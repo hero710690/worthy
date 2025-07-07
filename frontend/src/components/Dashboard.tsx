@@ -11,6 +11,7 @@ import {
   Paper,
   CircularProgress,
   Alert,
+  Chip,
 } from '@mui/material';
 import {
   TrendingUp,
@@ -19,10 +20,12 @@ import {
   Add,
   AccountCircle,
   GpsFixed,
+  Info,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { assetAPI } from '../services/assetApi';
+import { exchangeRateService } from '../services/exchangeRateService';
 import type { Asset } from '../types/assets';
 
 export const Dashboard: React.FC = () => {
@@ -50,9 +53,17 @@ export const Dashboard: React.FC = () => {
     fetchAssets();
   }, []);
 
-  const calculateTotalValue = () => {
+  const calculateTotalValueInBaseCurrency = () => {
+    const baseCurrency = user?.base_currency || 'USD';
+    
     return assets.reduce((total, asset) => {
-      return total + (asset.total_shares * asset.average_cost_basis);
+      const assetValue = asset.total_shares * asset.average_cost_basis;
+      const convertedValue = exchangeRateService.convertCurrency(
+        assetValue,
+        asset.currency,
+        baseCurrency
+      );
+      return total + convertedValue;
     }, 0);
   };
 
@@ -64,37 +75,28 @@ export const Dashboard: React.FC = () => {
     return new Set(assets.map(asset => asset.currency));
   };
 
-  const formatPortfolioValue = () => {
-    const currencies = getPortfolioCurrencies();
-    
-    if (currencies.size === 0) {
-      return '$0.00';
-    }
-    
-    if (currencies.size === 1) {
-      // Single currency - format normally
-      const currency = Array.from(currencies)[0];
-      const totalValue = calculateTotalValue();
-      return new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: currency,
-        minimumFractionDigits: 2,
-      }).format(totalValue);
-    }
-    
-    // Multiple currencies - show mixed indicator
-    return 'Mixed Currencies';
+  const formatBaseCurrency = (amount: number) => {
+    const baseCurrency = user?.base_currency || 'USD';
+    return exchangeRateService.formatCurrency(amount, baseCurrency);
   };
 
-  const getPortfolioValueSubtext = () => {
+  const getConversionInfo = () => {
     const currencies = getPortfolioCurrencies();
+    const baseCurrency = user?.base_currency || 'USD';
     
-    if (currencies.size <= 1) {
-      return 'vs last month';
+    if (currencies.size === 0) {
+      return null;
     }
     
-    // Multiple currencies - show currency list
-    return `${Array.from(currencies).join(', ')}`;
+    if (currencies.size === 1 && currencies.has(baseCurrency)) {
+      return null; // No conversion needed
+    }
+    
+    return {
+      originalCurrencies: Array.from(currencies),
+      baseCurrency: baseCurrency,
+      isConverted: true
+    };
   };
 
   const portfolioStats = [
@@ -109,12 +111,12 @@ export const Dashboard: React.FC = () => {
     },
     {
       title: 'Portfolio Value',
-      value: formatPortfolioValue(),
-      change: getPortfolioCurrencies().size > 1 ? 'Multi-currency' : '+0.0%',
-      changeType: getPortfolioCurrencies().size > 1 ? 'neutral' : 'positive',
+      value: formatBaseCurrency(calculateTotalValueInBaseCurrency()),
+      change: '+0.0%',
+      changeType: 'positive',
       icon: <TrendingUp />,
       color: '#764ba2',
-      subtext: getPortfolioValueSubtext()
+      subtext: 'vs last month'
     },
     {
       title: 'Unique Assets',
@@ -204,6 +206,33 @@ export const Dashboard: React.FC = () => {
         {error && (
           <Alert severity="error" sx={{ mb: 3 }}>
             {error}
+          </Alert>
+        )}
+
+        {/* Currency Conversion Info */}
+        {getConversionInfo() && (
+          <Alert 
+            severity="info" 
+            sx={{ mb: 3 }}
+            icon={<Info />}
+          >
+            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+              <Typography variant="body2">
+                Portfolio values converted to {user?.base_currency || 'USD'} from:
+              </Typography>
+              {getConversionInfo()?.originalCurrencies.map((currency, index) => (
+                <Chip 
+                  key={currency}
+                  label={currency}
+                  size="small"
+                  color="info"
+                  variant="outlined"
+                />
+              ))}
+              <Typography variant="body2" color="text.secondary">
+                (Using mock exchange rates - Real rates coming in Milestone 3)
+              </Typography>
+            </Stack>
           </Alert>
         )}
 
@@ -398,11 +427,9 @@ export const Dashboard: React.FC = () => {
                         View Portfolio
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
-                        {getPortfolioCurrencies().size === 0
-                          ? 'Analyze your investment performance'
-                          : getPortfolioCurrencies().size === 1
-                          ? `Analyze your ${formatPortfolioValue()} portfolio`
-                          : `Analyze your multi-currency portfolio (${Array.from(getPortfolioCurrencies()).join(', ')})`
+                        {calculateTotalValueInBaseCurrency() > 0 
+                          ? `Analyze your ${formatBaseCurrency(calculateTotalValueInBaseCurrency())} portfolio`
+                          : 'Analyze your investment performance'
                         }
                       </Typography>
                     </Box>
