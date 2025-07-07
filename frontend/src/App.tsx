@@ -12,6 +12,7 @@ import { Analytics } from './components/Analytics';
 import { UserProfile } from './components/UserProfile';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { useAuth } from './hooks/useAuth';
 
 // Create Material-UI theme
 const theme = createTheme({
@@ -60,6 +61,9 @@ const theme = createTheme({
 });
 
 function App() {
+  // Initialize authentication state on app load
+  useAuth();
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />

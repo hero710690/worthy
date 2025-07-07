@@ -10,20 +10,24 @@ interface AuthActions {
   clearError: () => void;
   setLoading: (loading: boolean) => void;
   initialize: () => void;
+  startTokenRefresh: () => void;
+  stopTokenRefresh: () => void;
 }
 
 type AuthStore = AuthState & AuthActions;
 
 export const useAuthStore = create<AuthStore>((set, get) => ({
-  // Initial state
+  // Initial state - start with loading true since we need to check localStorage
   user: null,
   token: null,
   isAuthenticated: false,
-  isLoading: false,
+  isLoading: true, // Start with loading true
   error: null,
 
   // Initialize auth state from localStorage
   initialize: () => {
+    set({ isLoading: true }); // Set loading during initialization
+    
     const token = localStorage.getItem('worthy_token');
     const userStr = localStorage.getItem('worthy_user');
     
@@ -46,6 +50,16 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         isLoading: false,
         error: null,
       });
+      
+      // Start automatic token refresh
+      get().startTokenRefresh();
+      
+      // Optionally verify token with backend
+      // This ensures the token is still valid
+      get().verifyToken().catch(() => {
+        // If token verification fails, logout
+        get().logout();
+      });
     } catch (error) {
       localStorage.removeItem('worthy_token');
       localStorage.removeItem('worthy_user');
@@ -56,6 +70,42 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         isLoading: false,
         error: null,
       });
+    }
+  },
+
+  // Start automatic token refresh
+  startTokenRefresh: () => {
+    // Clear any existing refresh interval
+    const existingInterval = (window as any).worthyTokenRefreshInterval;
+    if (existingInterval) {
+      clearInterval(existingInterval);
+    }
+
+    // Set up token refresh every 20 minutes (tokens expire in 24 hours)
+    const refreshInterval = setInterval(async () => {
+      const state = get();
+      if (state.isAuthenticated && state.token) {
+        try {
+          await authAPI.refreshToken();
+          console.log('Token refreshed automatically');
+        } catch (error) {
+          console.error('Auto token refresh failed:', error);
+          // If refresh fails, logout user
+          get().logout();
+        }
+      }
+    }, 20 * 60 * 1000); // 20 minutes
+
+    // Store interval reference globally so it can be cleared
+    (window as any).worthyTokenRefreshInterval = refreshInterval;
+  },
+
+  // Stop automatic token refresh
+  stopTokenRefresh: () => {
+    const existingInterval = (window as any).worthyTokenRefreshInterval;
+    if (existingInterval) {
+      clearInterval(existingInterval);
+      delete (window as any).worthyTokenRefreshInterval;
     }
   },
 
@@ -77,6 +127,9 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         isLoading: false,
         error: null,
       });
+
+      // Start automatic token refresh
+      get().startTokenRefresh();
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || 'Login failed';
       set({
@@ -121,6 +174,9 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   },
 
   logout: () => {
+    // Stop automatic token refresh
+    get().stopTokenRefresh();
+    
     // Clear local storage
     localStorage.removeItem('worthy_token');
     localStorage.removeItem('worthy_user');
