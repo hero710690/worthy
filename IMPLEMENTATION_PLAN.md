@@ -316,6 +316,15 @@ Worthy is a personalized financial strategy tool that helps users track investme
   - [ ] Implement fallback mechanisms
 - [ ] Add comprehensive logging and monitoring
 - [ ] Create admin endpoints for system monitoring
+- [ ] **Implement Dividend Tracking System:**
+  - [ ] Create dividends database table
+  - [ ] Integrate dividend data API (Alpha Vantage)
+  - [ ] Build automated dividend detection service
+  - [ ] Create dividend calculation logic
+  - [ ] Implement dividend transaction generation
+  - [ ] Add dividend notification system
+  - [ ] Handle ex-dividend date validation
+  - [ ] Support dividend reinvestment options
 
 ### Frontend Tasks
 - [ ] Create recurring investment components:
@@ -328,6 +337,15 @@ Worthy is a personalized financial strategy tool that helps users track investme
   - [ ] Upcoming investment reminders
 - [ ] Create automation status dashboard
 - [ ] Add bulk operations for managing plans
+- [ ] **Implement Dividend Tracking Interface:**
+  - [ ] Dividend dashboard section
+  - [ ] Upcoming dividends display
+  - [ ] Dividend history view
+  - [ ] Dividend yield calculations
+  - [ ] Enhanced asset cards with dividend info
+  - [ ] Dividend income analytics
+  - [ ] Dividend notification preferences
+  - [ ] Annual dividend income projections
 
 ---
 

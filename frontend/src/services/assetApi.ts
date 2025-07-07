@@ -76,4 +76,22 @@ export const assetAPI = {
     const response = await assetApi.post('/transactions', transactionData);
     return response.data;
   },
+
+  // Get all user transactions
+  getTransactions: async (): Promise<{ transactions: any[]; total_count: number }> => {
+    const response = await assetApi.get('/transactions');
+    return response.data;
+  },
+
+  // Update existing transaction
+  updateTransaction: async (transactionId: number, transactionData: Partial<CreateTransactionRequest>): Promise<{ message: string; transaction: any }> => {
+    const response = await assetApi.put(`/transactions/${transactionId}`, transactionData);
+    return response.data;
+  },
+
+  // Delete transaction
+  deleteTransaction: async (transactionId: number): Promise<{ message: string }> => {
+    const response = await assetApi.delete(`/transactions/${transactionId}`);
+    return response.data;
+  },
 };
