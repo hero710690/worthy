@@ -32,11 +32,15 @@ import {
   Email,
   AttachMoney,
   CalendarToday,
+  ShowChart,
+  Add,
 } from '@mui/icons-material';
 import { useAuth } from '../hooks/useAuth';
+import { useNavigate } from 'react-router-dom';
 
 export const Dashboard: React.FC = () => {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
   const handleLogout = () => {
     logout();
@@ -51,18 +55,29 @@ export const Dashboard: React.FC = () => {
   ];
 
   const upcomingFeatures = [
-    { label: 'Asset Portfolio Tracking', icon: <TrendingUp color="info" /> },
-    { label: 'Investment Recording', icon: <AccountBalance color="info" /> },
-    { label: 'FIRE Calculator', icon: <Calculate color="info" /> },
-    { label: 'Performance Analytics', icon: <Analytics color="info" /> },
-    { label: 'Multi-Currency Support', icon: <Language color="info" /> },
+    { 
+      label: 'Asset Portfolio Management', 
+      icon: <TrendingUp color="warning" />, 
+      description: 'Initialize and manage your investment assets',
+      status: 'In Development'
+    },
+    { 
+      label: 'Investment Recording', 
+      icon: <AccountBalance color="warning" />, 
+      description: 'Record lump-sum purchases and transactions',
+      status: 'In Development'
+    },
+    { label: 'FIRE Calculator', icon: <Calculate color="info" />, status: 'Planned' },
+    { label: 'Performance Analytics', icon: <Analytics color="info" />, status: 'Planned' },
+    { label: 'Real-time Price Updates', icon: <ShowChart color="info" />, status: 'Planned' },
+    { label: 'Recurring Investments', icon: <Language color="info" />, status: 'Planned' },
   ];
 
   const statusCards = [
     { title: 'Backend API', status: 'Connected', color: 'success', icon: <CheckCircle /> },
     { title: 'Database', status: 'Active', color: 'primary', icon: <AccountBalance /> },
     { title: 'Authentication', status: 'Secured', color: 'success', icon: <CheckCircle /> },
-    { title: 'Ready for', status: 'Milestone 2', color: 'info', icon: <TrendingUp /> },
+    { title: 'Asset Management', status: 'In Development', color: 'warning', icon: <TrendingUp /> },
   ];
 
   return (
@@ -121,7 +136,7 @@ export const Dashboard: React.FC = () => {
                   </Typography>
                   <Chip 
                     icon={<CheckCircle />} 
-                    label="System Online" 
+                    label="Asset Management Ready" 
                     color="success" 
                     variant="filled"
                     size="small"
@@ -129,14 +144,79 @@ export const Dashboard: React.FC = () => {
                 </Stack>
                 
                 <Typography variant="body1" color="text.secondary" sx={{ mb: 3, fontSize: '1.1rem' }}>
-                  Your authentication system is working perfectly! You're now ready to start tracking your financial journey toward FIRE.
+                  Your financial tracking system is ready! Asset management features are being finalized and will be available soon.
                 </Typography>
+
+                <Stack direction="row" spacing={2}>
+                  <Button
+                    variant="contained"
+                    size="large"
+                    startIcon={<Add />}
+                    disabled
+                    sx={{
+                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                      '&:hover': {
+                        background: 'linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%)',
+                      }
+                    }}
+                  >
+                    Manage Assets (Coming Soon)
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    size="large"
+                    startIcon={<ShowChart />}
+                    disabled
+                  >
+                    View Portfolio (Coming Soon)
+                  </Button>
+                </Stack>
               </CardContent>
             </Card>
           </Grid>
 
-          {/* User Profile Card */}
+          {/* Coming Soon Features */}
           <Grid item xs={12} lg={8}>
+            <Card elevation={2} sx={{ borderRadius: 3, mb: 3 }}>
+              <CardContent sx={{ p: 3 }}>
+                <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
+                  Features Status
+                </Typography>
+                
+                <List dense sx={{ p: 0 }}>
+                  {upcomingFeatures.map((feature, index) => (
+                    <React.Fragment key={index}>
+                      <ListItem sx={{ px: 0, py: 2 }}>
+                        <ListItemIcon sx={{ minWidth: 40 }}>
+                          {feature.icon}
+                        </ListItemIcon>
+                        <ListItemText 
+                          primary={feature.label}
+                          secondary={feature.description}
+                          primaryTypographyProps={{ 
+                            variant: 'body1',
+                            fontWeight: 'medium'
+                          }}
+                          secondaryTypographyProps={{
+                            variant: 'body2',
+                            color: 'text.secondary'
+                          }}
+                        />
+                        <Chip 
+                          label={feature.status} 
+                          color={feature.status === 'In Development' ? 'warning' : 'info'} 
+                          size="small" 
+                          variant="outlined"
+                        />
+                      </ListItem>
+                      {index < upcomingFeatures.length - 1 && <Divider />}
+                    </React.Fragment>
+                  ))}
+                </List>
+              </CardContent>
+            </Card>
+
+            {/* User Profile Card */}
             <Card elevation={2} sx={{ borderRadius: 3, height: 'fit-content' }}>
               <CardContent sx={{ p: 3 }}>
                 <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
@@ -201,32 +281,38 @@ export const Dashboard: React.FC = () => {
             </Card>
           </Grid>
 
-          {/* Coming Soon Features */}
+          {/* Development Status */}
           <Grid item xs={12} lg={4}>
             <Card elevation={2} sx={{ borderRadius: 3, height: 'fit-content' }}>
               <CardContent sx={{ p: 3 }}>
                 <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', mb: 2 }}>
-                  Coming Soon
+                  Development Progress
                 </Typography>
-                <List dense sx={{ p: 0 }}>
-                  {upcomingFeatures.map((feature, index) => (
-                    <React.Fragment key={index}>
-                      <ListItem sx={{ px: 0, py: 1 }}>
-                        <ListItemIcon sx={{ minWidth: 40 }}>
-                          {feature.icon}
-                        </ListItemIcon>
-                        <ListItemText 
-                          primary={feature.label}
-                          primaryTypographyProps={{ 
-                            variant: 'body2',
-                            fontWeight: 'medium'
-                          }}
-                        />
-                      </ListItem>
-                      {index < upcomingFeatures.length - 1 && <Divider />}
-                    </React.Fragment>
-                  ))}
-                </List>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  Asset management features are currently being finalized. Stay tuned for updates!
+                </Typography>
+                <Box sx={{ mt: 2 }}>
+                  <Typography variant="body2" sx={{ mb: 1 }}>
+                    Milestone 2 Progress
+                  </Typography>
+                  <Box sx={{ 
+                    width: '100%', 
+                    bgcolor: 'grey.200', 
+                    borderRadius: 1, 
+                    height: 8,
+                    mb: 1
+                  }}>
+                    <Box sx={{ 
+                      width: '85%', 
+                      bgcolor: 'warning.main', 
+                      height: '100%', 
+                      borderRadius: 1 
+                    }} />
+                  </Box>
+                  <Typography variant="caption" color="text.secondary">
+                    85% Complete - Asset Management UI
+                  </Typography>
+                </Box>
               </CardContent>
             </Card>
           </Grid>
