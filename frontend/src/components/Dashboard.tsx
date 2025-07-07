@@ -60,12 +60,41 @@ export const Dashboard: React.FC = () => {
     return new Set(assets.map(asset => asset.ticker_symbol)).size;
   };
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: user?.base_currency || 'USD',
-      minimumFractionDigits: 2,
-    }).format(amount);
+  const getPortfolioCurrencies = () => {
+    return new Set(assets.map(asset => asset.currency));
+  };
+
+  const formatPortfolioValue = () => {
+    const currencies = getPortfolioCurrencies();
+    
+    if (currencies.size === 0) {
+      return '$0.00';
+    }
+    
+    if (currencies.size === 1) {
+      // Single currency - format normally
+      const currency = Array.from(currencies)[0];
+      const totalValue = calculateTotalValue();
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: currency,
+        minimumFractionDigits: 2,
+      }).format(totalValue);
+    }
+    
+    // Multiple currencies - show mixed indicator
+    return 'Mixed Currencies';
+  };
+
+  const getPortfolioValueSubtext = () => {
+    const currencies = getPortfolioCurrencies();
+    
+    if (currencies.size <= 1) {
+      return 'vs last month';
+    }
+    
+    // Multiple currencies - show currency list
+    return `${Array.from(currencies).join(', ')}`;
   };
 
   const portfolioStats = [
@@ -75,15 +104,17 @@ export const Dashboard: React.FC = () => {
       change: '+0.0%',
       changeType: 'positive',
       icon: <AccountBalance />,
-      color: '#667eea'
+      color: '#667eea',
+      subtext: 'vs last month'
     },
     {
       title: 'Portfolio Value',
-      value: formatCurrency(calculateTotalValue()),
-      change: '+0.0%',
-      changeType: 'positive',
+      value: formatPortfolioValue(),
+      change: getPortfolioCurrencies().size > 1 ? 'Multi-currency' : '+0.0%',
+      changeType: getPortfolioCurrencies().size > 1 ? 'neutral' : 'positive',
       icon: <TrendingUp />,
-      color: '#764ba2'
+      color: '#764ba2',
+      subtext: getPortfolioValueSubtext()
     },
     {
       title: 'Unique Assets',
@@ -91,7 +122,8 @@ export const Dashboard: React.FC = () => {
       change: 'diversification',
       changeType: 'neutral',
       icon: <ShowChart />,
-      color: '#f093fb'
+      color: '#f093fb',
+      subtext: ''
     },
     {
       title: 'FIRE Progress',
@@ -99,7 +131,8 @@ export const Dashboard: React.FC = () => {
       change: 'vs target',
       changeType: 'neutral',
       icon: <GpsFixed />,
-      color: '#f5576c'
+      color: '#f5576c',
+      subtext: ''
     },
   ];
 
@@ -242,9 +275,11 @@ export const Dashboard: React.FC = () => {
                     >
                       {stat.change}
                     </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {stat.changeType === 'neutral' ? '' : 'vs last month'}
-                    </Typography>
+                    {stat.subtext && (
+                      <Typography variant="body2" color="text.secondary">
+                        {stat.subtext}
+                      </Typography>
+                    )}
                   </Stack>
                 </CardContent>
               </Card>
@@ -363,9 +398,11 @@ export const Dashboard: React.FC = () => {
                         View Portfolio
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
-                        {calculateTotalValue() > 0 
-                          ? `Analyze your ${formatCurrency(calculateTotalValue())} portfolio`
-                          : 'Analyze your investment performance'
+                        {getPortfolioCurrencies().size === 0
+                          ? 'Analyze your investment performance'
+                          : getPortfolioCurrencies().size === 1
+                          ? `Analyze your ${formatPortfolioValue()} portfolio`
+                          : `Analyze your multi-currency portfolio (${Array.from(getPortfolioCurrencies()).join(', ')})`
                         }
                       </Typography>
                     </Box>
