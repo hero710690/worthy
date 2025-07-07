@@ -59,6 +59,18 @@ export const assetAPI = {
     return response.data;
   },
 
+  // Update existing asset
+  updateAsset: async (assetId: number, assetData: Partial<CreateAssetRequest>): Promise<{ message: string; asset: Asset }> => {
+    const response = await assetApi.put(`/assets/${assetId}`, assetData);
+    return response.data;
+  },
+
+  // Delete asset
+  deleteAsset: async (assetId: number): Promise<{ message: string }> => {
+    const response = await assetApi.delete(`/assets/${assetId}`);
+    return response.data;
+  },
+
   // Create new transaction
   createTransaction: async (transactionData: CreateTransactionRequest): Promise<{ message: string; transaction: any }> => {
     const response = await assetApi.post('/transactions', transactionData);

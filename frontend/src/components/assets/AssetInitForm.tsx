@@ -125,13 +125,16 @@ export const AssetInitForm: React.FC<AssetInitFormProps> = ({
     setError(null);
 
     try {
-      if (isEditMode) {
-        // TODO: Implement update API call when backend supports it
-        // await assetAPI.updateAsset(editAsset.asset_id, formData);
-        setError('Edit functionality will be implemented in a future update. For now, you can add a new asset with the updated information.');
-        setLoading(false);
-        return;
+      if (isEditMode && editAsset) {
+        // Update existing asset
+        await assetAPI.updateAsset(editAsset.asset_id, {
+          asset_type: formData.asset_type,
+          total_shares: formData.total_shares,
+          average_cost_basis: formData.average_cost_basis,
+          currency: formData.currency,
+        });
       } else {
+        // Create new asset
         await assetAPI.createAsset(formData);
       }
       

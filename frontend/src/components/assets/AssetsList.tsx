@@ -133,13 +133,13 @@ export const AssetsList: React.FC = () => {
 
     setDeleteLoading(true);
     try {
-      // TODO: Implement delete API call when backend supports it
-      // await assetAPI.deleteAsset(deletingAsset.asset_id);
+      await assetAPI.deleteAsset(deletingAsset.asset_id);
       
-      // For now, show a message that delete is not implemented
-      setError('Delete functionality will be implemented in a future update. For now, you can edit the asset to change its details.');
+      // Refresh the assets list after successful deletion
+      await fetchAssets();
       
       setDeletingAsset(null);
+      setError(null);
     } catch (error: any) {
       console.error('Failed to delete asset:', error);
       setError(error.response?.data?.message || 'Failed to delete asset');

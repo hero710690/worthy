@@ -1,7 +1,7 @@
 """
 Worthy App Complete Backend - Single File Lambda Function
 Authentication system with hashlib-based password hashing
-External API integration for real-time data
+Asset management with UPDATE and DELETE functionality
 """
 import json
 import os
@@ -9,7 +9,6 @@ import logging
 import hashlib
 import secrets
 import jwt
-import requests
 from datetime import datetime, timedelta
 from email_validator import validate_email, EmailNotValidError
 
@@ -33,12 +32,6 @@ JWT_SECRET = os.environ.get('JWT_SECRET', 'REDACTED_JWT_SECRET')
 JWT_ALGORITHM = 'HS256'
 JWT_EXPIRATION_HOURS = 24
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
-
-# External API Configuration
-ALPHA_VANTAGE_API_KEY = os.environ.get('ALPHA_VANTAGE_API_KEY', 'demo')
-EXCHANGE_RATE_API_KEY = os.environ.get('EXCHANGE_RATE_API_KEY', '')
-ALPHA_VANTAGE_BASE_URL = 'https://www.alphavantage.co/query'
-EXCHANGE_RATE_BASE_URL = 'https://api.exchangerate-api.com/v4/latest'
 
 def get_cors_headers():
     """Return proper CORS headers"""
@@ -458,6 +451,112 @@ def handle_create_transaction(body, user_id):
         logger.error(f"Create transaction error: {str(e)}")
         return create_error_response(500, "Failed to create transaction")
 
+def handle_update_asset(asset_id, body, user_id):
+    """Handle asset update"""
+    try:
+        # Verify asset belongs to user
+        asset = execute_query(
+            DATABASE_URL,
+            "SELECT * FROM assets WHERE asset_id = %s AND user_id = %s",
+            (asset_id, user_id)
+        )
+        
+        if not asset:
+            return create_error_response(404, "Asset not found")
+        
+        # Get update data
+        asset_type = body.get('asset_type', '').strip()
+        total_shares = body.get('total_shares', 0)
+        average_cost_basis = body.get('average_cost_basis', 0)
+        currency = body.get('currency', '').strip()
+        
+        # Validate input
+        if not asset_type:
+            return create_error_response(400, "Asset type is required")
+        
+        if total_shares <= 0:
+            return create_error_response(400, "Total shares must be greater than 0")
+        
+        if average_cost_basis <= 0:
+            return create_error_response(400, "Average cost basis must be greater than 0")
+        
+        if not currency:
+            return create_error_response(400, "Currency is required")
+        
+        # Update asset
+        execute_update(
+            DATABASE_URL,
+            """
+            UPDATE assets 
+            SET asset_type = %s, total_shares = %s, average_cost_basis = %s, 
+                currency = %s, updated_at = CURRENT_TIMESTAMP
+            WHERE asset_id = %s AND user_id = %s
+            """,
+            (asset_type, total_shares, average_cost_basis, currency, asset_id, user_id)
+        )
+        
+        # Get updated asset
+        updated_asset = execute_query(
+            DATABASE_URL,
+            "SELECT * FROM assets WHERE asset_id = %s AND user_id = %s",
+            (asset_id, user_id)
+        )[0]
+        
+        return create_response(200, {
+            "message": "Asset updated successfully",
+            "asset": {
+                "asset_id": updated_asset['asset_id'],
+                "ticker_symbol": updated_asset['ticker_symbol'],
+                "asset_type": updated_asset['asset_type'],
+                "total_shares": float(updated_asset['total_shares']),
+                "average_cost_basis": float(updated_asset['average_cost_basis']),
+                "currency": updated_asset['currency'],
+                "created_at": updated_asset['created_at'].isoformat(),
+                "updated_at": updated_asset['updated_at'].isoformat() if updated_asset['updated_at'] else None
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Update asset error: {str(e)}")
+        return create_error_response(500, "Failed to update asset")
+
+def handle_delete_asset(asset_id, user_id):
+    """Handle asset deletion"""
+    try:
+        # Verify asset belongs to user
+        asset = execute_query(
+            DATABASE_URL,
+            "SELECT * FROM assets WHERE asset_id = %s AND user_id = %s",
+            (asset_id, user_id)
+        )
+        
+        if not asset:
+            return create_error_response(404, "Asset not found")
+        
+        asset = asset[0]
+        
+        # Delete associated transactions first (foreign key constraint)
+        execute_update(
+            DATABASE_URL,
+            "DELETE FROM transactions WHERE asset_id = %s",
+            (asset_id,)
+        )
+        
+        # Delete the asset
+        execute_update(
+            DATABASE_URL,
+            "DELETE FROM assets WHERE asset_id = %s AND user_id = %s",
+            (asset_id, user_id)
+        )
+        
+        return create_response(200, {
+            "message": f"Asset {asset['ticker_symbol']} deleted successfully"
+        })
+        
+    except Exception as e:
+        logger.error(f"Delete asset error: {str(e)}")
+        return create_error_response(500, "Failed to delete asset")
+
 def handle_register(body):
     try:
         # Validate input
@@ -859,6 +958,39 @@ def lambda_handler(event, context):
             try:
                 asset_id = int(path.split('/')[-1])
                 return handle_get_asset(asset_id, auth_result['user_id'])
+            except ValueError:
+                return create_error_response(400, "Invalid asset ID")
+        
+        elif path.startswith('/assets/') and http_method == 'PUT':
+            # Update asset - requires authentication
+            body = {}
+            if event.get('body'):
+                try:
+                    body = json.loads(event['body'])
+                except json.JSONDecodeError:
+                    return create_error_response(400, "Invalid JSON in request body")
+            
+            request_headers = event.get('headers', {})
+            auth_result = verify_jwt_token(request_headers.get('Authorization', ''))
+            if not auth_result['valid']:
+                return create_error_response(401, "Invalid or missing token")
+            
+            try:
+                asset_id = int(path.split('/')[-1])
+                return handle_update_asset(asset_id, body, auth_result['user_id'])
+            except ValueError:
+                return create_error_response(400, "Invalid asset ID")
+        
+        elif path.startswith('/assets/') and http_method == 'DELETE':
+            # Delete asset - requires authentication
+            request_headers = event.get('headers', {})
+            auth_result = verify_jwt_token(request_headers.get('Authorization', ''))
+            if not auth_result['valid']:
+                return create_error_response(401, "Invalid or missing token")
+            
+            try:
+                asset_id = int(path.split('/')[-1])
+                return handle_delete_asset(asset_id, auth_result['user_id'])
             except ValueError:
                 return create_error_response(400, "Invalid asset ID")
         
