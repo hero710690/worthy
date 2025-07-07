@@ -6,22 +6,23 @@ export interface ExchangeRates {
 }
 
 export interface ExchangeRateApiResponse {
-  result: string;
   base: string;
   rates: ExchangeRates;
   date: string;
 }
 
-// Fallback mock rates in case API fails
+// Fallback mock rates in case API fails (updated with recent rates)
 const FALLBACK_EXCHANGE_RATES: ExchangeRates = {
   'USD': 1.0,        // Base rate
-  'TWD': 31.5,       // 1 USD = 31.5 TWD
-  'EUR': 0.85,       // 1 USD = 0.85 EUR
-  'GBP': 0.73,       // 1 USD = 0.73 GBP
-  'JPY': 110.0,      // 1 USD = 110 JPY
+  'TWD': 28.85,      // 1 USD = 28.85 TWD (updated)
+  'EUR': 0.849,      // 1 USD = 0.849 EUR (updated)
+  'GBP': 0.733,      // 1 USD = 0.733 GBP (updated)
+  'JPY': 144.5,      // 1 USD = 144.5 JPY (updated)
   'KRW': 1200.0,     // 1 USD = 1200 KRW
   'SGD': 1.35,       // 1 USD = 1.35 SGD
   'HKD': 7.8,        // 1 USD = 7.8 HKD
+  'CAD': 1.25,       // 1 USD = 1.25 CAD
+  'AUD': 1.45,       // 1 USD = 1.45 AUD
 };
 
 export class ExchangeRateService {
@@ -181,7 +182,7 @@ export class ExchangeRateService {
 
       const data: ExchangeRateApiResponse = await response.json();
 
-      if (data.result === 'success' && data.rates) {
+      if (data.base && data.rates) {
         // Update rates with real API data
         this.rates = {
           [baseCurrency]: 1.0, // Base currency
@@ -195,6 +196,7 @@ export class ExchangeRateService {
         console.log(`📊 Loaded ${Object.keys(this.rates).length} currency rates`);
         console.log(`🕒 Last updated: ${this.lastUpdated.toISOString()}`);
         console.log(`📡 Base currency: ${baseCurrency}`);
+        console.log(`💱 Sample rates: USD/TWD=${this.rates.TWD}, USD/EUR=${this.rates.EUR}`);
       } else {
         throw new Error('Invalid API response format');
       }
