@@ -18,8 +18,6 @@ import {
   Alert,
   CircularProgress,
   Stack,
-  AppBar,
-  Toolbar,
   Container,
 } from '@mui/material';
 import {
@@ -94,29 +92,20 @@ export const AssetsList: React.FC = () => {
   if (loading) {
     return (
       <Box sx={{ flexGrow: 1, bgcolor: 'grey.50', minHeight: '100vh' }}>
-        <AppBar 
-          position="static" 
-          elevation={0}
-          sx={{ 
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          }}
-        >
-          <Toolbar>
-            <Button
-              color="inherit"
-              startIcon={<ArrowBack />}
-              onClick={() => navigate('/dashboard')}
-              sx={{ mr: 2 }}
-            >
-              Dashboard
-            </Button>
-            <Typography variant="h6" component="div" sx={{ flexGrow: 1, fontWeight: 'bold' }}>
-              Asset Management
-            </Typography>
-          </Toolbar>
-        </AppBar>
-        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
-          <CircularProgress size={60} />
+        <Box sx={{ p: { xs: 3, md: 4 } }}>
+          <Typography 
+            variant="h4" 
+            sx={{ 
+              fontWeight: 'bold',
+              fontSize: { xs: '1.75rem', md: '2.125rem' },
+              mb: 2
+            }}
+          >
+            Asset Management
+          </Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
+            <CircularProgress size={60} />
+          </Box>
         </Box>
       </Box>
     );
@@ -124,43 +113,70 @@ export const AssetsList: React.FC = () => {
 
   return (
     <Box sx={{ flexGrow: 1, bgcolor: 'grey.50', minHeight: '100vh' }}>
-      {/* Navigation Header */}
-      <AppBar 
-        position="static" 
-        elevation={0}
-        sx={{ 
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        }}
-      >
-        <Toolbar>
-          <Button
-            color="inherit"
-            startIcon={<ArrowBack />}
-            onClick={() => navigate('/dashboard')}
-            sx={{ mr: 2 }}
-          >
-            Dashboard
-          </Button>
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1, fontWeight: 'bold' }}>
-            Asset Management
-          </Typography>
-          <Button
-            color="inherit"
-            startIcon={<Add />}
-            onClick={() => setInitFormOpen(true)}
-            variant="outlined"
-            sx={{ 
-              borderColor: 'rgba(255,255,255,0.3)',
-              '&:hover': { 
-                borderColor: 'rgba(255,255,255,0.5)',
-                bgcolor: 'rgba(255,255,255,0.1)'
-              }
-            }}
-          >
-            Add Asset
-          </Button>
-        </Toolbar>
-      </AppBar>
+      {/* Header */}
+      <Box sx={{ p: { xs: 3, md: 4 }, pb: 0 }}>
+        <Stack 
+          direction="row" 
+          justifyContent="space-between" 
+          alignItems="center"
+          sx={{ mb: 1 }}
+        >
+          <Box>
+            <Typography 
+              variant="h4" 
+              sx={{ 
+                fontWeight: 'bold',
+                fontSize: { xs: '1.75rem', md: '2.125rem' },
+                mb: 0.5
+              }}
+            >
+              Asset Management
+            </Typography>
+            <Typography 
+              variant="body1" 
+              color="text.secondary"
+              sx={{ fontSize: { xs: '0.95rem', md: '1rem' } }}
+            >
+              Manage your investment portfolio and track performance
+            </Typography>
+          </Box>
+          
+          <Stack direction="row" spacing={2} alignItems="center">
+            <Button
+              variant="outlined"
+              startIcon={<ArrowBack />}
+              onClick={() => navigate('/dashboard')}
+              sx={{
+                borderRadius: 2,
+                px: 3,
+                py: 1.5,
+                textTransform: 'none',
+                fontWeight: 'medium',
+              }}
+            >
+              Back to Dashboard
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={<Add />}
+              onClick={() => setInitFormOpen(true)}
+              sx={{
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                borderRadius: 2,
+                px: 3,
+                py: 1.5,
+                textTransform: 'none',
+                fontWeight: 'bold',
+                '&:hover': {
+                  background: 'linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%)',
+                }
+              }}
+            >
+              Add Asset
+            </Button>
+          </Stack>
+        </Stack>
+      </Box>
 
       <Container maxWidth="xl" sx={{ py: { xs: 2, md: 4 }, px: { xs: 2, md: 3 } }}>
         {error && (
@@ -172,53 +188,117 @@ export const AssetsList: React.FC = () => {
         {/* Portfolio Summary */}
         <Grid container spacing={{ xs: 2, md: 4 }} sx={{ mb: { xs: 3, md: 5 } }}>
           <Grid item xs={12} sm={4}>
-            <Card elevation={2} sx={{ borderRadius: 3, height: '100%' }}>
-              <CardContent sx={{ textAlign: 'center', p: { xs: 2.5, md: 3.5 } }}>
-                <AccountBalance 
-                  color="primary" 
-                  sx={{ fontSize: { xs: 40, md: 50 }, mb: { xs: 1, md: 2 } }} 
-                />
-                <Typography 
-                  variant="h6" 
-                  gutterBottom
-                  sx={{ fontSize: { xs: '1.1rem', md: '1.25rem' } }}
-                >
-                  Total Assets
-                </Typography>
+            <Card 
+              elevation={0} 
+              sx={{ 
+                borderRadius: 3, 
+                height: '100%',
+                border: '1px solid',
+                borderColor: 'grey.200',
+                transition: 'all 0.3s ease',
+                '&:hover': {
+                  transform: 'translateY(-4px)',
+                  boxShadow: 4
+                }
+              }}
+            >
+              <CardContent sx={{ p: { xs: 2.5, md: 3.5 } }}>
+                <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
+                  <Typography 
+                    variant="body2" 
+                    color="text.secondary"
+                    sx={{ fontWeight: 'medium' }}
+                  >
+                    Total Assets
+                  </Typography>
+                  <Box
+                    sx={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: '8px',
+                      bgcolor: '#667eea15',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#667eea'
+                    }}
+                  >
+                    <AccountBalance />
+                  </Box>
+                </Stack>
                 <Typography 
                   variant="h4" 
-                  color="primary" 
                   sx={{ 
                     fontWeight: 'bold',
-                    fontSize: { xs: '2rem', md: '2.5rem' }
+                    mb: 1,
+                    fontSize: { xs: '1.75rem', md: '2rem' }
                   }}
                 >
                   {assets.length}
                 </Typography>
+                <Stack direction="row" alignItems="center" spacing={1}>
+                  <Typography 
+                    variant="body2" 
+                    sx={{ 
+                      color: 'success.main',
+                      fontWeight: 'medium'
+                    }}
+                  >
+                    +0.0%
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    vs last month
+                  </Typography>
+                </Stack>
               </CardContent>
             </Card>
           </Grid>
 
           <Grid item xs={12} sm={4}>
-            <Card elevation={2} sx={{ borderRadius: 3, height: '100%' }}>
-              <CardContent sx={{ textAlign: 'center', p: { xs: 2.5, md: 3.5 } }}>
-                <TrendingUp 
-                  color="success" 
-                  sx={{ fontSize: { xs: 40, md: 50 }, mb: { xs: 1, md: 2 } }} 
-                />
-                <Typography 
-                  variant="h6" 
-                  gutterBottom
-                  sx={{ fontSize: { xs: '1.1rem', md: '1.25rem' } }}
-                >
-                  Total Value
-                </Typography>
+            <Card 
+              elevation={0} 
+              sx={{ 
+                borderRadius: 3, 
+                height: '100%',
+                border: '1px solid',
+                borderColor: 'grey.200',
+                transition: 'all 0.3s ease',
+                '&:hover': {
+                  transform: 'translateY(-4px)',
+                  boxShadow: 4
+                }
+              }}
+            >
+              <CardContent sx={{ p: { xs: 2.5, md: 3.5 } }}>
+                <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
+                  <Typography 
+                    variant="body2" 
+                    color="text.secondary"
+                    sx={{ fontWeight: 'medium' }}
+                  >
+                    Total Value
+                  </Typography>
+                  <Box
+                    sx={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: '8px',
+                      bgcolor: '#764ba215',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#764ba2'
+                    }}
+                  >
+                    <TrendingUp />
+                  </Box>
+                </Stack>
                 <Typography 
                   variant="h4" 
-                  color="success.main" 
                   sx={{ 
                     fontWeight: 'bold',
-                    fontSize: { xs: '1.75rem', md: '2.25rem' }
+                    mb: 1,
+                    fontSize: { xs: '1.75rem', md: '2rem' }
                   }}
                 >
                   ${calculateTotalValue().toLocaleString(undefined, {
@@ -226,34 +306,87 @@ export const AssetsList: React.FC = () => {
                     maximumFractionDigits: 2
                   })}
                 </Typography>
+                <Stack direction="row" alignItems="center" spacing={1}>
+                  <Typography 
+                    variant="body2" 
+                    sx={{ 
+                      color: 'success.main',
+                      fontWeight: 'medium'
+                    }}
+                  >
+                    +0.0%
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    vs last month
+                  </Typography>
+                </Stack>
               </CardContent>
             </Card>
           </Grid>
 
           <Grid item xs={12} sm={4}>
-            <Card elevation={2} sx={{ borderRadius: 3, height: '100%' }}>
-              <CardContent sx={{ textAlign: 'center', p: { xs: 2.5, md: 3.5 } }}>
-                <ShowChart 
-                  color="info" 
-                  sx={{ fontSize: { xs: 40, md: 50 }, mb: { xs: 1, md: 2 } }} 
-                />
-                <Typography 
-                  variant="h6" 
-                  gutterBottom
-                  sx={{ fontSize: { xs: '1.1rem', md: '1.25rem' } }}
-                >
-                  Unique Assets
-                </Typography>
+            <Card 
+              elevation={0} 
+              sx={{ 
+                borderRadius: 3, 
+                height: '100%',
+                border: '1px solid',
+                borderColor: 'grey.200',
+                transition: 'all 0.3s ease',
+                '&:hover': {
+                  transform: 'translateY(-4px)',
+                  boxShadow: 4
+                }
+              }}
+            >
+              <CardContent sx={{ p: { xs: 2.5, md: 3.5 } }}>
+                <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
+                  <Typography 
+                    variant="body2" 
+                    color="text.secondary"
+                    sx={{ fontWeight: 'medium' }}
+                  >
+                    Unique Assets
+                  </Typography>
+                  <Box
+                    sx={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: '8px',
+                      bgcolor: '#f093fb15',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#f093fb'
+                    }}
+                  >
+                    <ShowChart />
+                  </Box>
+                </Stack>
                 <Typography 
                   variant="h4" 
-                  color="info.main" 
                   sx={{ 
                     fontWeight: 'bold',
-                    fontSize: { xs: '2rem', md: '2.5rem' }
+                    mb: 1,
+                    fontSize: { xs: '1.75rem', md: '2rem' }
                   }}
                 >
                   {new Set(assets.map(asset => asset.ticker_symbol)).size}
                 </Typography>
+                <Stack direction="row" alignItems="center" spacing={1}>
+                  <Typography 
+                    variant="body2" 
+                    sx={{ 
+                      color: 'success.main',
+                      fontWeight: 'medium'
+                    }}
+                  >
+                    +0.0%
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    vs last month
+                  </Typography>
+                </Stack>
               </CardContent>
             </Card>
           </Grid>
@@ -308,7 +441,14 @@ export const AssetsList: React.FC = () => {
             </CardContent>
           </Card>
         ) : (
-          <Card elevation={2} sx={{ borderRadius: 3 }}>
+          <Card 
+            elevation={0} 
+            sx={{ 
+              borderRadius: 3,
+              border: '1px solid',
+              borderColor: 'grey.200'
+            }}
+          >
             <CardContent sx={{ p: 0 }}>
               <Box sx={{ 
                 p: { xs: 3, md: 4 }, 
