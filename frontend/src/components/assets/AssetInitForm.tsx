@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -17,6 +17,7 @@ import {
   TrendingUp,
   AttachMoney,
   ShowChart,
+  AccountBalance,
 } from '@mui/icons-material';
 import { assetAPI } from '../../services/assetApi';
 import type { CreateAssetRequest } from '../../types/assets';
@@ -40,6 +41,7 @@ const currencies = [
 const assetTypes = [
   { value: 'Stock', label: 'Stock' },
   { value: 'ETF', label: 'ETF' },
+  { value: 'Cash', label: 'Cash' },
   { value: 'Mutual Fund', label: 'Mutual Fund' },
   { value: 'Bond', label: 'Bond' },
   { value: 'REIT', label: 'REIT' },
@@ -55,6 +57,16 @@ export const AssetInitForm: React.FC<AssetInitFormProps> = ({ open, onClose, onS
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Auto-set cost basis to 1 for Cash assets
+  useEffect(() => {
+    if (formData.asset_type === 'Cash') {
+      setFormData(prev => ({
+        ...prev,
+        average_cost_basis: 1
+      }));
+    }
+  }, [formData.asset_type]);
 
   const handleChange = (field: keyof CreateAssetRequest) => (
     event: React.ChangeEvent<HTMLInputElement>
@@ -73,17 +85,34 @@ export const AssetInitForm: React.FC<AssetInitFormProps> = ({ open, onClose, onS
     setError(null);
 
     // Validation
-    if (!formData.ticker_symbol.trim()) {
-      setError('Ticker symbol is required');
-      return;
-    }
-    if (formData.total_shares <= 0) {
-      setError('Total shares must be greater than 0');
-      return;
-    }
-    if (formData.average_cost_basis <= 0) {
-      setError('Average cost basis must be greater than 0');
-      return;
+    if (formData.asset_type === 'Cash') {
+      // For cash, ticker_symbol can be a description
+      if (!formData.ticker_symbol.trim()) {
+        setError('Please enter a description for your cash holding (e.g., "CASH-USD", "Savings")');
+        return;
+      }
+      if (formData.total_shares <= 0) {
+        setError('Cash amount must be greater than 0');
+        return;
+      }
+      if (formData.average_cost_basis !== 1) {
+        setError('For cash assets, cost basis should be 1 (representing 1 unit of currency)');
+        return;
+      }
+    } else {
+      // For other asset types
+      if (!formData.ticker_symbol.trim()) {
+        setError('Ticker symbol is required');
+        return;
+      }
+      if (formData.total_shares <= 0) {
+        setError('Total shares must be greater than 0');
+        return;
+      }
+      if (formData.average_cost_basis <= 0) {
+        setError('Average cost basis must be greater than 0');
+        return;
+      }
     }
 
     setLoading(true);
@@ -142,16 +171,29 @@ export const AssetInitForm: React.FC<AssetInitFormProps> = ({ open, onClose, onS
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
-                label="Ticker Symbol"
+                label={formData.asset_type === 'Cash' ? 'Cash Description' : 'Ticker Symbol'}
                 value={formData.ticker_symbol}
                 onChange={handleChange('ticker_symbol')}
                 required
                 disabled={loading}
-                placeholder="e.g., AAPL, TSLA, VTI"
+                placeholder={
+                  formData.asset_type === 'Cash' 
+                    ? 'e.g., CASH-USD, Savings Account, Emergency Fund'
+                    : 'e.g., AAPL, TSLA, VTI'
+                }
+                helperText={
+                  formData.asset_type === 'Cash'
+                    ? 'Enter a description to identify this cash holding'
+                    : 'Enter the stock/ETF ticker symbol'
+                }
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
-                      <ShowChart color="action" />
+                      {formData.asset_type === 'Cash' ? (
+                        <AccountBalance color="action" />
+                      ) : (
+                        <ShowChart color="action" />
+                      )}
                     </InputAdornment>
                   ),
                 }}
@@ -188,13 +230,18 @@ export const AssetInitForm: React.FC<AssetInitFormProps> = ({ open, onClose, onS
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
-                label="Total Shares"
+                label={formData.asset_type === 'Cash' ? 'Cash Amount' : 'Total Shares'}
                 type="number"
                 value={formData.total_shares || ''}
                 onChange={handleChange('total_shares')}
                 required
                 disabled={loading}
-                inputProps={{ min: 0, step: 0.000001 }}
+                inputProps={{ min: 0, step: formData.asset_type === 'Cash' ? 0.01 : 0.000001 }}
+                helperText={
+                  formData.asset_type === 'Cash'
+                    ? 'Enter the total amount of cash you hold'
+                    : 'Enter the number of shares you own'
+                }
                 sx={{
                   '& .MuiOutlinedInput-root': {
                     borderRadius: 2,
@@ -206,13 +253,18 @@ export const AssetInitForm: React.FC<AssetInitFormProps> = ({ open, onClose, onS
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
-                label="Average Cost Basis"
+                label={formData.asset_type === 'Cash' ? 'Cost Basis (should be 1)' : 'Average Cost Basis'}
                 type="number"
-                value={formData.average_cost_basis || ''}
+                value={formData.asset_type === 'Cash' ? 1 : (formData.average_cost_basis || '')}
                 onChange={handleChange('average_cost_basis')}
                 required
-                disabled={loading}
+                disabled={loading || formData.asset_type === 'Cash'}
                 inputProps={{ min: 0, step: 0.01 }}
+                helperText={
+                  formData.asset_type === 'Cash'
+                    ? 'For cash, this is always 1 (1 unit of currency = 1 unit of value)'
+                    : 'Enter the average price per share you paid'
+                }
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
