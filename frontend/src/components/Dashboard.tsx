@@ -145,14 +145,23 @@ export const Dashboard: React.FC = () => {
       </AppBar>
 
       {/* Main Content */}
-      <Container maxWidth="xl" sx={{ py: 4 }}>
-        <Grid container spacing={3}>
+      <Container maxWidth="xl" sx={{ py: { xs: 2, md: 4 }, px: { xs: 2, md: 3 } }}>
+        <Grid container spacing={{ xs: 2, md: 4 }}>
           {/* Welcome Section */}
           <Grid item xs={12}>
-            <Card elevation={2} sx={{ borderRadius: 3, mb: 2 }}>
-              <CardContent sx={{ p: 4 }}>
-                <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 2 }}>
-                  <Typography variant="h4" component="h1" sx={{ fontWeight: 'bold' }}>
+            <Card elevation={2} sx={{ borderRadius: 3, mb: { xs: 2, md: 3 } }}>
+              <CardContent sx={{ p: { xs: 3, md: 5 } }}>
+                <Stack 
+                  direction={{ xs: 'column', sm: 'row' }} 
+                  spacing={2} 
+                  alignItems={{ xs: 'flex-start', sm: 'center' }} 
+                  sx={{ mb: 3 }}
+                >
+                  <Typography 
+                    variant={{ xs: 'h5', md: 'h4' }} 
+                    component="h1" 
+                    sx={{ fontWeight: 'bold' }}
+                  >
                     Welcome to Worthy! 👋
                   </Typography>
                   <Chip 
@@ -160,15 +169,27 @@ export const Dashboard: React.FC = () => {
                     label="Asset Management Ready" 
                     color="success" 
                     variant="filled"
-                    size="small"
+                    size="medium"
                   />
                 </Stack>
                 
-                <Typography variant="body1" color="text.secondary" sx={{ mb: 3, fontSize: '1.1rem' }}>
+                <Typography 
+                  variant="body1" 
+                  color="text.secondary" 
+                  sx={{ 
+                    mb: 4, 
+                    fontSize: { xs: '1rem', md: '1.1rem' },
+                    lineHeight: 1.6
+                  }}
+                >
                   Your financial tracking system is ready! Start by managing your investment assets and recording transactions.
                 </Typography>
 
-                <Stack direction="row" spacing={2}>
+                <Stack 
+                  direction={{ xs: 'column', sm: 'row' }} 
+                  spacing={{ xs: 2, sm: 3 }}
+                  sx={{ alignItems: { xs: 'stretch', sm: 'center' } }}
+                >
                   <Button
                     variant="contained"
                     size="large"
@@ -176,6 +197,9 @@ export const Dashboard: React.FC = () => {
                     onClick={() => navigate('/assets')}
                     sx={{
                       background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                      py: { xs: 1.5, md: 2 },
+                      px: { xs: 3, md: 4 },
+                      fontSize: { xs: '1rem', md: '1.1rem' },
                       '&:hover': {
                         background: 'linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%)',
                       }
@@ -188,6 +212,11 @@ export const Dashboard: React.FC = () => {
                     size="large"
                     startIcon={<ShowChart />}
                     onClick={() => navigate('/assets')}
+                    sx={{
+                      py: { xs: 1.5, md: 2 },
+                      px: { xs: 3, md: 4 },
+                      fontSize: { xs: '1rem', md: '1.1rem' },
+                    }}
                   >
                     View Portfolio
                   </Button>
@@ -198,41 +227,63 @@ export const Dashboard: React.FC = () => {
 
           {/* Available Features */}
           <Grid item xs={12} lg={8}>
-            <Card elevation={2} sx={{ borderRadius: 3, mb: 3 }}>
-              <CardContent sx={{ p: 3 }}>
-                <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
+            <Card elevation={2} sx={{ borderRadius: 3, mb: { xs: 2, md: 3 } }}>
+              <CardContent sx={{ p: { xs: 3, md: 4 } }}>
+                <Typography 
+                  variant="h6" 
+                  gutterBottom 
+                  sx={{ 
+                    fontWeight: 'bold', 
+                    mb: { xs: 2, md: 3 },
+                    fontSize: { xs: '1.25rem', md: '1.5rem' }
+                  }}
+                >
                   Available Features
                 </Typography>
                 
-                <Grid container spacing={2}>
+                <Grid container spacing={{ xs: 2, md: 3 }}>
                   {availableFeatures.map((feature, index) => (
-                    <Grid item xs={12} key={index}>
+                    <Grid item xs={12} md={6} key={index}>
                       <Paper 
                         elevation={0} 
                         sx={{ 
-                          p: 3, 
+                          p: { xs: 2.5, md: 3.5 }, 
                           bgcolor: 'success.50',
-                          borderRadius: 2,
+                          borderRadius: 3,
                           border: '1px solid',
                           borderColor: 'success.200',
                           cursor: 'pointer',
-                          transition: 'all 0.2s ease',
+                          transition: 'all 0.3s ease',
+                          height: '100%',
                           '&:hover': {
                             bgcolor: 'success.100',
-                            transform: 'translateY(-2px)',
-                            boxShadow: 2
+                            transform: 'translateY(-4px)',
+                            boxShadow: 4
                           }
                         }}
                         onClick={feature.action}
                       >
                         <Stack direction="row" spacing={2} alignItems="center" justifyContent="space-between">
-                          <Stack direction="row" spacing={2} alignItems="center">
-                            {feature.icon}
-                            <Box>
-                              <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+                          <Stack direction="row" spacing={2} alignItems="center" sx={{ flex: 1 }}>
+                            <Box sx={{ fontSize: { xs: 32, md: 40 } }}>
+                              {feature.icon}
+                            </Box>
+                            <Box sx={{ flex: 1 }}>
+                              <Typography 
+                                variant="body1" 
+                                sx={{ 
+                                  fontWeight: 'bold',
+                                  fontSize: { xs: '1rem', md: '1.1rem' },
+                                  mb: 0.5
+                                }}
+                              >
                                 {feature.label}
                               </Typography>
-                              <Typography variant="body2" color="text.secondary">
+                              <Typography 
+                                variant="body2" 
+                                color="text.secondary"
+                                sx={{ fontSize: { xs: '0.875rem', md: '0.95rem' } }}
+                              >
                                 {feature.description}
                               </Typography>
                             </Box>
@@ -240,8 +291,12 @@ export const Dashboard: React.FC = () => {
                           <Chip 
                             label={feature.status} 
                             color="success" 
-                            size="small" 
+                            size="medium" 
                             variant="filled"
+                            sx={{ 
+                              fontWeight: 'bold',
+                              minWidth: { xs: 80, md: 90 }
+                            }}
                           />
                         </Stack>
                       </Paper>
@@ -288,31 +343,59 @@ export const Dashboard: React.FC = () => {
 
             {/* User Profile Card */}
             <Card elevation={2} sx={{ borderRadius: 3, height: 'fit-content' }}>
-              <CardContent sx={{ p: 3 }}>
-                <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
+              <CardContent sx={{ p: { xs: 3, md: 4 } }}>
+                <Typography 
+                  variant="h6" 
+                  gutterBottom 
+                  sx={{ 
+                    fontWeight: 'bold', 
+                    mb: { xs: 2, md: 3 },
+                    fontSize: { xs: '1.25rem', md: '1.5rem' }
+                  }}
+                >
                   Your Profile
                 </Typography>
                 
-                <Grid container spacing={3}>
+                <Grid container spacing={{ xs: 2, md: 3 }}>
                   {userDetails.map((detail, index) => (
-                    <Grid item xs={12} sm={6} key={index}>
+                    <Grid item xs={12} sm={6} lg={12} xl={6} key={index}>
                       <Paper 
                         elevation={0} 
                         sx={{ 
-                          p: 2, 
+                          p: { xs: 2, md: 2.5 }, 
                           bgcolor: 'grey.50',
                           borderRadius: 2,
                           border: '1px solid',
-                          borderColor: 'grey.200'
+                          borderColor: 'grey.200',
+                          transition: 'all 0.2s ease',
+                          '&:hover': {
+                            bgcolor: 'grey.100',
+                            borderColor: 'grey.300'
+                          }
                         }}
                       >
                         <Stack direction="row" spacing={2} alignItems="center">
-                          {detail.icon}
-                          <Box>
-                            <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.875rem' }}>
+                          <Box sx={{ fontSize: { xs: 20, md: 24 } }}>
+                            {detail.icon}
+                          </Box>
+                          <Box sx={{ flex: 1 }}>
+                            <Typography 
+                              variant="body2" 
+                              color="text.secondary" 
+                              sx={{ 
+                                fontSize: { xs: '0.75rem', md: '0.875rem' },
+                                mb: 0.5
+                              }}
+                            >
                               {detail.label}
                             </Typography>
-                            <Typography variant="body1" sx={{ fontWeight: 'medium' }}>
+                            <Typography 
+                              variant="body1" 
+                              sx={{ 
+                                fontWeight: 'medium',
+                                fontSize: { xs: '0.95rem', md: '1rem' }
+                              }}
+                            >
                               {detail.value}
                             </Typography>
                           </Box>
@@ -321,24 +404,44 @@ export const Dashboard: React.FC = () => {
                     </Grid>
                   ))}
                   {user?.created_at && (
-                    <Grid item xs={12} sm={6}>
+                    <Grid item xs={12} sm={6} lg={12} xl={6}>
                       <Paper 
                         elevation={0} 
                         sx={{ 
-                          p: 2, 
+                          p: { xs: 2, md: 2.5 }, 
                           bgcolor: 'grey.50',
                           borderRadius: 2,
                           border: '1px solid',
-                          borderColor: 'grey.200'
+                          borderColor: 'grey.200',
+                          transition: 'all 0.2s ease',
+                          '&:hover': {
+                            bgcolor: 'grey.100',
+                            borderColor: 'grey.300'
+                          }
                         }}
                       >
                         <Stack direction="row" spacing={2} alignItems="center">
-                          <CalendarToday color="primary" />
-                          <Box>
-                            <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.875rem' }}>
+                          <Box sx={{ fontSize: { xs: 20, md: 24 } }}>
+                            <CalendarToday color="primary" />
+                          </Box>
+                          <Box sx={{ flex: 1 }}>
+                            <Typography 
+                              variant="body2" 
+                              color="text.secondary" 
+                              sx={{ 
+                                fontSize: { xs: '0.75rem', md: '0.875rem' },
+                                mb: 0.5
+                              }}
+                            >
                               Member Since
                             </Typography>
-                            <Typography variant="body1" sx={{ fontWeight: 'medium' }}>
+                            <Typography 
+                              variant="body1" 
+                              sx={{ 
+                                fontWeight: 'medium',
+                                fontSize: { xs: '0.95rem', md: '1rem' }
+                              }}
+                            >
                               {new Date(user.created_at).toLocaleDateString()}
                             </Typography>
                           </Box>
@@ -389,36 +492,62 @@ export const Dashboard: React.FC = () => {
 
           {/* Status Cards */}
           <Grid item xs={12}>
-            <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', mb: 2 }}>
+            <Typography 
+              variant="h6" 
+              gutterBottom 
+              sx={{ 
+                fontWeight: 'bold', 
+                mb: { xs: 2, md: 3 },
+                fontSize: { xs: '1.25rem', md: '1.5rem' }
+              }}
+            >
               System Status
             </Typography>
-            <Grid container spacing={2}>
+            <Grid container spacing={{ xs: 2, md: 3 }}>
               {statusCards.map((card, index) => (
-                <Grid item xs={6} sm={3} key={index}>
+                <Grid item xs={6} sm={3} md={3} lg={3} key={index}>
                   <Card 
-                    elevation={1} 
+                    elevation={2} 
                     sx={{ 
-                      borderRadius: 2, 
+                      borderRadius: 3, 
                       textAlign: 'center', 
-                      p: 2,
-                      transition: 'transform 0.2s ease',
+                      p: { xs: 2, md: 3 },
+                      transition: 'all 0.3s ease',
+                      height: '100%',
                       '&:hover': {
-                        transform: 'translateY(-2px)',
-                        elevation: 3
+                        transform: 'translateY(-4px)',
+                        boxShadow: 6
                       }
                     }}
                   >
-                    <Box sx={{ color: `${card.color}.main`, mb: 1 }}>
-                      {React.cloneElement(card.icon, { sx: { fontSize: 32 } })}
+                    <Box sx={{ 
+                      color: `${card.color}.main`, 
+                      mb: { xs: 1, md: 2 }
+                    }}>
+                      {React.cloneElement(card.icon, { 
+                        sx: { fontSize: { xs: 32, md: 40 } } 
+                      })}
                     </Box>
-                    <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 'bold' }}>
+                    <Typography 
+                      variant="subtitle2" 
+                      gutterBottom 
+                      sx={{ 
+                        fontWeight: 'bold',
+                        fontSize: { xs: '0.875rem', md: '1rem' },
+                        mb: { xs: 1, md: 1.5 }
+                      }}
+                    >
                       {card.title}
                     </Typography>
                     <Chip 
                       label={card.status} 
                       color={card.color as any} 
-                      size="small" 
+                      size="medium" 
                       variant="filled"
+                      sx={{ 
+                        fontWeight: 'bold',
+                        fontSize: { xs: '0.75rem', md: '0.875rem' }
+                      }}
                     />
                   </Card>
                 </Grid>
