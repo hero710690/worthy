@@ -1,4 +1,4 @@
-// Asset Valuation Service
+// Asset Valuation Service with Real-time Data Integration
 // Milestone 3: External API Integration & Real-time Data
 // Combines exchange rates and stock prices for comprehensive asset valuation
 
@@ -146,6 +146,7 @@ export class AssetValuationService {
     // Pre-fetch stock prices for better performance
     if (stockSymbols.length > 0) {
       try {
+        console.log(`🔄 Pre-fetching prices for ${stockSymbols.length} symbols...`);
         await stockPriceService.getMultipleStockPrices(stockSymbols);
       } catch (error) {
         console.warn('Failed to pre-fetch stock prices:', error);
