@@ -212,7 +212,7 @@ export class AssetValuationService {
       lastUpdated: new Date(),
       apiStatus: {
         exchangeRates: exchangeRateService.isUsingRealApiRates(),
-        stockPrices: stockPriceService.getServiceStatus().isUsingRealPrices
+        stockPrices: stockPriceService.isShowingLivePrices()
       }
     };
 
