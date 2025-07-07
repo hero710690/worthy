@@ -28,11 +28,13 @@ Parameters:
     Type: String
     NoEcho: true
     Description: JWT Secret Key
+    Default: REDACTED_JWT_SECRET
   
   DatabaseURL:
     Type: String
     NoEcho: true
     Description: PostgreSQL Database URL
+    Default: postgresql://worthy_admin:REDACTED_DB_PASSWORD@worthy-db-dev.ch0ccg6ycp7t.ap-northeast-1.rds.amazonaws.com:5432/worthy
   
   AlphaVantageAPIKey:
     Type: String
@@ -69,7 +71,7 @@ Resources:
             RestApiId: !Ref WorthyApiGateway
       Environment:
         Variables:
-          PYTHONPATH: /var/task/src
+          PYTHONPATH: /var/task
 
   WorthyApiGateway:
     Type: AWS::Serverless::Api
@@ -92,19 +94,6 @@ Resources:
             Headers:
               Access-Control-Allow-Origin: "'*'"
               Access-Control-Allow-Headers: "'Content-Type,Authorization,X-Requested-With'"
-
-  # Database initialization Lambda (run once)
-  DatabaseInitFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub "worthy-db-init-${Environment}"
-      CodeUri: src/
-      Handler: database.create_tables
-      Description: Initialize Worthy Database Tables
-      Timeout: 60
-      Environment:
-        Variables:
-          PYTHONPATH: /var/task/src
 
 Outputs:
   WorthyApiUrl:

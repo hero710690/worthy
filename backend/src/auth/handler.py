@@ -5,8 +5,12 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
 from email_validator import validate_email, EmailNotValidError
 
-from ..database import execute_query, execute_update
-from ..utils.response import create_response, create_error_response
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+
+from database import execute_query, execute_update
+from utils.response import create_response, create_error_response
 
 logger = logging.getLogger(__name__)
 
