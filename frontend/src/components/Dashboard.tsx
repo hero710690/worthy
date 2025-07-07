@@ -1,561 +1,548 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
-  AppBar,
-  Toolbar,
   Typography,
-  Button,
-  Container,
   Card,
   CardContent,
+  Button,
+  Grid,
+  Avatar,
+  Stack,
+  Drawer,
   List,
   ListItem,
   ListItemIcon,
   ListItemText,
+  ListItemButton,
+  IconButton,
   Chip,
-  Avatar,
   Paper,
-  Grid,
-  Stack,
   Divider,
 } from '@mui/material';
 import {
-  AccountCircle,
-  ExitToApp,
+  Dashboard as DashboardIcon,
   TrendingUp,
   AccountBalance,
-  Calculate,
-  Analytics,
-  Language,
-  CheckCircle,
-  Person,
-  Email,
-  AttachMoney,
-  CalendarToday,
   ShowChart,
   Add,
+  AccountCircle,
+  ExitToApp,
+  Menu,
+  Person,
+  Settings,
+  Analytics,
+  Receipt,
+  Wallet,
+  GpsFixed,
+  Assessment,
+  Help,
+  Logout,
 } from '@mui/icons-material';
-import { useAuth } from '../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
+import { useAuthStore } from '../store/authStore';
+
+const drawerWidth = 280;
 
 export const Dashboard: React.FC = () => {
-  const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const { user, logout } = useAuthStore();
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const handleLogout = () => {
     logout();
+    navigate('/login');
   };
 
-  const userDetails = [
-    { label: 'Name', value: user?.name, icon: <Person color="primary" /> },
-    { label: 'Email', value: user?.email, icon: <Email color="primary" /> },
-    { label: 'User ID', value: `#${user?.user_id}`, icon: <Person color="primary" /> },
-    { label: 'Base Currency', value: user?.base_currency, icon: <AttachMoney color="primary" /> },
-    { label: 'Birth Year', value: user?.birth_year, icon: <CalendarToday color="primary" /> },
+  const handleDrawerToggle = () => {
+    setMobileOpen(!mobileOpen);
+  };
+
+  const menuItems = [
+    { text: 'Dashboard', icon: <DashboardIcon />, active: true, path: '/dashboard' },
+    { text: 'Assets', icon: <TrendingUp />, active: false, path: '/assets' },
+    { text: 'Transactions', icon: <Receipt />, active: false, path: '/transactions' },
+    { text: 'Portfolio', icon: <Assessment />, active: false, path: '/portfolio' },
+    { text: 'Goals', icon: <GpsFixed />, active: false, path: '/goals' },
+    { text: 'Analytics', icon: <Analytics />, active: false, path: '/analytics' },
+    { text: 'Settings', icon: <Settings />, active: false, path: '/settings' },
   ];
 
-  const availableFeatures = [
-    { 
-      label: 'Asset Portfolio Management', 
-      icon: <TrendingUp color="success" />, 
-      description: 'Initialize and manage your investment assets',
-      action: () => navigate('/assets'),
-      status: 'Available'
+  const portfolioStats = [
+    {
+      title: 'Total Assets',
+      value: '$0.00',
+      change: '+0.0%',
+      changeType: 'positive',
+      icon: <AccountBalance />,
+      color: '#667eea'
     },
-    { 
-      label: 'Investment Recording', 
-      icon: <AccountBalance color="success" />, 
-      description: 'Record lump-sum purchases and transactions',
-      action: () => navigate('/assets'),
-      status: 'Available'
+    {
+      title: 'Portfolio Value',
+      value: '$0.00',
+      change: '+0.0%',
+      changeType: 'positive',
+      icon: <TrendingUp />,
+      color: '#764ba2'
+    },
+    {
+      title: 'Monthly Investment',
+      value: '$0.00',
+      change: '+0.0%',
+      changeType: 'positive',
+      icon: <ShowChart />,
+      color: '#f093fb'
+    },
+    {
+      title: 'FIRE Progress',
+      value: '0%',
+      change: 'vs target',
+      changeType: 'neutral',
+      icon: <GpsFixed />,
+      color: '#f5576c'
     },
   ];
 
-  const upcomingFeatures = [
-    { label: 'FIRE Calculator', icon: <Calculate color="info" />, status: 'Planned' },
-    { label: 'Performance Analytics', icon: <Analytics color="info" />, status: 'Planned' },
-    { label: 'Real-time Price Updates', icon: <ShowChart color="info" />, status: 'Planned' },
-    { label: 'Recurring Investments', icon: <Language color="info" />, status: 'Planned' },
-  ];
+  const drawer = (
+    <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      {/* Logo/Brand */}
+      <Box sx={{ p: 3, borderBottom: '1px solid', borderColor: 'divider' }}>
+        <Stack direction="row" spacing={2} alignItems="center">
+          <Box
+            sx={{
+              width: 40,
+              height: 40,
+              borderRadius: '12px',
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'white',
+              fontWeight: 'bold',
+              fontSize: '1.2rem'
+            }}
+          >
+            W
+          </Box>
+          <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'text.primary' }}>
+            Worthy
+          </Typography>
+        </Stack>
+      </Box>
 
-  const statusCards = [
-    { title: 'Backend API', status: 'Connected', color: 'success', icon: <CheckCircle /> },
-    { title: 'Database', status: 'Active', color: 'primary', icon: <AccountBalance /> },
-    { title: 'Authentication', status: 'Secured', color: 'success', icon: <CheckCircle /> },
-    { title: 'Asset Management', status: 'Available', color: 'success', icon: <TrendingUp /> },
-  ];
+      {/* Navigation Menu */}
+      <Box sx={{ flex: 1, py: 2 }}>
+        <List sx={{ px: 2 }}>
+          {menuItems.map((item) => (
+            <ListItem key={item.text} disablePadding sx={{ mb: 1 }}>
+              <ListItemButton
+                onClick={() => navigate(item.path)}
+                sx={{
+                  borderRadius: 2,
+                  py: 1.5,
+                  px: 2,
+                  ...(item.active && {
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    color: 'white',
+                    '&:hover': {
+                      background: 'linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%)',
+                    }
+                  }),
+                  ...(!item.active && {
+                    '&:hover': {
+                      bgcolor: 'grey.100'
+                    }
+                  })
+                }}
+              >
+                <ListItemIcon sx={{ 
+                  minWidth: 40,
+                  color: item.active ? 'white' : 'text.secondary'
+                }}>
+                  {item.icon}
+                </ListItemIcon>
+                <ListItemText 
+                  primary={item.text}
+                  primaryTypographyProps={{
+                    fontWeight: item.active ? 'bold' : 'medium',
+                    fontSize: '0.95rem'
+                  }}
+                />
+              </ListItemButton>
+            </ListItem>
+          ))}
+        </List>
+      </Box>
+
+      {/* Bottom Section */}
+      <Box sx={{ p: 2, borderTop: '1px solid', borderColor: 'divider' }}>
+        <List>
+          <ListItem disablePadding>
+            <ListItemButton
+              sx={{
+                borderRadius: 2,
+                py: 1.5,
+                px: 2,
+                '&:hover': { bgcolor: 'grey.100' }
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 40 }}>
+                <Help />
+              </ListItemIcon>
+              <ListItemText primary="Help" />
+            </ListItemButton>
+          </ListItem>
+          <ListItem disablePadding>
+            <ListItemButton
+              onClick={handleLogout}
+              sx={{
+                borderRadius: 2,
+                py: 1.5,
+                px: 2,
+                '&:hover': { bgcolor: 'grey.100' }
+              }}
+            >
+              <ListItemIcon sx={{ minWidth: 40 }}>
+                <Logout />
+              </ListItemIcon>
+              <ListItemText primary="Log out" />
+            </ListItemButton>
+          </ListItem>
+        </List>
+      </Box>
+    </Box>
+  );
 
   return (
-    <Box sx={{ flexGrow: 1, bgcolor: 'grey.50', minHeight: '100vh' }}>
-      {/* Header */}
-      <AppBar 
-        position="static" 
-        elevation={0}
+    <Box sx={{ display: 'flex', minHeight: '100vh', bgcolor: 'grey.50' }}>
+      {/* Mobile Menu Button */}
+      <IconButton
+        color="inherit"
+        aria-label="open drawer"
+        edge="start"
+        onClick={handleDrawerToggle}
         sx={{ 
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          position: 'fixed',
+          top: 16,
+          left: 16,
+          zIndex: 1300,
+          display: { sm: 'none' },
+          bgcolor: 'white',
+          boxShadow: 2,
+          '&:hover': { bgcolor: 'grey.100' }
         }}
       >
-        <Toolbar sx={{ py: 1 }}>
-          <Typography variant="h5" component="div" sx={{ flexGrow: 1, fontWeight: 'bold' }}>
-            Worthy Dashboard
-          </Typography>
-          <Stack direction="row" spacing={2} alignItems="center">
-            <Button
-              color="inherit"
-              onClick={() => navigate('/assets')}
-              startIcon={<ShowChart />}
-              variant="outlined"
-              size="small"
-              sx={{ 
-                borderColor: 'rgba(255,255,255,0.3)',
-                '&:hover': { 
-                  borderColor: 'rgba(255,255,255,0.5)',
-                  bgcolor: 'rgba(255,255,255,0.1)'
-                }
-              }}
-            >
-              Assets
-            </Button>
-            <Avatar sx={{ bgcolor: 'rgba(255,255,255,0.2)', width: 32, height: 32 }}>
-              <AccountCircle />
-            </Avatar>
-            <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
-              <Typography variant="body2" sx={{ opacity: 0.9 }}>
-                {user?.name}
-              </Typography>
-            </Box>
-            <Button
-              color="inherit"
-              onClick={handleLogout}
-              startIcon={<ExitToApp />}
-              variant="outlined"
-              size="small"
-              sx={{ 
-                borderColor: 'rgba(255,255,255,0.3)',
-                '&:hover': { 
-                  borderColor: 'rgba(255,255,255,0.5)',
-                  bgcolor: 'rgba(255,255,255,0.1)'
-                }
-              }}
-            >
-              Logout
-            </Button>
-          </Stack>
-        </Toolbar>
-      </AppBar>
+        <Menu />
+      </IconButton>
+
+      {/* Sidebar */}
+      <Box
+        component="nav"
+        sx={{ width: { sm: drawerWidth }, flexShrink: { sm: 0 } }}
+      >
+        {/* Mobile drawer */}
+        <Drawer
+          variant="temporary"
+          open={mobileOpen}
+          onClose={handleDrawerToggle}
+          ModalProps={{ keepMounted: true }}
+          sx={{
+            display: { xs: 'block', sm: 'none' },
+            '& .MuiDrawer-paper': { 
+              boxSizing: 'border-box', 
+              width: drawerWidth,
+              bgcolor: 'white',
+              borderRight: '1px solid',
+              borderColor: 'divider'
+            },
+          }}
+        >
+          {drawer}
+        </Drawer>
+        
+        {/* Desktop drawer */}
+        <Drawer
+          variant="permanent"
+          sx={{
+            display: { xs: 'none', sm: 'block' },
+            '& .MuiDrawer-paper': { 
+              boxSizing: 'border-box', 
+              width: drawerWidth,
+              bgcolor: 'white',
+              borderRight: '1px solid',
+              borderColor: 'divider'
+            },
+          }}
+          open
+        >
+          {drawer}
+        </Drawer>
+      </Box>
 
       {/* Main Content */}
-      <Container maxWidth="xl" sx={{ py: { xs: 2, md: 4 }, px: { xs: 2, md: 3 } }}>
-        <Grid container spacing={{ xs: 2, md: 4 }}>
-          {/* Welcome Section */}
-          <Grid item xs={12}>
-            <Card elevation={2} sx={{ borderRadius: 3, mb: { xs: 2, md: 3 } }}>
-              <CardContent sx={{ p: { xs: 3, md: 5 } }}>
-                <Stack 
-                  direction={{ xs: 'column', sm: 'row' }} 
-                  spacing={2} 
-                  alignItems={{ xs: 'flex-start', sm: 'center' }} 
-                  sx={{ mb: 3 }}
-                >
-                  <Typography 
-                    variant={{ xs: 'h5', md: 'h4' }} 
-                    component="h1" 
-                    sx={{ fontWeight: 'bold' }}
-                  >
-                    Welcome to Worthy! 👋
-                  </Typography>
-                  <Chip 
-                    icon={<CheckCircle />} 
-                    label="Asset Management Ready" 
-                    color="success" 
-                    variant="filled"
-                    size="medium"
-                  />
-                </Stack>
-                
-                <Typography 
-                  variant="body1" 
-                  color="text.secondary" 
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          width: { sm: `calc(100% - ${drawerWidth}px)` },
+          minHeight: '100vh'
+        }}
+      >
+        {/* Header */}
+        <Box sx={{ p: { xs: 3, md: 4 }, pb: 0 }}>
+          <Stack 
+            direction="row" 
+            justifyContent="space-between" 
+            alignItems="center"
+            sx={{ mb: 1 }}
+          >
+            <Box>
+              <Typography 
+                variant="h4" 
+                sx={{ 
+                  fontWeight: 'bold',
+                  fontSize: { xs: '1.75rem', md: '2.125rem' },
+                  mb: 0.5
+                }}
+              >
+                Welcome back, {user?.name?.split(' ')[0] || 'User'}!
+              </Typography>
+              <Typography 
+                variant="body1" 
+                color="text.secondary"
+                sx={{ fontSize: { xs: '0.95rem', md: '1rem' } }}
+              >
+                It is the best time to manage your finances
+              </Typography>
+            </Box>
+            
+            <Stack direction="row" spacing={2} alignItems="center">
+              <Button
+                variant="contained"
+                startIcon={<Add />}
+                onClick={() => navigate('/assets')}
+                sx={{
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  borderRadius: 2,
+                  px: 3,
+                  py: 1.5,
+                  textTransform: 'none',
+                  fontWeight: 'bold',
+                  '&:hover': {
+                    background: 'linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%)',
+                  }
+                }}
+              >
+                Add new asset
+              </Button>
+              <Avatar 
+                sx={{ 
+                  width: 40, 
+                  height: 40,
+                  bgcolor: 'grey.200',
+                  color: 'text.primary'
+                }}
+              >
+                <AccountCircle />
+              </Avatar>
+            </Stack>
+          </Stack>
+        </Box>
+
+        {/* Content */}
+        <Box sx={{ p: { xs: 3, md: 4 } }}>
+          {/* Stats Cards */}
+          <Grid container spacing={3} sx={{ mb: 4 }}>
+            {portfolioStats.map((stat, index) => (
+              <Grid item xs={12} sm={6} lg={3} key={index}>
+                <Card 
+                  elevation={0}
                   sx={{ 
-                    mb: 4, 
-                    fontSize: { xs: '1rem', md: '1.1rem' },
-                    lineHeight: 1.6
+                    borderRadius: 3,
+                    border: '1px solid',
+                    borderColor: 'grey.200',
+                    transition: 'all 0.3s ease',
+                    '&:hover': {
+                      transform: 'translateY(-4px)',
+                      boxShadow: 4
+                    }
                   }}
                 >
-                  Your financial tracking system is ready! Start by managing your investment assets and recording transactions.
-                </Typography>
-
-                <Stack 
-                  direction={{ xs: 'column', sm: 'row' }} 
-                  spacing={{ xs: 2, sm: 3 }}
-                  sx={{ alignItems: { xs: 'stretch', sm: 'center' } }}
-                >
-                  <Button
-                    variant="contained"
-                    size="large"
-                    startIcon={<Add />}
-                    onClick={() => navigate('/assets')}
-                    sx={{
-                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                      py: { xs: 1.5, md: 2 },
-                      px: { xs: 3, md: 4 },
-                      fontSize: { xs: '1rem', md: '1.1rem' },
-                      '&:hover': {
-                        background: 'linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%)',
-                      }
-                    }}
-                  >
-                    Manage Assets
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    size="large"
-                    startIcon={<ShowChart />}
-                    onClick={() => navigate('/assets')}
-                    sx={{
-                      py: { xs: 1.5, md: 2 },
-                      px: { xs: 3, md: 4 },
-                      fontSize: { xs: '1rem', md: '1.1rem' },
-                    }}
-                  >
-                    View Portfolio
-                  </Button>
-                </Stack>
-              </CardContent>
-            </Card>
-          </Grid>
-
-          {/* Available Features */}
-          <Grid item xs={12} lg={8}>
-            <Card elevation={2} sx={{ borderRadius: 3, mb: { xs: 2, md: 3 } }}>
-              <CardContent sx={{ p: { xs: 3, md: 4 } }}>
-                <Typography 
-                  variant="h6" 
-                  gutterBottom 
-                  sx={{ 
-                    fontWeight: 'bold', 
-                    mb: { xs: 2, md: 3 },
-                    fontSize: { xs: '1.25rem', md: '1.5rem' }
-                  }}
-                >
-                  Available Features
-                </Typography>
-                
-                <Grid container spacing={{ xs: 2, md: 3 }}>
-                  {availableFeatures.map((feature, index) => (
-                    <Grid item xs={12} md={6} key={index}>
-                      <Paper 
-                        elevation={0} 
-                        sx={{ 
-                          p: { xs: 2.5, md: 3.5 }, 
-                          bgcolor: 'success.50',
-                          borderRadius: 3,
-                          border: '1px solid',
-                          borderColor: 'success.200',
-                          cursor: 'pointer',
-                          transition: 'all 0.3s ease',
-                          height: '100%',
-                          '&:hover': {
-                            bgcolor: 'success.100',
-                            transform: 'translateY(-4px)',
-                            boxShadow: 4
-                          }
-                        }}
-                        onClick={feature.action}
+                  <CardContent sx={{ p: 3 }}>
+                    <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
+                      <Typography 
+                        variant="body2" 
+                        color="text.secondary"
+                        sx={{ fontWeight: 'medium' }}
                       >
-                        <Stack direction="row" spacing={2} alignItems="center" justifyContent="space-between">
-                          <Stack direction="row" spacing={2} alignItems="center" sx={{ flex: 1 }}>
-                            <Box sx={{ fontSize: { xs: 32, md: 40 } }}>
-                              {feature.icon}
-                            </Box>
-                            <Box sx={{ flex: 1 }}>
-                              <Typography 
-                                variant="body1" 
-                                sx={{ 
-                                  fontWeight: 'bold',
-                                  fontSize: { xs: '1rem', md: '1.1rem' },
-                                  mb: 0.5
-                                }}
-                              >
-                                {feature.label}
-                              </Typography>
-                              <Typography 
-                                variant="body2" 
-                                color="text.secondary"
-                                sx={{ fontSize: { xs: '0.875rem', md: '0.95rem' } }}
-                              >
-                                {feature.description}
-                              </Typography>
-                            </Box>
-                          </Stack>
-                          <Chip 
-                            label={feature.status} 
-                            color="success" 
-                            size="medium" 
-                            variant="filled"
-                            sx={{ 
-                              fontWeight: 'bold',
-                              minWidth: { xs: 80, md: 90 }
-                            }}
-                          />
-                        </Stack>
-                      </Paper>
-                    </Grid>
-                  ))}
-                </Grid>
-              </CardContent>
-            </Card>
-
-            {/* Coming Soon Features */}
-            <Card elevation={2} sx={{ borderRadius: 3, mb: 3 }}>
-              <CardContent sx={{ p: 3 }}>
-                <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
-                  Coming Soon
-                </Typography>
-                
-                <List dense sx={{ p: 0 }}>
-                  {upcomingFeatures.map((feature, index) => (
-                    <React.Fragment key={index}>
-                      <ListItem sx={{ px: 0, py: 2 }}>
-                        <ListItemIcon sx={{ minWidth: 40 }}>
-                          {feature.icon}
-                        </ListItemIcon>
-                        <ListItemText 
-                          primary={feature.label}
-                          primaryTypographyProps={{ 
-                            variant: 'body1',
-                            fontWeight: 'medium'
-                          }}
-                        />
-                        <Chip 
-                          label={feature.status} 
-                          color="info" 
-                          size="small" 
-                          variant="outlined"
-                        />
-                      </ListItem>
-                      {index < upcomingFeatures.length - 1 && <Divider />}
-                    </React.Fragment>
-                  ))}
-                </List>
-              </CardContent>
-            </Card>
-
-            {/* User Profile Card */}
-            <Card elevation={2} sx={{ borderRadius: 3, height: 'fit-content' }}>
-              <CardContent sx={{ p: { xs: 3, md: 4 } }}>
-                <Typography 
-                  variant="h6" 
-                  gutterBottom 
-                  sx={{ 
-                    fontWeight: 'bold', 
-                    mb: { xs: 2, md: 3 },
-                    fontSize: { xs: '1.25rem', md: '1.5rem' }
-                  }}
-                >
-                  Your Profile
-                </Typography>
-                
-                <Grid container spacing={{ xs: 2, md: 3 }}>
-                  {userDetails.map((detail, index) => (
-                    <Grid item xs={12} sm={6} lg={12} xl={6} key={index}>
-                      <Paper 
-                        elevation={0} 
-                        sx={{ 
-                          p: { xs: 2, md: 2.5 }, 
-                          bgcolor: 'grey.50',
-                          borderRadius: 2,
-                          border: '1px solid',
-                          borderColor: 'grey.200',
-                          transition: 'all 0.2s ease',
-                          '&:hover': {
-                            bgcolor: 'grey.100',
-                            borderColor: 'grey.300'
-                          }
+                        {stat.title}
+                      </Typography>
+                      <Box
+                        sx={{
+                          width: 32,
+                          height: 32,
+                          borderRadius: '8px',
+                          bgcolor: `${stat.color}15`,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: stat.color
                         }}
                       >
-                        <Stack direction="row" spacing={2} alignItems="center">
-                          <Box sx={{ fontSize: { xs: 20, md: 24 } }}>
-                            {detail.icon}
-                          </Box>
-                          <Box sx={{ flex: 1 }}>
-                            <Typography 
-                              variant="body2" 
-                              color="text.secondary" 
-                              sx={{ 
-                                fontSize: { xs: '0.75rem', md: '0.875rem' },
-                                mb: 0.5
-                              }}
-                            >
-                              {detail.label}
-                            </Typography>
-                            <Typography 
-                              variant="body1" 
-                              sx={{ 
-                                fontWeight: 'medium',
-                                fontSize: { xs: '0.95rem', md: '1rem' }
-                              }}
-                            >
-                              {detail.value}
-                            </Typography>
-                          </Box>
-                        </Stack>
-                      </Paper>
-                    </Grid>
-                  ))}
-                  {user?.created_at && (
-                    <Grid item xs={12} sm={6} lg={12} xl={6}>
-                      <Paper 
-                        elevation={0} 
-                        sx={{ 
-                          p: { xs: 2, md: 2.5 }, 
-                          bgcolor: 'grey.50',
-                          borderRadius: 2,
-                          border: '1px solid',
-                          borderColor: 'grey.200',
-                          transition: 'all 0.2s ease',
-                          '&:hover': {
-                            bgcolor: 'grey.100',
-                            borderColor: 'grey.300'
-                          }
-                        }}
-                      >
-                        <Stack direction="row" spacing={2} alignItems="center">
-                          <Box sx={{ fontSize: { xs: 20, md: 24 } }}>
-                            <CalendarToday color="primary" />
-                          </Box>
-                          <Box sx={{ flex: 1 }}>
-                            <Typography 
-                              variant="body2" 
-                              color="text.secondary" 
-                              sx={{ 
-                                fontSize: { xs: '0.75rem', md: '0.875rem' },
-                                mb: 0.5
-                              }}
-                            >
-                              Member Since
-                            </Typography>
-                            <Typography 
-                              variant="body1" 
-                              sx={{ 
-                                fontWeight: 'medium',
-                                fontSize: { xs: '0.95rem', md: '1rem' }
-                              }}
-                            >
-                              {new Date(user.created_at).toLocaleDateString()}
-                            </Typography>
-                          </Box>
-                        </Stack>
-                      </Paper>
-                    </Grid>
-                  )}
-                </Grid>
-              </CardContent>
-            </Card>
-          </Grid>
-
-          {/* Milestone Status */}
-          <Grid item xs={12} lg={4}>
-            <Card elevation={2} sx={{ borderRadius: 3, height: 'fit-content' }}>
-              <CardContent sx={{ p: 3 }}>
-                <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', mb: 2 }}>
-                  Milestone Progress
-                </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  Asset management features are now live and ready to use!
-                </Typography>
-                <Box sx={{ mt: 2 }}>
-                  <Typography variant="body2" sx={{ mb: 1 }}>
-                    Milestone 2 Progress
-                  </Typography>
-                  <Box sx={{ 
-                    width: '100%', 
-                    bgcolor: 'grey.200', 
-                    borderRadius: 1, 
-                    height: 8,
-                    mb: 1
-                  }}>
-                    <Box sx={{ 
-                      width: '100%', 
-                      bgcolor: 'success.main', 
-                      height: '100%', 
-                      borderRadius: 1 
-                    }} />
-                  </Box>
-                  <Typography variant="caption" color="text.secondary">
-                    100% Complete - Asset Management Live
-                  </Typography>
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-
-          {/* Status Cards */}
-          <Grid item xs={12}>
-            <Typography 
-              variant="h6" 
-              gutterBottom 
-              sx={{ 
-                fontWeight: 'bold', 
-                mb: { xs: 2, md: 3 },
-                fontSize: { xs: '1.25rem', md: '1.5rem' }
-              }}
-            >
-              System Status
-            </Typography>
-            <Grid container spacing={{ xs: 2, md: 3 }}>
-              {statusCards.map((card, index) => (
-                <Grid item xs={6} sm={3} md={3} lg={3} key={index}>
-                  <Card 
-                    elevation={2} 
-                    sx={{ 
-                      borderRadius: 3, 
-                      textAlign: 'center', 
-                      p: { xs: 2, md: 3 },
-                      transition: 'all 0.3s ease',
-                      height: '100%',
-                      '&:hover': {
-                        transform: 'translateY(-4px)',
-                        boxShadow: 6
-                      }
-                    }}
-                  >
-                    <Box sx={{ 
-                      color: `${card.color}.main`, 
-                      mb: { xs: 1, md: 2 }
-                    }}>
-                      {React.cloneElement(card.icon, { 
-                        sx: { fontSize: { xs: 32, md: 40 } } 
-                      })}
-                    </Box>
+                        {stat.icon}
+                      </Box>
+                    </Stack>
+                    
                     <Typography 
-                      variant="subtitle2" 
-                      gutterBottom 
+                      variant="h4" 
                       sx={{ 
                         fontWeight: 'bold',
-                        fontSize: { xs: '0.875rem', md: '1rem' },
-                        mb: { xs: 1, md: 1.5 }
+                        mb: 1,
+                        fontSize: { xs: '1.75rem', md: '2rem' }
                       }}
                     >
-                      {card.title}
+                      {stat.value}
                     </Typography>
-                    <Chip 
-                      label={card.status} 
-                      color={card.color as any} 
-                      size="medium" 
-                      variant="filled"
-                      sx={{ 
-                        fontWeight: 'bold',
-                        fontSize: { xs: '0.75rem', md: '0.875rem' }
-                      }}
-                    />
-                  </Card>
-                </Grid>
-              ))}
-            </Grid>
+                    
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      <Typography 
+                        variant="body2" 
+                        sx={{ 
+                          color: stat.changeType === 'positive' ? 'success.main' : 
+                                 stat.changeType === 'negative' ? 'error.main' : 'text.secondary',
+                          fontWeight: 'medium'
+                        }}
+                      >
+                        {stat.change}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        vs last month
+                      </Typography>
+                    </Stack>
+                  </CardContent>
+                </Card>
+              </Grid>
+            ))}
           </Grid>
-        </Grid>
-      </Container>
+
+          {/* Getting Started Section */}
+          <Card 
+            elevation={0}
+            sx={{ 
+              borderRadius: 3,
+              border: '1px solid',
+              borderColor: 'grey.200',
+              mb: 3
+            }}
+          >
+            <CardContent sx={{ p: 4 }}>
+              <Typography 
+                variant="h6" 
+                sx={{ 
+                  fontWeight: 'bold',
+                  mb: 2,
+                  fontSize: { xs: '1.25rem', md: '1.5rem' }
+                }}
+              >
+                Get Started with Worthy
+              </Typography>
+              
+              <Grid container spacing={3}>
+                <Grid item xs={12} md={6}>
+                  <Paper 
+                    elevation={0}
+                    sx={{ 
+                      p: 3,
+                      borderRadius: 2,
+                      bgcolor: 'success.50',
+                      border: '1px solid',
+                      borderColor: 'success.200',
+                      cursor: 'pointer',
+                      transition: 'all 0.3s ease',
+                      '&:hover': {
+                        bgcolor: 'success.100',
+                        transform: 'translateY(-2px)',
+                        boxShadow: 2
+                      }
+                    }}
+                    onClick={() => navigate('/assets')}
+                  >
+                    <Stack direction="row" spacing={2} alignItems="center">
+                      <Box
+                        sx={{
+                          width: 48,
+                          height: 48,
+                          borderRadius: '12px',
+                          bgcolor: 'success.main',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'white'
+                        }}
+                      >
+                        <TrendingUp />
+                      </Box>
+                      <Box sx={{ flex: 1 }}>
+                        <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 0.5 }}>
+                          Manage Your Assets
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Initialize and track your investment portfolio
+                        </Typography>
+                      </Box>
+                    </Stack>
+                  </Paper>
+                </Grid>
+                
+                <Grid item xs={12} md={6}>
+                  <Paper 
+                    elevation={0}
+                    sx={{ 
+                      p: 3,
+                      borderRadius: 2,
+                      bgcolor: 'info.50',
+                      border: '1px solid',
+                      borderColor: 'info.200',
+                      cursor: 'pointer',
+                      transition: 'all 0.3s ease',
+                      '&:hover': {
+                        bgcolor: 'info.100',
+                        transform: 'translateY(-2px)',
+                        boxShadow: 2
+                      }
+                    }}
+                    onClick={() => navigate('/assets')}
+                  >
+                    <Stack direction="row" spacing={2} alignItems="center">
+                      <Box
+                        sx={{
+                          width: 48,
+                          height: 48,
+                          borderRadius: '12px',
+                          bgcolor: 'info.main',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          color: 'white'
+                        }}
+                      >
+                        <ShowChart />
+                      </Box>
+                      <Box sx={{ flex: 1 }}>
+                        <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 0.5 }}>
+                          View Portfolio
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                          Analyze your investment performance
+                        </Typography>
+                      </Box>
+                    </Stack>
+                  </Paper>
+                </Grid>
+              </Grid>
+            </CardContent>
+          </Card>
+        </Box>
+      </Box>
     </Box>
   );
 };
