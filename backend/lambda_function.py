@@ -722,6 +722,297 @@ def handle_delete_asset(asset_id, user_id):
         logger.error(f"Delete asset error: {str(e)}")
         return create_error_response(500, "Failed to delete asset")
 
+def handle_get_stock_prices_multi_api(query_params):
+    """Handle multi-API stock price requests with fallback"""
+    try:
+        symbols = query_params.get('symbols', '').split(',')
+        symbols = [s.strip().upper() for s in symbols if s.strip()]
+        
+        if not symbols:
+            return create_error_response(400, "No symbols provided")
+        
+        logger.info(f"Fetching stock prices for symbols: {symbols}")
+        
+        results = {}
+        
+        for symbol in symbols:
+            price_data = fetch_stock_price_with_fallback(symbol)
+            if price_data:
+                results[symbol] = price_data
+        
+        return create_response(200, {
+            "prices": results,
+            "timestamp": datetime.now().isoformat(),
+            "symbols_requested": len(symbols),
+            "symbols_found": len(results)
+        })
+        
+    except Exception as e:
+        logger.error(f"Multi-API stock price error: {str(e)}")
+        return create_error_response(500, "Failed to fetch stock prices")
+
+def fetch_stock_price_with_fallback(symbol):
+    """Fetch stock price with multiple API fallback strategy"""
+    
+    # API priority order: Polygon -> Finnhub -> Alpha Vantage
+    apis = [
+        ('polygon', fetch_from_polygon),
+        ('finnhub', fetch_from_finnhub), 
+        ('alphavantage', fetch_from_alphavantage_single)
+    ]
+    
+    for api_name, fetch_func in apis:
+        try:
+            logger.info(f"Trying {api_name} API for {symbol}")
+            price_data = fetch_func(symbol)
+            
+            if price_data:
+                logger.info(f"✅ Successfully fetched {symbol} from {api_name}")
+                price_data['source'] = api_name
+                return price_data
+                
+        except Exception as e:
+            logger.warning(f"❌ {api_name} API failed for {symbol}: {str(e)}")
+            continue
+    
+    # If all APIs fail, return mock data
+    logger.warning(f"🎭 All APIs failed for {symbol}, using mock data")
+    return get_mock_stock_price(symbol)
+
+def fetch_from_polygon(symbol):
+    """Fetch from Polygon.io API"""
+    api_key = os.getenv('REACT_APP_POLYGON_API_KEY')
+    if not api_key:
+        raise Exception("Polygon API key not configured")
+    
+    import requests
+    
+    # Get previous close price
+    url = f"https://api.polygon.io/v2/aggs/ticker/{symbol}/prev"
+    params = {'adjusted': 'true', 'apikey': api_key}
+    
+    response = requests.get(url, params=params, timeout=10)
+    response.raise_for_status()
+    
+    data = response.json()
+    
+    if data.get('status') != 'OK' or not data.get('results'):
+        raise Exception("No data from Polygon API")
+    
+    result = data['results'][0]
+    
+    # Get current day data for real-time price
+    current_url = f"https://api.polygon.io/v1/last/stocks/{symbol}"
+    current_params = {'apikey': api_key}
+    
+    try:
+        current_response = requests.get(current_url, params=current_params, timeout=5)
+        current_data = current_response.json()
+        
+        if current_data.get('status') == 'OK' and current_data.get('last'):
+            current_price = current_data['last']['price']
+        else:
+            current_price = result['c']  # Use close price as fallback
+    except:
+        current_price = result['c']  # Use close price as fallback
+    
+    previous_close = result['c']
+    change = current_price - previous_close
+    change_percent = (change / previous_close) * 100 if previous_close > 0 else 0
+    
+    return {
+        'symbol': symbol,
+        'price': current_price,
+        'change': change,
+        'changePercent': change_percent,
+        'currency': 'USD',
+        'lastUpdated': datetime.now().isoformat(),
+        'marketStatus': determine_market_status(),
+        'volume': result.get('v', 0),
+        'high': result.get('h', current_price),
+        'low': result.get('l', current_price),
+        'open': result.get('o', current_price)
+    }
+
+def fetch_from_finnhub(symbol):
+    """Fetch from Finnhub API"""
+    api_key = os.getenv('REACT_APP_FINNHUB_API_KEY')
+    if not api_key:
+        raise Exception("Finnhub API key not configured")
+    
+    import requests
+    
+    url = "https://finnhub.io/api/v1/quote"
+    params = {'symbol': symbol, 'token': api_key}
+    
+    response = requests.get(url, params=params, timeout=10)
+    response.raise_for_status()
+    
+    data = response.json()
+    
+    if not data.get('c'):
+        raise Exception("No data from Finnhub API")
+    
+    return {
+        'symbol': symbol,
+        'price': data['c'],  # current price
+        'change': data['d'],  # change
+        'changePercent': data['dp'],  # percent change
+        'currency': 'USD',
+        'lastUpdated': datetime.now().isoformat(),
+        'marketStatus': determine_market_status(),
+        'high': data.get('h', data['c']),
+        'low': data.get('l', data['c']),
+        'open': data.get('o', data['c']),
+        'previousClose': data.get('pc', data['c'])
+    }
+
+def fetch_from_alphavantage_single(symbol):
+    """Fetch from Alpha Vantage API (existing implementation)"""
+    api_key = os.getenv('ALPHA_VANTAGE_API_KEY')
+    if not api_key:
+        raise Exception("Alpha Vantage API key not configured")
+    
+    import requests
+    
+    url = "https://www.alphavantage.co/query"
+    params = {
+        'function': 'GLOBAL_QUOTE',
+        'symbol': symbol,
+        'apikey': api_key
+    }
+    
+    response = requests.get(url, params=params, timeout=10)
+    response.raise_for_status()
+    
+    data = response.json()
+    
+    # Check for rate limit
+    if data.get('Information') and 'rate limit' in data['Information'].lower():
+        raise Exception("Alpha Vantage rate limit reached")
+    
+    if data.get('Note') and 'rate limit' in data['Note'].lower():
+        raise Exception("Alpha Vantage rate limit reached")
+    
+    quote = data.get('Global Quote')
+    if not quote:
+        raise Exception("No data from Alpha Vantage API")
+    
+    return {
+        'symbol': quote['01. symbol'],
+        'price': float(quote['05. price']),
+        'change': float(quote['09. change']),
+        'changePercent': float(quote['10. change percent'].replace('%', '')),
+        'currency': 'USD',
+        'lastUpdated': datetime.now().isoformat(),
+        'marketStatus': determine_market_status(),
+        'high': float(quote['03. high']),
+        'low': float(quote['04. low']),
+        'open': float(quote['02. open']),
+        'previousClose': float(quote['08. previous close']),
+        'volume': int(quote['06. volume'])
+    }
+
+def fetch_from_yahoo_finance(symbol):
+    """Fetch from Yahoo Finance (no API key required)"""
+    import requests
+    
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (compatible; Worthy-Portfolio-App/1.0)'
+    }
+    
+    response = requests.get(url, headers=headers, timeout=10)
+    response.raise_for_status()
+    
+    data = response.json()
+    
+    if not data.get('chart') or not data['chart'].get('result'):
+        raise Exception("No data from Yahoo Finance API")
+    
+    result = data['chart']['result'][0]
+    meta = result.get('meta', {})
+    
+    current_price = meta.get('regularMarketPrice')
+    previous_close = meta.get('previousClose')
+    
+    if not current_price or not previous_close:
+        raise Exception("Incomplete data from Yahoo Finance API")
+    
+    change = current_price - previous_close
+    change_percent = (change / previous_close) * 100 if previous_close > 0 else 0
+    
+    return {
+        'symbol': symbol,
+        'price': current_price,
+        'change': change,
+        'changePercent': change_percent,
+        'currency': meta.get('currency', 'USD'),
+        'lastUpdated': datetime.now().isoformat(),
+        'marketStatus': map_yahoo_market_status(meta.get('marketState', 'CLOSED')),
+        'high': meta.get('regularMarketDayHigh', current_price),
+        'low': meta.get('regularMarketDayLow', current_price),
+        'open': meta.get('regularMarketOpen', current_price),
+        'previousClose': previous_close,
+        'volume': meta.get('regularMarketVolume', 0)
+    }
+
+def get_mock_stock_price(symbol):
+    """Get mock stock price data as fallback"""
+    mock_prices = {
+        'AAPL': {'price': 175.50, 'change': 2.30, 'changePercent': 1.33},
+        'TSLA': {'price': 248.75, 'change': -5.20, 'changePercent': -2.05},
+        'MSFT': {'price': 378.85, 'change': 4.12, 'changePercent': 1.10},
+        'GOOGL': {'price': 142.56, 'change': -1.23, 'changePercent': -0.85},
+        'AMZN': {'price': 145.32, 'change': 2.87, 'changePercent': 2.01},
+        'NVDA': {'price': 875.30, 'change': 15.20, 'changePercent': 1.77},
+        'META': {'price': 325.40, 'change': -8.90, 'changePercent': -2.66},
+        'NFLX': {'price': 445.60, 'change': 12.30, 'changePercent': 2.84}
+    }
+    
+    mock_data = mock_prices.get(symbol, {
+        'price': 100.00,
+        'change': 0.00,
+        'changePercent': 0.00
+    })
+    
+    return {
+        'symbol': symbol,
+        'price': mock_data['price'],
+        'change': mock_data['change'],
+        'changePercent': mock_data['changePercent'],
+        'currency': 'USD',
+        'lastUpdated': datetime.now().isoformat(),
+        'marketStatus': determine_market_status(),
+        'source': 'mock'
+    }
+
+def determine_market_status():
+    """Determine current market status"""
+    now = datetime.now()
+    hour = now.hour
+    weekday = now.weekday()
+    
+    # Simple market hours check (9:30 AM - 4:00 PM EST)
+    if weekday >= 5:  # Weekend
+        return 'CLOSED'
+    elif 9 <= hour < 16:
+        return 'OPEN'
+    elif 4 <= hour < 9:
+        return 'PRE_MARKET'
+    else:
+        return 'AFTER_HOURS'
+
+def map_yahoo_market_status(status):
+    """Map Yahoo Finance market status to our format"""
+    status_map = {
+        'REGULAR': 'OPEN',
+        'CLOSED': 'CLOSED',
+        'PRE': 'PRE_MARKET',
+        'POST': 'AFTER_HOURS'
+    }
+    return status_map.get(status.upper(), 'CLOSED')
+
 def handle_register(body):
     try:
         # Validate input
@@ -1264,6 +1555,16 @@ def lambda_handler(event, context):
                 return create_error_response(400, "Symbols array is required")
             
             return handle_get_multiple_stock_prices(symbols)
+        
+        elif path == '/api/stock-prices-multi' and http_method == 'GET':
+            # Get stock prices with multi-API fallback - requires authentication
+            request_headers = event.get('headers', {})
+            auth_result = verify_jwt_token(request_headers.get('Authorization', ''))
+            if not auth_result['valid']:
+                return create_error_response(401, "Invalid or missing token")
+            
+            query_params = event.get('queryStringParameters') or {}
+            return handle_get_stock_prices_multi_api(query_params)
         
         else:
             return create_error_response(404, f"Endpoint not found: {path}")

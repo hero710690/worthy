@@ -1,9 +1,9 @@
 // Asset Valuation Service with Real-time Data Integration
 // Milestone 3: External API Integration & Real-time Data
-// Combines exchange rates and stock prices for comprehensive asset valuation
+// Enhanced with Multi-API Stock Price Fallback System
 
 import { exchangeRateService } from './exchangeRateService';
-import { stockPriceService, type StockPrice } from './stockPriceService';
+import { enhancedStockPriceService, type StockPrice } from './enhancedStockPriceService';
 import type { Asset } from '../types/assets';
 
 export interface AssetValuation {
@@ -57,10 +57,10 @@ export class AssetValuationService {
     // Get current market price for non-cash assets
     if (asset.asset_type !== 'Cash') {
       try {
-        const stockPrice = await stockPriceService.getStockPrice(asset.ticker_symbol);
+        const stockPrice = await enhancedStockPriceService.getStockPrice(asset.ticker_symbol);
         if (stockPrice) {
           currentPrice = stockPrice.price;
-          priceSource = stockPriceService.getServiceStatus().isUsingRealPrices ? 'API' : 'MOCK';
+          priceSource = enhancedStockPriceService.getServiceStatus().isUsingRealPrices ? 'API' : 'MOCK';
         }
       } catch (error) {
         console.warn(`Failed to get current price for ${asset.ticker_symbol}:`, error);
@@ -147,7 +147,7 @@ export class AssetValuationService {
     if (stockSymbols.length > 0) {
       try {
         console.log(`🔄 Pre-fetching prices for ${stockSymbols.length} symbols...`);
-        await stockPriceService.getMultipleStockPrices(stockSymbols);
+        await enhancedStockPriceService.getMultipleStockPrices(stockSymbols);
       } catch (error) {
         console.warn('Failed to pre-fetch stock prices:', error);
       }
@@ -212,7 +212,7 @@ export class AssetValuationService {
       lastUpdated: new Date(),
       apiStatus: {
         exchangeRates: exchangeRateService.isUsingRealApiRates(),
-        stockPrices: stockPriceService.isShowingLivePrices()
+        stockPrices: enhancedStockPriceService.isShowingLivePrices()
       }
     };
 
@@ -295,11 +295,11 @@ export class AssetValuationService {
    */
   public getServiceStatus(): {
     exchangeRates: ReturnType<typeof exchangeRateService.getApiStatus>;
-    stockPrices: ReturnType<typeof stockPriceService.getServiceStatus>;
+    stockPrices: ReturnType<typeof enhancedStockPriceService.getServiceStatus>;
   } {
     return {
       exchangeRates: exchangeRateService.getApiStatus(),
-      stockPrices: stockPriceService.getServiceStatus()
+      stockPrices: enhancedStockPriceService.getServiceStatus()
     };
   }
 }
