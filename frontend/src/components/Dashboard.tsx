@@ -12,6 +12,8 @@ import {
   CircularProgress,
   Alert,
   Chip,
+  Tooltip,
+  IconButton,
 } from '@mui/material';
 import {
   TrendingUp,
@@ -21,51 +23,63 @@ import {
   AccountCircle,
   GpsFixed,
   Info,
+  Refresh,
+  CheckCircle,
+  Warning,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { assetAPI } from '../services/assetApi';
+import { assetValuationService, type PortfolioValuation } from '../services/assetValuationService';
 import { exchangeRateService } from '../services/exchangeRateService';
+import { stockPriceService } from '../services/stockPriceService';
 import type { Asset } from '../types/assets';
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [portfolioValuation, setPortfolioValuation] = useState<PortfolioValuation | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchAssets = async () => {
+  const fetchPortfolioData = async (forceRefresh: boolean = false) => {
     try {
-      setLoading(true);
+      if (forceRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+      
+      // Fetch assets from API
       const response = await assetAPI.getAssets();
       setAssets(response.assets);
+      
+      // Get user's base currency
+      const baseCurrency = user?.base_currency || 'USD';
+      
+      // Valuate portfolio with real-time data
+      const valuation = await assetValuationService.valuatePortfolio(response.assets, baseCurrency);
+      setPortfolioValuation(valuation);
+      
       setError(null);
     } catch (error: any) {
-      console.error('Failed to fetch assets:', error);
+      console.error('Failed to fetch portfolio data:', error);
       setError(error.response?.data?.message || 'Failed to fetch portfolio data');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  useEffect(() => {
-    fetchAssets();
-  }, []);
-
-  const calculateTotalValueInBaseCurrency = () => {
-    const baseCurrency = user?.base_currency || 'USD';
-    
-    return assets.reduce((total, asset) => {
-      const assetValue = asset.total_shares * asset.average_cost_basis;
-      const convertedValue = exchangeRateService.convertCurrency(
-        assetValue,
-        asset.currency,
-        baseCurrency
-      );
-      return total + convertedValue;
-    }, 0);
+  const handleRefresh = async () => {
+    await fetchPortfolioData(true);
   };
+
+  useEffect(() => {
+    fetchPortfolioData();
+  }, [user?.base_currency]);
 
   const calculateUniqueAssets = () => {
     return new Set(assets.map(asset => asset.ticker_symbol)).size;
@@ -80,22 +94,13 @@ export const Dashboard: React.FC = () => {
     return exchangeRateService.formatCurrency(amount, baseCurrency);
   };
 
-  const getConversionInfo = () => {
-    const currencies = getPortfolioCurrencies();
-    const baseCurrency = user?.base_currency || 'USD';
-    
-    if (currencies.size === 0) {
-      return null;
-    }
-    
-    if (currencies.size === 1 && currencies.has(baseCurrency)) {
-      return null; // No conversion needed
-    }
+  const getApiStatusInfo = () => {
+    if (!portfolioValuation) return null;
     
     return {
-      originalCurrencies: Array.from(currencies),
-      baseCurrency: baseCurrency,
-      isConverted: true
+      exchangeRates: portfolioValuation.apiStatus.exchangeRates,
+      stockPrices: portfolioValuation.apiStatus.stockPrices,
+      lastUpdated: portfolioValuation.lastUpdated
     };
   };
 
@@ -111,30 +116,42 @@ export const Dashboard: React.FC = () => {
     },
     {
       title: 'Portfolio Value',
-      value: formatBaseCurrency(calculateTotalValueInBaseCurrency()),
-      change: '+0.0%',
-      changeType: 'positive',
+      value: portfolioValuation ? formatBaseCurrency(portfolioValuation.totalValueInBaseCurrency) : '$0.00',
+      change: portfolioValuation && portfolioValuation.totalUnrealizedGainLossPercent !== 0 
+        ? `${portfolioValuation.totalUnrealizedGainLossPercent >= 0 ? '+' : ''}${portfolioValuation.totalUnrealizedGainLossPercent.toFixed(2)}%`
+        : '+0.0%',
+      changeType: portfolioValuation && portfolioValuation.totalUnrealizedGainLossPercent > 0 
+        ? 'positive' 
+        : portfolioValuation && portfolioValuation.totalUnrealizedGainLossPercent < 0 
+        ? 'negative' 
+        : 'neutral',
       icon: <TrendingUp />,
       color: '#764ba2',
-      subtext: 'vs last month'
+      subtext: 'unrealized P&L'
+    },
+    {
+      title: 'Unrealized P&L',
+      value: portfolioValuation ? formatBaseCurrency(portfolioValuation.totalUnrealizedGainLoss) : '$0.00',
+      change: portfolioValuation && portfolioValuation.totalUnrealizedGainLossPercent !== 0 
+        ? `${portfolioValuation.totalUnrealizedGainLossPercent >= 0 ? '+' : ''}${portfolioValuation.totalUnrealizedGainLossPercent.toFixed(2)}%`
+        : '0.0%',
+      changeType: portfolioValuation && portfolioValuation.totalUnrealizedGainLoss > 0 
+        ? 'positive' 
+        : portfolioValuation && portfolioValuation.totalUnrealizedGainLoss < 0 
+        ? 'negative' 
+        : 'neutral',
+      icon: <ShowChart />,
+      color: '#f093fb',
+      subtext: 'total gain/loss'
     },
     {
       title: 'Unique Assets',
       value: calculateUniqueAssets().toString(),
       change: 'diversification',
       changeType: 'neutral',
-      icon: <ShowChart />,
-      color: '#f093fb',
-      subtext: ''
-    },
-    {
-      title: 'FIRE Progress',
-      value: '0%',
-      change: 'vs target',
-      changeType: 'neutral',
       icon: <GpsFixed />,
       color: '#f5576c',
-      subtext: ''
+      subtext: 'different symbols'
     },
   ];
 
@@ -209,28 +226,47 @@ export const Dashboard: React.FC = () => {
           </Alert>
         )}
 
-        {/* Currency Conversion Info */}
-        {getConversionInfo() && (
+        {/* Real-time Data Status */}
+        {portfolioValuation && (
           <Alert 
-            severity="info" 
+            severity={portfolioValuation.apiStatus.exchangeRates && portfolioValuation.apiStatus.stockPrices ? "success" : "info"}
             sx={{ mb: 3 }}
-            icon={<Info />}
+            action={
+              <Tooltip title="Refresh portfolio data">
+                <IconButton
+                  color="inherit"
+                  size="small"
+                  onClick={handleRefresh}
+                  disabled={refreshing}
+                >
+                  {refreshing ? <CircularProgress size={16} /> : <Refresh />}
+                </IconButton>
+              </Tooltip>
+            }
           >
             <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
-              <Typography variant="body2">
-                Portfolio values converted to {user?.base_currency || 'USD'} from:
+              <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+                Real-time Data Status:
               </Typography>
-              {getConversionInfo()?.originalCurrencies.map((currency, index) => (
-                <Chip 
-                  key={currency}
-                  label={currency}
-                  size="small"
-                  color="info"
-                  variant="outlined"
-                />
-              ))}
+              
+              <Chip 
+                icon={portfolioValuation.apiStatus.exchangeRates ? <CheckCircle /> : <Warning />}
+                label={`Exchange Rates: ${portfolioValuation.apiStatus.exchangeRates ? 'Live' : 'Mock'}`}
+                size="small"
+                color={portfolioValuation.apiStatus.exchangeRates ? "success" : "warning"}
+                variant="outlined"
+              />
+              
+              <Chip 
+                icon={portfolioValuation.apiStatus.stockPrices ? <CheckCircle /> : <Warning />}
+                label={`Stock Prices: ${portfolioValuation.apiStatus.stockPrices ? 'Live' : 'Mock'}`}
+                size="small"
+                color={portfolioValuation.apiStatus.stockPrices ? "success" : "warning"}
+                variant="outlined"
+              />
+              
               <Typography variant="body2" color="text.secondary">
-                (Using mock exchange rates - Real rates coming in Milestone 3)
+                Last updated: {portfolioValuation.lastUpdated.toLocaleTimeString()}
               </Typography>
             </Stack>
           </Alert>
@@ -427,9 +463,9 @@ export const Dashboard: React.FC = () => {
                         View Portfolio
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
-                        {calculateTotalValueInBaseCurrency() > 0 
-                          ? `Analyze your ${formatBaseCurrency(calculateTotalValueInBaseCurrency())} portfolio`
-                          : 'Analyze your investment performance'
+                        {portfolioValuation && portfolioValuation.totalValueInBaseCurrency > 0 
+                          ? `Analyze your ${formatBaseCurrency(portfolioValuation.totalValueInBaseCurrency)} portfolio with real-time data`
+                          : 'Analyze your investment performance with real-time market data'
                         }
                       </Typography>
                     </Box>
