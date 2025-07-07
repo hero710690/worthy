@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import {
+  Box,
+  Typography,
   Card,
   CardContent,
-  Typography,
-  Grid,
   Button,
-  Box,
+  Grid,
   Chip,
   Table,
   TableBody,
@@ -23,35 +23,91 @@ import {
 import {
   Add,
   TrendingUp,
+  TrendingDown,
   AccountBalance,
-  Visibility,
   ShowChart,
+  Assessment,
+  Edit,
+  Delete,
+  Refresh,
 } from '@mui/icons-material';
-import { useNavigate } from 'react-router-dom';
+import { useAuthStore } from '../../store/authStore';
 import { assetAPI } from '../../services/assetApi';
+import { assetValuationService } from '../../services/assetValuationService';
+import { stockPriceService } from '../../services/stockPriceService';
+import { exchangeRateService } from '../../services/exchangeRateService';
 import { AssetInitForm } from './AssetInitForm';
-import { TransactionForm } from './TransactionForm';
 import type { Asset } from '../../types/assets';
 
 export const AssetsList: React.FC = () => {
-  const navigate = useNavigate();
+  const { user } = useAuthStore();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [initFormOpen, setInitFormOpen] = useState(false);
-  const [transactionFormOpen, setTransactionFormOpen] = useState(false);
-  const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
+  const [showAssetForm, setShowAssetForm] = useState(false);
+  const [currentPrices, setCurrentPrices] = useState<Map<string, number>>(new Map());
+  const [portfolioValue, setPortfolioValue] = useState(0);
+  const [totalUnrealizedPL, setTotalUnrealizedPL] = useState(0);
+  const [apiStatus, setApiStatus] = useState({ exchangeRates: false, stockPrices: false });
 
   const fetchAssets = async () => {
     try {
       setLoading(true);
       const response = await assetAPI.getAssets();
       setAssets(response.assets);
+      
+      // Fetch current prices and calculate portfolio value
+      await updatePortfolioData(response.assets);
+      
       setError(null);
     } catch (error: any) {
+      console.error('Failed to fetch assets:', error);
       setError(error.response?.data?.message || 'Failed to fetch assets');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const updatePortfolioData = async (assetList: Asset[]) => {
+    try {
+      const baseCurrency = user?.base_currency || 'USD';
+      
+      // Get portfolio valuation with real-time data
+      const portfolioValuation = await assetValuationService.valuatePortfolio(assetList, baseCurrency);
+      
+      // Update state with real-time data
+      setPortfolioValue(portfolioValuation.totalValueInBaseCurrency);
+      setTotalUnrealizedPL(portfolioValuation.totalUnrealizedGainLoss);
+      setApiStatus(portfolioValuation.apiStatus);
+      
+      // Extract current prices for display
+      const pricesMap = new Map<string, number>();
+      portfolioValuation.assets.forEach(valuation => {
+        if (valuation.currentPrice) {
+          pricesMap.set(valuation.asset.ticker_symbol, valuation.currentPrice);
+        }
+      });
+      setCurrentPrices(pricesMap);
+      
+    } catch (error) {
+      console.error('Failed to update portfolio data:', error);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      // Force refresh of external data
+      await exchangeRateService.forceRefreshRates();
+      stockPriceService.clearCache();
+      
+      // Refresh assets and portfolio data
+      await fetchAssets();
+    } catch (error) {
+      console.error('Failed to refresh data:', error);
+    } finally {
+      setRefreshing(false);
     }
   };
 
@@ -59,400 +115,318 @@ export const AssetsList: React.FC = () => {
     fetchAssets();
   }, []);
 
-  const handleInitSuccess = () => {
+  const handleAssetSuccess = () => {
+    setShowAssetForm(false);
     fetchAssets();
-  };
-
-  const handleTransactionSuccess = () => {
-    fetchAssets();
-    setTransactionFormOpen(false);
-    setSelectedAsset(null);
-  };
-
-  const handleAddTransaction = (asset: Asset) => {
-    setSelectedAsset(asset);
-    setTransactionFormOpen(true);
-  };
-
-  const calculateTotalValue = () => {
-    return assets.reduce((total, asset) => {
-      return total + (asset.total_shares * asset.average_cost_basis);
-    }, 0);
   };
 
   const formatCurrency = (amount: number, currency: string) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: currency,
-      minimumFractionDigits: 2,
-    }).format(amount);
+    return exchangeRateService.formatCurrency(amount, currency);
+  };
+
+  const getAssetTypeColor = (type: string) => {
+    const colors: { [key: string]: string } = {
+      'Stock': 'primary',
+      'ETF': 'secondary',
+      'Cash': 'success',
+      'Bond': 'warning',
+      'REIT': 'info',
+      'Mutual Fund': 'error'
+    };
+    return colors[type] || 'default';
+  };
+
+  const getPriceChangeColor = (currentPrice: number, avgCost: number) => {
+    if (currentPrice > avgCost) return 'success.main';
+    if (currentPrice < avgCost) return 'error.main';
+    return 'text.secondary';
+  };
+
+  const getPriceChangeIcon = (currentPrice: number, avgCost: number) => {
+    if (currentPrice > avgCost) return <TrendingUp fontSize="small" />;
+    if (currentPrice < avgCost) return <TrendingDown fontSize="small" />;
+    return null;
+  };
+
+  const calculatePriceChange = (currentPrice: number, avgCost: number) => {
+    const change = currentPrice - avgCost;
+    const changePercent = avgCost > 0 ? (change / avgCost) * 100 : 0;
+    return { change, changePercent };
   };
 
   if (loading) {
     return (
-      <Box sx={{ minHeight: '100vh' }}>
-        <Box sx={{ p: { xs: 3, md: 4 } }}>
-          <Typography 
-            variant="h4" 
-            sx={{ 
-              fontWeight: 'bold',
-              fontSize: { xs: '1.75rem', md: '2.125rem' },
-              mb: 2
-            }}
-          >
-            Asset Management
-          </Typography>
-          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
-            <CircularProgress size={60} />
-          </Box>
+      <Container maxWidth="xl" sx={{ py: 4 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
+          <CircularProgress />
         </Box>
-      </Box>
+      </Container>
     );
   }
 
   return (
-    <Box sx={{ minHeight: '100vh' }}>
+    <Container maxWidth="xl" sx={{ py: 4 }}>
       {/* Header */}
-      <Box sx={{ p: { xs: 3, md: 4 }, pb: 0 }}>
-        <Stack 
-          direction="row" 
-          justifyContent="space-between" 
-          alignItems="center"
-          sx={{ mb: 1 }}
-        >
-          <Box>
-            <Typography 
-              variant="h4" 
-              sx={{ 
-                fontWeight: 'bold',
-                fontSize: { xs: '1.75rem', md: '2.125rem' },
-                mb: 0.5
-              }}
-            >
-              Asset Management
-            </Typography>
-            <Typography 
-              variant="body1" 
-              color="text.secondary"
-              sx={{ fontSize: { xs: '0.95rem', md: '1rem' } }}
-            >
-              Manage your investment portfolio and track performance
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 1 }}>
+            My Assets
+          </Typography>
+          <Typography variant="body1" color="text.secondary">
+            Manage your investment portfolio and track performance
+          </Typography>
+        </Box>
+        <Stack direction="row" spacing={2}>
+          <Button
+            variant="outlined"
+            startIcon={refreshing ? <CircularProgress size={16} /> : <Refresh />}
+            onClick={handleRefresh}
+            disabled={refreshing}
+            sx={{ borderRadius: 2 }}
+          >
+            {refreshing ? 'Refreshing...' : 'Refresh Data'}
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={<Add />}
+            onClick={() => setShowAssetForm(true)}
+            sx={{
+              borderRadius: 2,
+              px: 3,
+              py: 1.5,
+              textTransform: 'none',
+              fontWeight: 'bold'
+            }}
+          >
+            Add Asset
+          </Button>
+        </Stack>
+      </Stack>
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          {error}
+        </Alert>
+      )}
+
+      {/* API Status Indicators */}
+      <Stack direction="row" spacing={2} sx={{ mb: 3 }}>
+        <Chip
+          label={`Exchange Rates: ${apiStatus.exchangeRates ? 'Live' : 'Mock'}`}
+          color={apiStatus.exchangeRates ? 'success' : 'warning'}
+          variant="outlined"
+          size="small"
+        />
+        <Chip
+          label={`Stock Prices: ${apiStatus.stockPrices ? 'Live' : 'Mock'}`}
+          color={apiStatus.stockPrices ? 'success' : 'warning'}
+          variant="outlined"
+          size="small"
+        />
+      </Stack>
+
+      {/* Summary Cards */}
+      <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid item xs={12} sm={4}>
+          <Card 
+            elevation={0} 
+            sx={{ 
+              borderRadius: 3, 
+              height: '100%',
+              border: '1px solid',
+              borderColor: 'grey.200',
+              transition: 'all 0.3s ease',
+              '&:hover': {
+                borderColor: 'primary.main',
+                boxShadow: '0 8px 32px rgba(102, 126, 234, 0.1)'
+              }
+            }}
+          >
+            <CardContent sx={{ p: 3 }}>
+              <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
+                <Box
+                  sx={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: '8px',
+                    bgcolor: '#667eea15',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#667eea'
+                  }}
+                >
+                  <AccountBalance />
+                </Box>
+              </Stack>
+              <Typography 
+                variant="h4" 
+                sx={{ 
+                  fontWeight: 'bold',
+                  mb: 1,
+                  fontSize: { xs: '1.75rem', md: '2rem' }
+                }}
+              >
+                {formatCurrency(portfolioValue, user?.base_currency || 'USD')}
+              </Typography>
+              <Stack direction="row" alignItems="center" spacing={1}>
+                <Typography 
+                  variant="body2" 
+                  sx={{ 
+                    color: totalUnrealizedPL >= 0 ? 'success.main' : 'error.main',
+                    fontWeight: 'medium'
+                  }}
+                >
+                  {totalUnrealizedPL >= 0 ? '+' : ''}{formatCurrency(totalUnrealizedPL, user?.base_currency || 'USD')}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  unrealized P&L
+                </Typography>
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid item xs={12} sm={4}>
+          <Card 
+            elevation={0} 
+            sx={{ 
+              borderRadius: 3, 
+              height: '100%',
+              border: '1px solid',
+              borderColor: 'grey.200',
+              transition: 'all 0.3s ease',
+              '&:hover': {
+                borderColor: 'success.main',
+                boxShadow: '0 8px 32px rgba(76, 175, 80, 0.1)'
+              }
+            }}
+          >
+            <CardContent sx={{ p: 3 }}>
+              <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
+                <Box
+                  sx={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: '8px',
+                    bgcolor: '#4caf5015',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#4caf50'
+                  }}
+                >
+                  <ShowChart />
+                </Box>
+              </Stack>
+              <Typography 
+                variant="h4" 
+                sx={{ 
+                  fontWeight: 'bold',
+                  mb: 1,
+                  fontSize: { xs: '1.75rem', md: '2rem' }
+                }}
+              >
+                {assets.length}
+              </Typography>
+              <Stack direction="row" alignItems="center" spacing={1}>
+                <Typography variant="body2" color="text.secondary">
+                  Total Assets
+                </Typography>
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid item xs={12} sm={4}>
+          <Card 
+            elevation={0} 
+            sx={{ 
+              borderRadius: 3, 
+              height: '100%',
+              border: '1px solid',
+              borderColor: 'grey.200',
+              transition: 'all 0.3s ease',
+              '&:hover': {
+                borderColor: 'info.main',
+                boxShadow: '0 8px 32px rgba(33, 150, 243, 0.1)'
+              }
+            }}
+          >
+            <CardContent sx={{ p: 3 }}>
+              <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
+                <Box
+                  sx={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: '8px',
+                    bgcolor: '#2196f315',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#2196f3'
+                  }}
+                >
+                  <Assessment />
+                </Box>
+              </Stack>
+              <Typography 
+                variant="h4" 
+                sx={{ 
+                  fontWeight: 'bold',
+                  mb: 1,
+                  fontSize: { xs: '1.75rem', md: '2rem' }
+                }}
+              >
+                {new Set(assets.map(a => a.asset_type)).size}
+              </Typography>
+              <Stack direction="row" alignItems="center" spacing={1}>
+                <Typography variant="body2" color="text.secondary">
+                  Asset Types
+                </Typography>
+              </Stack>
+            </CardContent>
+          </Card>
+        </Grid>
+      </Grid>
+
+      {/* Assets Table */}
+      <Card 
+        elevation={0} 
+        sx={{ 
+          borderRadius: 3,
+          border: '1px solid',
+          borderColor: 'grey.200'
+        }}
+      >
+        <CardContent sx={{ p: 0 }}>
+          <Box sx={{ p: 3, borderBottom: '1px solid', borderColor: 'grey.200' }}>
+            <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+              Asset Holdings
             </Typography>
           </Box>
           
-          <Stack direction="row" spacing={2} alignItems="center">
-            <Button
-              variant="contained"
-              startIcon={<Add />}
-              onClick={() => setInitFormOpen(true)}
-              sx={{
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                borderRadius: 2,
-                px: 3,
-                py: 1.5,
-                textTransform: 'none',
-                fontWeight: 'bold',
-                '&:hover': {
-                  background: 'linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%)',
-                }
-              }}
-            >
-              Add Asset
-            </Button>
-          </Stack>
-        </Stack>
-      </Box>
-
-      <Container maxWidth="xl" sx={{ py: { xs: 2, md: 4 }, px: { xs: 2, md: 3 } }}>
-        {error && (
-          <Alert severity="error" sx={{ mb: { xs: 2, md: 3 } }}>
-            {error}
-          </Alert>
-        )}
-
-        {/* Portfolio Summary */}
-        <Grid container spacing={{ xs: 2, md: 4 }} sx={{ mb: { xs: 3, md: 5 } }}>
-          <Grid item xs={12} sm={4}>
-            <Card 
-              elevation={0} 
-              sx={{ 
-                borderRadius: 3, 
-                height: '100%',
-                border: '1px solid',
-                borderColor: 'grey.200',
-                transition: 'all 0.3s ease',
-                '&:hover': {
-                  transform: 'translateY(-4px)',
-                  boxShadow: 4
-                }
-              }}
-            >
-              <CardContent sx={{ p: { xs: 2.5, md: 3.5 } }}>
-                <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
-                  <Typography 
-                    variant="body2" 
-                    color="text.secondary"
-                    sx={{ fontWeight: 'medium' }}
-                  >
-                    Total Assets
-                  </Typography>
-                  <Box
-                    sx={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: '8px',
-                      bgcolor: '#667eea15',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#667eea'
-                    }}
-                  >
-                    <AccountBalance />
-                  </Box>
-                </Stack>
-                <Typography 
-                  variant="h4" 
-                  sx={{ 
-                    fontWeight: 'bold',
-                    mb: 1,
-                    fontSize: { xs: '1.75rem', md: '2rem' }
-                  }}
-                >
-                  {assets.length}
-                </Typography>
-                <Stack direction="row" alignItems="center" spacing={1}>
-                  <Typography 
-                    variant="body2" 
-                    sx={{ 
-                      color: 'success.main',
-                      fontWeight: 'medium'
-                    }}
-                  >
-                    +0.0%
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    vs last month
-                  </Typography>
-                </Stack>
-              </CardContent>
-            </Card>
-          </Grid>
-
-          <Grid item xs={12} sm={4}>
-            <Card 
-              elevation={0} 
-              sx={{ 
-                borderRadius: 3, 
-                height: '100%',
-                border: '1px solid',
-                borderColor: 'grey.200',
-                transition: 'all 0.3s ease',
-                '&:hover': {
-                  transform: 'translateY(-4px)',
-                  boxShadow: 4
-                }
-              }}
-            >
-              <CardContent sx={{ p: { xs: 2.5, md: 3.5 } }}>
-                <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
-                  <Typography 
-                    variant="body2" 
-                    color="text.secondary"
-                    sx={{ fontWeight: 'medium' }}
-                  >
-                    Total Value
-                  </Typography>
-                  <Box
-                    sx={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: '8px',
-                      bgcolor: '#764ba215',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#764ba2'
-                    }}
-                  >
-                    <TrendingUp />
-                  </Box>
-                </Stack>
-                <Typography 
-                  variant="h4" 
-                  sx={{ 
-                    fontWeight: 'bold',
-                    mb: 1,
-                    fontSize: { xs: '1.75rem', md: '2rem' }
-                  }}
-                >
-                  ${calculateTotalValue().toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                  })}
-                </Typography>
-                <Stack direction="row" alignItems="center" spacing={1}>
-                  <Typography 
-                    variant="body2" 
-                    sx={{ 
-                      color: 'success.main',
-                      fontWeight: 'medium'
-                    }}
-                  >
-                    +0.0%
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    vs last month
-                  </Typography>
-                </Stack>
-              </CardContent>
-            </Card>
-          </Grid>
-
-          <Grid item xs={12} sm={4}>
-            <Card 
-              elevation={0} 
-              sx={{ 
-                borderRadius: 3, 
-                height: '100%',
-                border: '1px solid',
-                borderColor: 'grey.200',
-                transition: 'all 0.3s ease',
-                '&:hover': {
-                  transform: 'translateY(-4px)',
-                  boxShadow: 4
-                }
-              }}
-            >
-              <CardContent sx={{ p: { xs: 2.5, md: 3.5 } }}>
-                <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
-                  <Typography 
-                    variant="body2" 
-                    color="text.secondary"
-                    sx={{ fontWeight: 'medium' }}
-                  >
-                    Unique Assets
-                  </Typography>
-                  <Box
-                    sx={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: '8px',
-                      bgcolor: '#f093fb15',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#f093fb'
-                    }}
-                  >
-                    <ShowChart />
-                  </Box>
-                </Stack>
-                <Typography 
-                  variant="h4" 
-                  sx={{ 
-                    fontWeight: 'bold',
-                    mb: 1,
-                    fontSize: { xs: '1.75rem', md: '2rem' }
-                  }}
-                >
-                  {new Set(assets.map(asset => asset.ticker_symbol)).size}
-                </Typography>
-                <Stack direction="row" alignItems="center" spacing={1}>
-                  <Typography 
-                    variant="body2" 
-                    sx={{ 
-                      color: 'success.main',
-                      fontWeight: 'medium'
-                    }}
-                  >
-                    +0.0%
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    vs last month
-                  </Typography>
-                </Stack>
-              </CardContent>
-            </Card>
-          </Grid>
-        </Grid>
-
-        {/* Assets Table */}
-        {assets.length === 0 ? (
-          <Card elevation={2} sx={{ borderRadius: 3, textAlign: 'center', py: { xs: 4, md: 8 } }}>
-            <CardContent sx={{ p: { xs: 3, md: 5 } }}>
-              <AccountBalance sx={{ 
-                fontSize: { xs: 60, md: 100 }, 
-                color: 'grey.300', 
-                mb: { xs: 2, md: 3 } 
-              }} />
-              <Typography 
-                variant="h5" 
-                gutterBottom 
-                color="text.secondary"
-                sx={{ fontSize: { xs: '1.5rem', md: '2rem' } }}
-              >
-                No Assets Found
+          {assets.length === 0 ? (
+            <Box sx={{ p: 6, textAlign: 'center' }}>
+              <AccountBalance sx={{ fontSize: 64, color: 'grey.300', mb: 2 }} />
+              <Typography variant="h6" color="text.secondary" sx={{ mb: 1 }}>
+                No assets yet
               </Typography>
-              <Typography 
-                variant="body1" 
-                color="text.secondary" 
-                sx={{ 
-                  mb: { xs: 3, md: 4 },
-                  fontSize: { xs: '1rem', md: '1.1rem' },
-                  maxWidth: 500,
-                  mx: 'auto'
-                }}
-              >
-                Start building your portfolio by initializing your first asset.
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+                Start building your portfolio by adding your first asset
               </Typography>
               <Button
                 variant="contained"
                 startIcon={<Add />}
-                onClick={() => setInitFormOpen(true)}
-                size="large"
-                sx={{
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  py: { xs: 1.5, md: 2 },
-                  px: { xs: 3, md: 4 },
-                  fontSize: { xs: '1rem', md: '1.1rem' },
-                  '&:hover': {
-                    background: 'linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%)',
-                  },
-                }}
+                onClick={() => setShowAssetForm(true)}
               >
-                Initialize First Asset
+                Add Your First Asset
               </Button>
-            </CardContent>
-          </Card>
-        ) : (
-          <Card 
-            elevation={0} 
-            sx={{ 
-              borderRadius: 3,
-              border: '1px solid',
-              borderColor: 'grey.200'
-            }}
-          >
-            <CardContent sx={{ p: 0 }}>
-              <Box sx={{ 
-                p: { xs: 3, md: 4 }, 
-                borderBottom: '1px solid', 
-                borderColor: 'divider' 
-              }}>
-                <Typography 
-                  variant="h6" 
-                  sx={{ 
-                    fontWeight: 'bold',
-                    fontSize: { xs: '1.25rem', md: '1.5rem' }
-                  }}
-                >
-                  Your Assets
-                </Typography>
-              </Box>
-              
+            </Box>
+          ) : (
+            <Box sx={{ overflowX: 'auto' }}>
               <TableContainer>
-                <Table sx={{ minWidth: { xs: 650, md: 750 } }}>
+                <Table sx={{ minWidth: { xs: 800, md: 900 } }}>
                   <TableHead>
                     <TableRow>
                       <TableCell sx={{ 
@@ -474,7 +448,7 @@ export const AssetsList: React.FC = () => {
                         fontSize: { xs: '0.875rem', md: '1rem' },
                         py: { xs: 2, md: 2.5 }
                       }} align="right">
-                        Amount/Shares
+                        Shares
                       </TableCell>
                       <TableCell sx={{ 
                         fontWeight: 'bold',
@@ -488,7 +462,14 @@ export const AssetsList: React.FC = () => {
                         fontSize: { xs: '0.875rem', md: '1rem' },
                         py: { xs: 2, md: 2.5 }
                       }} align="right">
-                        Total Value
+                        Current Price
+                      </TableCell>
+                      <TableCell sx={{ 
+                        fontWeight: 'bold',
+                        fontSize: { xs: '0.875rem', md: '1rem' },
+                        py: { xs: 2, md: 2.5 }
+                      }} align="right">
+                        Market Value
                       </TableCell>
                       <TableCell sx={{ 
                         fontWeight: 'bold',
@@ -507,141 +488,147 @@ export const AssetsList: React.FC = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {assets.map((asset) => (
-                      <TableRow key={asset.asset_id} hover sx={{ 
-                        '&:hover': { bgcolor: 'grey.50' },
-                        transition: 'background-color 0.2s ease'
-                      }}>
-                        <TableCell sx={{ py: { xs: 2, md: 2.5 } }}>
-                          <Box>
+                    {assets.map((asset) => {
+                      const currentPrice = currentPrices.get(asset.ticker_symbol);
+                      const marketValue = currentPrice ? asset.total_shares * currentPrice : asset.total_shares * asset.average_cost_basis;
+                      const priceChange = currentPrice ? calculatePriceChange(currentPrice, asset.average_cost_basis) : null;
+                      
+                      return (
+                        <TableRow key={asset.asset_id} hover sx={{ 
+                          '&:hover': { bgcolor: 'grey.50' },
+                          transition: 'background-color 0.2s ease'
+                        }}>
+                          <TableCell sx={{ py: { xs: 2, md: 2.5 } }}>
+                            <Box>
+                              <Typography 
+                                variant="body1" 
+                                sx={{ 
+                                  fontWeight: 'bold',
+                                  fontSize: { xs: '0.875rem', md: '1rem' }
+                                }}
+                              >
+                                {asset.ticker_symbol}
+                              </Typography>
+                              <Typography 
+                                variant="body2" 
+                                color="text.secondary"
+                                sx={{ fontSize: { xs: '0.75rem', md: '0.875rem' } }}
+                              >
+                                {asset.asset_type}
+                              </Typography>
+                            </Box>
+                          </TableCell>
+                          <TableCell sx={{ py: { xs: 2, md: 2.5 } }}>
+                            <Chip
+                              label={asset.asset_type}
+                              color={getAssetTypeColor(asset.asset_type) as any}
+                              size="small"
+                              variant="outlined"
+                            />
+                          </TableCell>
+                          <TableCell align="right" sx={{ py: { xs: 2, md: 2.5 } }}>
                             <Typography 
-                              variant="body1" 
-                              sx={{ 
-                                fontWeight: 'medium',
-                                fontSize: { xs: '0.95rem', md: '1rem' }
-                              }}
+                              variant="body2"
+                              sx={{ fontSize: { xs: '0.875rem', md: '1rem' } }}
                             >
-                              {asset.ticker_symbol}
+                              {asset.total_shares.toLocaleString(undefined, {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 6
+                              })}
                             </Typography>
+                          </TableCell>
+                          <TableCell align="right" sx={{ py: { xs: 2, md: 2.5 } }}>
                             <Typography 
-                              variant="caption" 
-                              color="text.secondary"
-                              sx={{ fontSize: { xs: '0.75rem', md: '0.8rem' } }}
+                              variant="body2"
+                              sx={{ fontSize: { xs: '0.875rem', md: '1rem' } }}
                             >
-                              ID: {asset.asset_id}
+                              {formatCurrency(asset.average_cost_basis, asset.currency)}
                             </Typography>
-                          </Box>
-                        </TableCell>
-                        <TableCell sx={{ py: { xs: 2, md: 2.5 } }}>
-                          <Chip 
-                            label={asset.asset_type} 
-                            size="small" 
-                            color="primary" 
-                            variant="outlined"
-                            sx={{ fontSize: { xs: '0.75rem', md: '0.8rem' } }}
-                          />
-                        </TableCell>
-                        <TableCell align="right" sx={{ py: { xs: 2, md: 2.5 } }}>
-                          <Typography 
-                            variant="body2"
-                            sx={{ fontSize: { xs: '0.875rem', md: '0.95rem' } }}
-                          >
-                            {asset.asset_type === 'Cash' 
-                              ? formatCurrency(asset.total_shares, asset.currency)
-                              : asset.total_shares.toLocaleString(undefined, {
-                                  minimumFractionDigits: 2,
-                                  maximumFractionDigits: 6
-                                })
-                            }
-                          </Typography>
-                        </TableCell>
-                        <TableCell align="right" sx={{ py: { xs: 2, md: 2.5 } }}>
-                          <Typography 
-                            variant="body2"
-                            sx={{ fontSize: { xs: '0.875rem', md: '0.95rem' } }}
-                          >
-                            {asset.asset_type === 'Cash' 
-                              ? '1.00 (per unit)'
-                              : formatCurrency(asset.average_cost_basis, asset.currency)
-                            }
-                          </Typography>
-                        </TableCell>
-                        <TableCell align="right" sx={{ py: { xs: 2, md: 2.5 } }}>
-                          <Typography 
-                            variant="body2" 
-                            sx={{ 
-                              fontWeight: 'medium',
-                              fontSize: { xs: '0.875rem', md: '0.95rem' }
-                            }}
-                          >
-                            {formatCurrency(asset.total_shares * asset.average_cost_basis, asset.currency)}
-                          </Typography>
-                        </TableCell>
-                        <TableCell sx={{ py: { xs: 2, md: 2.5 } }}>
-                          <Chip 
-                            label={asset.currency} 
-                            size="small" 
-                            color="secondary" 
-                            variant="filled"
-                            sx={{ fontSize: { xs: '0.75rem', md: '0.8rem' } }}
-                          />
-                        </TableCell>
-                        <TableCell align="center" sx={{ py: { xs: 2, md: 2.5 } }}>
-                          <Stack direction="row" spacing={1} justifyContent="center">
-                            <IconButton 
-                              size="small" 
-                              color="primary"
-                              onClick={() => handleAddTransaction(asset)}
-                              title="Add Transaction"
+                          </TableCell>
+                          <TableCell align="right" sx={{ py: { xs: 2, md: 2.5 } }}>
+                            {currentPrice ? (
+                              <Stack direction="column" alignItems="flex-end" spacing={0.5}>
+                                <Typography 
+                                  variant="body2"
+                                  sx={{ 
+                                    fontSize: { xs: '0.875rem', md: '1rem' },
+                                    fontWeight: 'medium',
+                                    color: getPriceChangeColor(currentPrice, asset.average_cost_basis)
+                                  }}
+                                >
+                                  {formatCurrency(currentPrice, asset.currency)}
+                                </Typography>
+                                {priceChange && (
+                                  <Stack direction="row" alignItems="center" spacing={0.5}>
+                                    {getPriceChangeIcon(currentPrice, asset.average_cost_basis)}
+                                    <Typography 
+                                      variant="caption"
+                                      sx={{ 
+                                        color: getPriceChangeColor(currentPrice, asset.average_cost_basis),
+                                        fontSize: '0.75rem'
+                                      }}
+                                    >
+                                      {priceChange.changePercent >= 0 ? '+' : ''}{priceChange.changePercent.toFixed(2)}%
+                                    </Typography>
+                                  </Stack>
+                                )}
+                              </Stack>
+                            ) : (
+                              <Typography 
+                                variant="body2" 
+                                color="text.secondary"
+                                sx={{ fontSize: { xs: '0.875rem', md: '1rem' } }}
+                              >
+                                {asset.asset_type === 'Cash' ? 'N/A' : 'Loading...'}
+                              </Typography>
+                            )}
+                          </TableCell>
+                          <TableCell align="right" sx={{ py: { xs: 2, md: 2.5 } }}>
+                            <Typography 
+                              variant="body2"
                               sx={{ 
-                                '&:hover': { bgcolor: 'primary.50' },
-                                transition: 'background-color 0.2s ease'
+                                fontSize: { xs: '0.875rem', md: '1rem' },
+                                fontWeight: 'medium'
                               }}
                             >
-                              <Add />
-                            </IconButton>
-                            <IconButton 
-                              size="small" 
-                              color="info"
-                              title="View Details"
-                              sx={{ 
-                                '&:hover': { bgcolor: 'info.50' },
-                                transition: 'background-color 0.2s ease'
-                              }}
-                            >
-                              <Visibility />
-                            </IconButton>
-                          </Stack>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                              {formatCurrency(marketValue, asset.currency)}
+                            </Typography>
+                          </TableCell>
+                          <TableCell sx={{ py: { xs: 2, md: 2.5 } }}>
+                            <Chip
+                              label={asset.currency}
+                              size="small"
+                              variant="outlined"
+                              sx={{ fontSize: '0.75rem' }}
+                            />
+                          </TableCell>
+                          <TableCell align="center" sx={{ py: { xs: 2, md: 2.5 } }}>
+                            <Stack direction="row" spacing={1} justifyContent="center">
+                              <IconButton size="small" color="primary">
+                                <Edit fontSize="small" />
+                              </IconButton>
+                              <IconButton size="small" color="error">
+                                <Delete fontSize="small" />
+                              </IconButton>
+                            </Stack>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </TableContainer>
-            </CardContent>
-          </Card>
-        )}
+            </Box>
+          )}
+        </CardContent>
+      </Card>
 
-        {/* Asset Initialization Form */}
-        <AssetInitForm
-          open={initFormOpen}
-          onClose={() => setInitFormOpen(false)}
-          onSuccess={handleInitSuccess}
-        />
-
-        {/* Transaction Form */}
-        {selectedAsset && (
-          <TransactionForm
-            open={transactionFormOpen}
-            onClose={() => {
-              setTransactionFormOpen(false);
-              setSelectedAsset(null);
-            }}
-            onSuccess={handleTransactionSuccess}
-            asset={selectedAsset}
-          />
-        )}
-      </Container>
-    </Box>
+      {/* Asset Form Dialog */}
+      <AssetInitForm
+        open={showAssetForm}
+        onClose={() => setShowAssetForm(false)}
+        onSuccess={handleAssetSuccess}
+      />
+    </Container>
   );
 };
