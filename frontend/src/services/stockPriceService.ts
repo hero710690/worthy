@@ -1,4 +1,4 @@
-// Stock Price Service with Backend Proxy Integration
+// Stock Price Service with Real API Integration
 // Milestone 3: External API Integration & Real-time Data
 
 export interface StockPrice {
@@ -11,27 +11,23 @@ export interface StockPrice {
   marketStatus: 'OPEN' | 'CLOSED' | 'PRE_MARKET' | 'AFTER_HOURS';
 }
 
-export interface StockPriceApiResponse {
-  success: boolean;
-  data: {
-    symbol: string;
-    price: number;
-    change: number;
-    change_percent: string;
-    volume: string;
-    latest_trading_day: string;
-    previous_close: number;
-    currency: string;
-    source: string;
-    last_updated: string;
-  };
+export interface StockQuote {
+  '01. symbol': string;
+  '02. open': string;
+  '03. high': string;
+  '04. low': string;
+  '05. price': string;
+  '06. volume': string;
+  '07. latest trading day': string;
+  '08. previous close': string;
+  '09. change': string;
+  '10. change percent': string;
 }
 
-export interface MultipleStockPricesApiResponse {
-  success: boolean;
-  data: { [symbol: string]: any };
-  errors: string[];
-  source: string;
+export interface AlphaVantageResponse {
+  'Global Quote': StockQuote;
+  'Error Message'?: string;
+  'Note'?: string;
 }
 
 // Mock prices for fallback and testing
@@ -78,7 +74,8 @@ export class StockPriceService {
   private static instance: StockPriceService;
   private priceCache: Map<string, StockPrice> = new Map();
   private isUsingRealPrices: boolean = false;
-  private apiBaseUrl: string = 'https://mreda8g340.execute-api.ap-northeast-1.amazonaws.com/development';
+  private apiKey: string = 'demo'; // Use 'demo' for Alpha Vantage demo key
+  private baseUrl: string = 'https://www.alphavantage.co/query';
   private cacheDuration: number = 5 * 60 * 1000; // 5 minutes cache for stock prices
   private rateLimitDelay: number = 12000; // 12 seconds between API calls (5 calls per minute limit)
   private lastApiCall: number = 0;
@@ -98,17 +95,6 @@ export class StockPriceService {
   }
 
   /**
-   * Get authorization header with JWT token
-   */
-  private getAuthHeaders(): { [key: string]: string } {
-    const token = localStorage.getItem('worthy_token');
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': token ? `Bearer ${token}` : ''
-    };
-  }
-
-  /**
    * Get stock price for a symbol
    * @param symbol - Stock symbol (e.g., 'AAPL', 'TSLA')
    * @returns Stock price data
@@ -123,8 +109,8 @@ export class StockPriceService {
     }
 
     try {
-      // Fetch from backend proxy
-      const price = await this.fetchStockPriceFromBackend(normalizedSymbol);
+      // Fetch from API
+      const price = await this.fetchStockPriceFromAPI(normalizedSymbol);
       if (price) {
         this.priceCache.set(normalizedSymbol, price);
         return price;
@@ -145,54 +131,20 @@ export class StockPriceService {
   public async getMultipleStockPrices(symbols: string[]): Promise<Map<string, StockPrice>> {
     const results = new Map<string, StockPrice>();
     
-    try {
-      // Use backend batch endpoint
-      const response = await fetch(`${this.apiBaseUrl}/api/stock-prices`, {
-        method: 'POST',
-        headers: this.getAuthHeaders(),
-        body: JSON.stringify({ symbols: symbols.map(s => s.toUpperCase()) })
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data: MultipleStockPricesApiResponse = await response.json();
-
-      if (data.success && data.data) {
-        // Process successful results
-        Object.entries(data.data).forEach(([symbol, priceData]) => {
-          const price: StockPrice = {
-            symbol: priceData.symbol,
-            price: priceData.price,
-            change: priceData.change,
-            changePercent: parseFloat(priceData.change_percent),
-            currency: priceData.currency || 'USD',
-            lastUpdated: new Date(priceData.last_updated),
-            marketStatus: this.determineMarketStatus()
-          };
-          
-          results.set(symbol, price);
-          this.priceCache.set(symbol, price);
-        });
-
-        this.isUsingRealPrices = true;
-        console.log(`✅ Successfully fetched ${results.size} stock prices from backend`);
+    // Process symbols with rate limiting
+    for (const symbol of symbols) {
+      try {
+        const price = await this.getStockPrice(symbol);
+        if (price) {
+          results.set(symbol.toUpperCase(), price);
+        }
         
-        if (data.errors && data.errors.length > 0) {
-          console.warn('Some symbols had errors:', data.errors);
+        // Rate limiting: wait between API calls
+        if (symbols.length > 1) {
+          await this.waitForRateLimit();
         }
-      }
-
-    } catch (error) {
-      console.error('Failed to fetch multiple stock prices:', error);
-      
-      // Fall back to individual requests or cached data
-      for (const symbol of symbols) {
-        const cachedPrice = this.priceCache.get(symbol.toUpperCase());
-        if (cachedPrice) {
-          results.set(symbol.toUpperCase(), cachedPrice);
-        }
+      } catch (error) {
+        console.warn(`Failed to get price for ${symbol}:`, error);
       }
     }
 
@@ -211,49 +163,65 @@ export class StockPriceService {
   }
 
   /**
-   * Fetch stock price from backend proxy
+   * Fetch stock price from Alpha Vantage API
    * @param symbol - Stock symbol
    * @returns Stock price data
    */
-  private async fetchStockPriceFromBackend(symbol: string): Promise<StockPrice | null> {
+  private async fetchStockPriceFromAPI(symbol: string): Promise<StockPrice | null> {
     try {
-      console.log(`Fetching stock price for ${symbol} from backend...`);
+      // Rate limiting
+      await this.waitForRateLimit();
+
+      const url = `${this.baseUrl}?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${this.apiKey}`;
       
-      const response = await fetch(`${this.apiBaseUrl}/api/stock-price/${symbol}`, {
+      console.log(`Fetching stock price for ${symbol}...`);
+      
+      const response = await fetch(url, {
         method: 'GET',
-        headers: this.getAuthHeaders()
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'Worthy-Portfolio-App/1.0'
+        }
       });
 
       if (!response.ok) {
-        if (response.status === 401) {
-          throw new Error('Authentication required');
-        }
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const data: StockPriceApiResponse = await response.json();
+      const data: AlphaVantageResponse = await response.json();
 
-      if (data.success && data.data) {
-        const price: StockPrice = {
-          symbol: data.data.symbol,
-          price: data.data.price,
-          change: data.data.change,
-          changePercent: parseFloat(data.data.change_percent),
-          currency: data.data.currency,
-          lastUpdated: new Date(data.data.last_updated),
-          marketStatus: this.determineMarketStatus()
-        };
-
-        this.isUsingRealPrices = true;
-        this.lastApiCall = Date.now();
-        
-        console.log(`✅ Successfully fetched price for ${symbol}: $${price.price}`);
-        console.log(`📡 Source: ${data.data.source}`);
-        
-        return price;
+      // Check for API errors
+      if (data['Error Message']) {
+        throw new Error(`API Error: ${data['Error Message']}`);
       }
 
-      throw new Error('Invalid API response format');
+      if (data['Note']) {
+        throw new Error(`API Rate Limit: ${data['Note']}`);
+      }
+
+      if (!data['Global Quote']) {
+        throw new Error('Invalid API response format');
+      }
+
+      const quote = data['Global Quote'];
+      
+      // Parse the response
+      const price: StockPrice = {
+        symbol: quote['01. symbol'],
+        price: parseFloat(quote['05. price']),
+        change: parseFloat(quote['09. change']),
+        changePercent: parseFloat(quote['10. change percent'].replace('%', '')),
+        currency: 'USD', // Alpha Vantage primarily provides USD prices
+        lastUpdated: new Date(),
+        marketStatus: this.determineMarketStatus()
+      };
+
+      this.isUsingRealPrices = true;
+      this.lastApiCall = Date.now();
+      
+      console.log(`✅ Successfully fetched price for ${symbol}: $${price.price}`);
+      
+      return price;
 
     } catch (error) {
       console.error(`❌ Failed to fetch stock price for ${symbol}:`, error);
@@ -269,6 +237,18 @@ export class StockPriceService {
       }
       
       return null;
+    }
+  }
+
+  /**
+   * Wait for rate limit if necessary
+   */
+  private async waitForRateLimit(): Promise<void> {
+    const timeSinceLastCall = Date.now() - this.lastApiCall;
+    if (timeSinceLastCall < this.rateLimitDelay) {
+      const waitTime = this.rateLimitDelay - timeSinceLastCall;
+      console.log(`⏳ Rate limiting: waiting ${waitTime}ms...`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
     }
   }
 
@@ -338,6 +318,15 @@ export class StockPriceService {
       const waitTime = Math.ceil((this.rateLimitDelay - timeSinceLastCall) / 1000);
       return `Wait ${waitTime}s`;
     }
+  }
+
+  /**
+   * Set API key for production use
+   * @param apiKey - Alpha Vantage API key
+   */
+  public setApiKey(apiKey: string): void {
+    this.apiKey = apiKey;
+    console.log('🔑 API key updated for stock price service');
   }
 }
 
