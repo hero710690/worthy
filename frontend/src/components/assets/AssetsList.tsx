@@ -474,7 +474,7 @@ export const AssetsList: React.FC = () => {
                         fontSize: { xs: '0.875rem', md: '1rem' },
                         py: { xs: 2, md: 2.5 }
                       }} align="right">
-                        Shares
+                        Amount/Shares
                       </TableCell>
                       <TableCell sx={{ 
                         fontWeight: 'bold',
@@ -546,10 +546,13 @@ export const AssetsList: React.FC = () => {
                             variant="body2"
                             sx={{ fontSize: { xs: '0.875rem', md: '0.95rem' } }}
                           >
-                            {asset.total_shares.toLocaleString(undefined, {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 6
-                            })}
+                            {asset.asset_type === 'Cash' 
+                              ? formatCurrency(asset.total_shares, asset.currency)
+                              : asset.total_shares.toLocaleString(undefined, {
+                                  minimumFractionDigits: 2,
+                                  maximumFractionDigits: 6
+                                })
+                            }
                           </Typography>
                         </TableCell>
                         <TableCell align="right" sx={{ py: { xs: 2, md: 2.5 } }}>
@@ -557,7 +560,10 @@ export const AssetsList: React.FC = () => {
                             variant="body2"
                             sx={{ fontSize: { xs: '0.875rem', md: '0.95rem' } }}
                           >
-                            {formatCurrency(asset.average_cost_basis, asset.currency)}
+                            {asset.asset_type === 'Cash' 
+                              ? '1.00 (per unit)'
+                              : formatCurrency(asset.average_cost_basis, asset.currency)
+                            }
                           </Typography>
                         </TableCell>
                         <TableCell align="right" sx={{ py: { xs: 2, md: 2.5 } }}>
