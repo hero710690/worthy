@@ -8,17 +8,23 @@ export interface Asset {
   transaction_count?: number;
   created_at: string;
   updated_at?: string;
+  transactions?: Transaction[];
 }
 
 export interface Transaction {
-  transaction_id: number;
+  id?: number;
+  transaction_id?: number;
   asset_id: number;
   transaction_type: 'Initialization' | 'LumpSum' | 'Recurring';
-  transaction_date: string;
+  date: string;
+  transaction_date?: string;
   shares: number;
   price_per_share: number;
   currency: string;
-  created_at: string;
+  created_at?: string;
+  // Additional fields for display
+  asset_ticker?: string;
+  asset_type?: string;
 }
 
 export interface AssetWithTransactions {

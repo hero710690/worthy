@@ -5,6 +5,10 @@ import { Login } from './components/auth/Login';
 import { Register } from './components/auth/Register';
 import { Dashboard } from './components/Dashboard';
 import { AssetsList } from './components/assets/AssetsList';
+import { Transactions } from './components/Transactions';
+import { Portfolio } from './components/Portfolio';
+import { Goals } from './components/Goals';
+import { Analytics } from './components/Analytics';
 import { UserProfile } from './components/UserProfile';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
@@ -83,6 +87,50 @@ function App() {
               <ProtectedRoute>
                 <Layout>
                   <AssetsList />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/transactions"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <Transactions />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/portfolio"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <Portfolio />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/goals"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <Goals />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/analytics"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <Analytics />
                 </Layout>
               </ProtectedRoute>
             }
