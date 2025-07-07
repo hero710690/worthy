@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -9,6 +9,8 @@ import {
   Avatar,
   Stack,
   Paper,
+  CircularProgress,
+  Alert,
 } from '@mui/material';
 import {
   TrendingUp,
@@ -20,15 +22,56 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import { assetAPI } from '../services/assetApi';
+import type { Asset } from '../types/assets';
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuthStore();
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchAssets = async () => {
+    try {
+      setLoading(true);
+      const response = await assetAPI.getAssets();
+      setAssets(response.assets);
+      setError(null);
+    } catch (error: any) {
+      console.error('Failed to fetch assets:', error);
+      setError(error.response?.data?.message || 'Failed to fetch portfolio data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAssets();
+  }, []);
+
+  const calculateTotalValue = () => {
+    return assets.reduce((total, asset) => {
+      return total + (asset.total_shares * asset.average_cost_basis);
+    }, 0);
+  };
+
+  const calculateUniqueAssets = () => {
+    return new Set(assets.map(asset => asset.ticker_symbol)).size;
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: user?.base_currency || 'USD',
+      minimumFractionDigits: 2,
+    }).format(amount);
+  };
 
   const portfolioStats = [
     {
       title: 'Total Assets',
-      value: '$0.00',
+      value: assets.length.toString(),
       change: '+0.0%',
       changeType: 'positive',
       icon: <AccountBalance />,
@@ -36,17 +79,17 @@ export const Dashboard: React.FC = () => {
     },
     {
       title: 'Portfolio Value',
-      value: '$0.00',
+      value: formatCurrency(calculateTotalValue()),
       change: '+0.0%',
       changeType: 'positive',
       icon: <TrendingUp />,
       color: '#764ba2'
     },
     {
-      title: 'Monthly Investment',
-      value: '$0.00',
-      change: '+0.0%',
-      changeType: 'positive',
+      title: 'Unique Assets',
+      value: calculateUniqueAssets().toString(),
+      change: 'diversification',
+      changeType: 'neutral',
       icon: <ShowChart />,
       color: '#f093fb'
     },
@@ -86,7 +129,7 @@ export const Dashboard: React.FC = () => {
               color="text.secondary"
               sx={{ fontSize: { xs: '0.95rem', md: '1rem' } }}
             >
-              It is the best time to manage your finances
+              {loading ? 'Loading your portfolio...' : 'It is the best time to manage your finances'}
             </Typography>
           </Box>
           
@@ -125,6 +168,12 @@ export const Dashboard: React.FC = () => {
 
       {/* Content */}
       <Box sx={{ p: { xs: 3, md: 4 } }}>
+        {error && (
+          <Alert severity="error" sx={{ mb: 3 }}>
+            {error}
+          </Alert>
+        )}
+
         {/* Stats Cards */}
         <Grid container spacing={3} sx={{ mb: 4 }}>
           {portfolioStats.map((stat, index) => (
@@ -175,7 +224,11 @@ export const Dashboard: React.FC = () => {
                       fontSize: { xs: '1.75rem', md: '2rem' }
                     }}
                   >
-                    {stat.value}
+                    {loading ? (
+                      <CircularProgress size={24} sx={{ color: stat.color }} />
+                    ) : (
+                      stat.value
+                    )}
                   </Typography>
                   
                   <Stack direction="row" alignItems="center" spacing={1}>
@@ -190,7 +243,7 @@ export const Dashboard: React.FC = () => {
                       {stat.change}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      vs last month
+                      {stat.changeType === 'neutral' ? '' : 'vs last month'}
                     </Typography>
                   </Stack>
                 </CardContent>
@@ -218,7 +271,7 @@ export const Dashboard: React.FC = () => {
                 fontSize: { xs: '1.25rem', md: '1.5rem' }
               }}
             >
-              Get Started with Worthy
+              {assets.length === 0 ? 'Get Started with Worthy' : 'Manage Your Portfolio'}
             </Typography>
             
             <Grid container spacing={3}>
@@ -258,10 +311,13 @@ export const Dashboard: React.FC = () => {
                     </Box>
                     <Box sx={{ flex: 1 }}>
                       <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 0.5 }}>
-                        Manage Your Assets
+                        {assets.length === 0 ? 'Initialize Your Assets' : 'Manage Your Assets'}
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
-                        Initialize and track your investment portfolio
+                        {assets.length === 0 
+                          ? 'Add your existing investments to start tracking'
+                          : `Track and manage your ${assets.length} asset${assets.length !== 1 ? 's' : ''}`
+                        }
                       </Typography>
                     </Box>
                   </Stack>
@@ -307,7 +363,10 @@ export const Dashboard: React.FC = () => {
                         View Portfolio
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
-                        Analyze your investment performance
+                        {calculateTotalValue() > 0 
+                          ? `Analyze your ${formatCurrency(calculateTotalValue())} portfolio`
+                          : 'Analyze your investment performance'
+                        }
                       </Typography>
                     </Box>
                   </Stack>
