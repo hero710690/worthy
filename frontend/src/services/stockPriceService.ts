@@ -1,4 +1,4 @@
-// Stock Price Service with Real API Integration
+// Stock Price Service with Direct Alpha Vantage API Integration
 // Milestone 3: External API Integration & Real-time Data
 
 export interface StockPrice {
@@ -11,7 +11,7 @@ export interface StockPrice {
   marketStatus: 'OPEN' | 'CLOSED' | 'PRE_MARKET' | 'AFTER_HOURS';
 }
 
-export interface StockQuote {
+export interface AlphaVantageGlobalQuote {
   '01. symbol': string;
   '02. open': string;
   '03. high': string;
@@ -25,7 +25,7 @@ export interface StockQuote {
 }
 
 export interface AlphaVantageResponse {
-  'Global Quote': StockQuote;
+  'Global Quote': AlphaVantageGlobalQuote;
   'Error Message'?: string;
   'Note'?: string;
 }
@@ -67,6 +67,15 @@ const MOCK_STOCK_PRICES: { [symbol: string]: StockPrice } = {
     currency: 'USD',
     lastUpdated: new Date(),
     marketStatus: 'CLOSED'
+  },
+  'QQQ': {
+    symbol: 'QQQ',
+    price: 385.40,
+    change: 1.85,
+    changePercent: 0.48,
+    currency: 'USD',
+    lastUpdated: new Date(),
+    marketStatus: 'CLOSED'
   }
 };
 
@@ -74,7 +83,7 @@ export class StockPriceService {
   private static instance: StockPriceService;
   private priceCache: Map<string, StockPrice> = new Map();
   private isUsingRealPrices: boolean = false;
-  private apiKey: string = 'demo'; // Use 'demo' for Alpha Vantage demo key
+  private apiKey: string = 'REDACTED_ALPHA_VANTAGE_KEY'; // Real Alpha Vantage API key
   private baseUrl: string = 'https://www.alphavantage.co/query';
   private cacheDuration: number = 5 * 60 * 1000; // 5 minutes cache for stock prices
   private rateLimitDelay: number = 12000; // 12 seconds between API calls (5 calls per minute limit)
@@ -109,7 +118,7 @@ export class StockPriceService {
     }
 
     try {
-      // Fetch from API
+      // Fetch from Alpha Vantage API
       const price = await this.fetchStockPriceFromAPI(normalizedSymbol);
       if (price) {
         this.priceCache.set(normalizedSymbol, price);
@@ -174,7 +183,7 @@ export class StockPriceService {
 
       const url = `${this.baseUrl}?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${this.apiKey}`;
       
-      console.log(`Fetching stock price for ${symbol}...`);
+      console.log(`Fetching stock price for ${symbol} from Alpha Vantage...`);
       
       const response = await fetch(url, {
         method: 'GET',
@@ -196,6 +205,12 @@ export class StockPriceService {
       }
 
       if (data['Note']) {
+        console.warn(`API Rate Limit: ${data['Note']}`);
+        // Return mock data if rate limited
+        const mockPrice = MOCK_STOCK_PRICES[symbol];
+        if (mockPrice) {
+          return { ...mockPrice, lastUpdated: new Date() };
+        }
         throw new Error(`API Rate Limit: ${data['Note']}`);
       }
 
@@ -220,6 +235,7 @@ export class StockPriceService {
       this.lastApiCall = Date.now();
       
       console.log(`✅ Successfully fetched price for ${symbol}: $${price.price}`);
+      console.log(`📊 Change: ${price.change >= 0 ? '+' : ''}${price.change} (${price.changePercent >= 0 ? '+' : ''}${price.changePercent}%)`);
       
       return price;
 
@@ -318,15 +334,6 @@ export class StockPriceService {
       const waitTime = Math.ceil((this.rateLimitDelay - timeSinceLastCall) / 1000);
       return `Wait ${waitTime}s`;
     }
-  }
-
-  /**
-   * Set API key for production use
-   * @param apiKey - Alpha Vantage API key
-   */
-  public setApiKey(apiKey: string): void {
-    this.apiKey = apiKey;
-    console.log('🔑 API key updated for stock price service');
   }
 }
 

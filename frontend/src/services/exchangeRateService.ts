@@ -1,20 +1,15 @@
-// Exchange Rate Service with Real API Integration
+// Exchange Rate Service with Direct API Integration
 // Milestone 3: External API Integration & Real-time Data
 
 export interface ExchangeRates {
   [currency: string]: number;
 }
 
-export interface ExchangeRateResponse {
+export interface ExchangeRateApiResponse {
   result: string;
-  documentation: string;
-  terms_of_use: string;
-  time_last_update_unix: number;
-  time_last_update_utc: string;
-  time_next_update_unix: number;
-  time_next_update_utc: string;
-  base_code: string;
-  conversion_rates: ExchangeRates;
+  base: string;
+  rates: ExchangeRates;
+  date: string;
 }
 
 // Fallback mock rates in case API fails
@@ -34,8 +29,7 @@ export class ExchangeRateService {
   private rates: ExchangeRates = FALLBACK_EXCHANGE_RATES;
   private lastUpdated: Date = new Date();
   private isUsingRealRates: boolean = false;
-  private apiKey: string = ''; // Free tier doesn't require API key for ExchangeRate-API
-  private baseUrl: string = 'https://api.exchangerate-api.com/v4/latest';
+  private apiBaseUrl: string = 'https://api.exchangerate-api.com/v4/latest';
   private cacheDuration: number = 60 * 60 * 1000; // 1 hour cache
 
   private constructor() {
@@ -166,15 +160,14 @@ export class ExchangeRateService {
   }
 
   /**
-   * Fetch latest exchange rates from external API
+   * Fetch latest exchange rates from ExchangeRate-API (free tier)
    * Implements caching and error handling
    */
-  public async fetchLatestRates(): Promise<void> {
+  public async fetchLatestRates(baseCurrency: string = 'USD'): Promise<void> {
     try {
-      console.log('Fetching latest exchange rates from API...');
+      console.log('Fetching latest exchange rates from ExchangeRate-API...');
       
-      // Use USD as base currency for the API call
-      const response = await fetch(`${this.baseUrl}/USD`, {
+      const response = await fetch(`${this.apiBaseUrl}/${baseCurrency}`, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
@@ -186,21 +179,22 @@ export class ExchangeRateService {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const data: ExchangeRateResponse = await response.json();
+      const data: ExchangeRateApiResponse = await response.json();
 
-      if (data.result === 'success' && data.conversion_rates) {
+      if (data.result === 'success' && data.rates) {
         // Update rates with real API data
         this.rates = {
-          'USD': 1.0, // Base currency
-          ...data.conversion_rates
+          [baseCurrency]: 1.0, // Base currency
+          ...data.rates
         };
         
-        this.lastUpdated = new Date();
+        this.lastUpdated = new Date(data.date || new Date());
         this.isUsingRealRates = true;
         
-        console.log('✅ Successfully updated exchange rates from API');
+        console.log('✅ Successfully updated exchange rates from ExchangeRate-API');
         console.log(`📊 Loaded ${Object.keys(this.rates).length} currency rates`);
         console.log(`🕒 Last updated: ${this.lastUpdated.toISOString()}`);
+        console.log(`📡 Base currency: ${baseCurrency}`);
       } else {
         throw new Error('Invalid API response format');
       }
@@ -222,17 +216,17 @@ export class ExchangeRateService {
   /**
    * Force refresh rates (bypass cache)
    */
-  public async forceRefreshRates(): Promise<void> {
-    await this.fetchLatestRates();
+  public async forceRefreshRates(baseCurrency: string = 'USD'): Promise<void> {
+    await this.fetchLatestRates(baseCurrency);
   }
 
   /**
    * Get rates with automatic refresh if needed
    */
-  public async getRatesWithRefresh(): Promise<ExchangeRates> {
+  public async getRatesWithRefresh(baseCurrency: string = 'USD'): Promise<ExchangeRates> {
     if (this.shouldRefreshRates()) {
       try {
-        await this.fetchLatestRates();
+        await this.fetchLatestRates(baseCurrency);
       } catch (error) {
         console.warn('Failed to refresh rates, using cached rates:', error);
       }
