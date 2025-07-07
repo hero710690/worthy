@@ -13,7 +13,7 @@ NC='\033[0m' # No Color
 # Configuration
 ENVIRONMENT=${1:-development}
 STACK_NAME="worthy-backend-${ENVIRONMENT}"
-REGION=${AWS_DEFAULT_REGION:-us-east-1}
+REGION=${AWS_DEFAULT_REGION:-ap-northeast-1}
 
 echo -e "${GREEN}🚀 Deploying Worthy Backend to AWS Lambda${NC}"
 echo -e "${YELLOW}Environment: ${ENVIRONMENT}${NC}"
