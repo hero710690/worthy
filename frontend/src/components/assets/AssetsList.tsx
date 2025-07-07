@@ -19,6 +19,11 @@ import {
   CircularProgress,
   Stack,
   Container,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  DialogContentText,
 } from '@mui/material';
 import {
   Add,
@@ -46,6 +51,9 @@ export const AssetsList: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showAssetForm, setShowAssetForm] = useState(false);
+  const [editingAsset, setEditingAsset] = useState<Asset | null>(null);
+  const [deletingAsset, setDeletingAsset] = useState<Asset | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
   const [currentPrices, setCurrentPrices] = useState<Map<string, number>>(new Map());
   const [portfolioValue, setPortfolioValue] = useState(0);
   const [totalUnrealizedPL, setTotalUnrealizedPL] = useState(0);
@@ -111,13 +119,52 @@ export const AssetsList: React.FC = () => {
     }
   };
 
+  const handleEditAsset = (asset: Asset) => {
+    setEditingAsset(asset);
+    setShowAssetForm(true);
+  };
+
+  const handleDeleteAsset = (asset: Asset) => {
+    setDeletingAsset(asset);
+  };
+
+  const confirmDeleteAsset = async () => {
+    if (!deletingAsset) return;
+
+    setDeleteLoading(true);
+    try {
+      // TODO: Implement delete API call when backend supports it
+      // await assetAPI.deleteAsset(deletingAsset.asset_id);
+      
+      // For now, show a message that delete is not implemented
+      setError('Delete functionality will be implemented in a future update. For now, you can edit the asset to change its details.');
+      
+      setDeletingAsset(null);
+    } catch (error: any) {
+      console.error('Failed to delete asset:', error);
+      setError(error.response?.data?.message || 'Failed to delete asset');
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  const cancelDelete = () => {
+    setDeletingAsset(null);
+  };
+
   useEffect(() => {
     fetchAssets();
   }, []);
 
   const handleAssetSuccess = () => {
     setShowAssetForm(false);
+    setEditingAsset(null);
     fetchAssets();
+  };
+
+  const handleCloseAssetForm = () => {
+    setShowAssetForm(false);
+    setEditingAsset(null);
   };
 
   const formatCurrency = (amount: number, currency: string) => {
@@ -204,7 +251,7 @@ export const AssetsList: React.FC = () => {
       </Stack>
 
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
+        <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
           {error}
         </Alert>
       )}
@@ -604,10 +651,20 @@ export const AssetsList: React.FC = () => {
                           </TableCell>
                           <TableCell align="center" sx={{ py: { xs: 2, md: 2.5 } }}>
                             <Stack direction="row" spacing={1} justifyContent="center">
-                              <IconButton size="small" color="primary">
+                              <IconButton 
+                                size="small" 
+                                color="primary"
+                                onClick={() => handleEditAsset(asset)}
+                                title="Edit asset"
+                              >
                                 <Edit fontSize="small" />
                               </IconButton>
-                              <IconButton size="small" color="error">
+                              <IconButton 
+                                size="small" 
+                                color="error"
+                                onClick={() => handleDeleteAsset(asset)}
+                                title="Delete asset"
+                              >
                                 <Delete fontSize="small" />
                               </IconButton>
                             </Stack>
@@ -626,9 +683,42 @@ export const AssetsList: React.FC = () => {
       {/* Asset Form Dialog */}
       <AssetInitForm
         open={showAssetForm}
-        onClose={() => setShowAssetForm(false)}
+        onClose={handleCloseAssetForm}
         onSuccess={handleAssetSuccess}
+        editAsset={editingAsset}
       />
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={!!deletingAsset}
+        onClose={cancelDelete}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          Delete Asset
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete <strong>{deletingAsset?.ticker_symbol}</strong>?
+            This action cannot be undone and will remove all associated transaction history.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={cancelDelete} disabled={deleteLoading}>
+            Cancel
+          </Button>
+          <Button 
+            onClick={confirmDeleteAsset} 
+            color="error" 
+            variant="contained"
+            disabled={deleteLoading}
+            startIcon={deleteLoading ? <CircularProgress size={16} /> : undefined}
+          >
+            {deleteLoading ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 };

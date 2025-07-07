@@ -12,6 +12,7 @@ import {
   InputAdornment,
   Typography,
   Box,
+  CircularProgress,
 } from '@mui/material';
 import {
   TrendingUp,
@@ -20,12 +21,13 @@ import {
   AccountBalance,
 } from '@mui/icons-material';
 import { assetAPI } from '../../services/assetApi';
-import type { CreateAssetRequest } from '../../types/assets';
+import type { CreateAssetRequest, Asset } from '../../types/assets';
 
 interface AssetInitFormProps {
   open: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  editAsset?: Asset | null;
 }
 
 const currencies = [
@@ -47,7 +49,12 @@ const assetTypes = [
   { value: 'REIT', label: 'REIT' },
 ];
 
-export const AssetInitForm: React.FC<AssetInitFormProps> = ({ open, onClose, onSuccess }) => {
+export const AssetInitForm: React.FC<AssetInitFormProps> = ({ 
+  open, 
+  onClose, 
+  onSuccess, 
+  editAsset 
+}) => {
   const [formData, setFormData] = useState<CreateAssetRequest>({
     ticker_symbol: '',
     asset_type: 'Stock',
@@ -58,17 +65,32 @@ export const AssetInitForm: React.FC<AssetInitFormProps> = ({ open, onClose, onS
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Auto-set cost basis to 1 for Cash assets
-  useEffect(() => {
-    if (formData.asset_type === 'Cash') {
-      setFormData(prev => ({
-        ...prev,
-        average_cost_basis: 1
-      }));
-    }
-  }, [formData.asset_type]);
+  const isEditMode = !!editAsset;
 
-  const handleChange = (field: keyof CreateAssetRequest) => (
+  // Initialize form data when editing
+  useEffect(() => {
+    if (editAsset) {
+      setFormData({
+        ticker_symbol: editAsset.ticker_symbol,
+        asset_type: editAsset.asset_type,
+        total_shares: editAsset.total_shares,
+        average_cost_basis: editAsset.average_cost_basis,
+        currency: editAsset.currency,
+      });
+    } else {
+      // Reset form for new asset
+      setFormData({
+        ticker_symbol: '',
+        asset_type: 'Stock',
+        total_shares: 0,
+        average_cost_basis: 0,
+        currency: 'USD',
+      });
+    }
+    setError(null);
+  }, [editAsset, open]);
+
+  const handleInputChange = (field: keyof CreateAssetRequest) => (
     event: React.ChangeEvent<HTMLInputElement>
   ) => {
     const value = event.target.value;
@@ -80,61 +102,43 @@ export const AssetInitForm: React.FC<AssetInitFormProps> = ({ open, onClose, onS
     }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-
-    // Validation
-    if (formData.asset_type === 'Cash') {
-      // For cash, ticker_symbol can be a description
-      if (!formData.ticker_symbol.trim()) {
-        setError('Please enter a description for your cash holding (e.g., "CASH-USD", "Savings")');
-        return;
-      }
-      if (formData.total_shares <= 0) {
-        setError('Cash amount must be greater than 0');
-        return;
-      }
-      if (formData.average_cost_basis !== 1) {
-        setError('For cash assets, cost basis should be 1 (representing 1 unit of currency)');
-        return;
-      }
-    } else {
-      // For other asset types
-      if (!formData.ticker_symbol.trim()) {
-        setError('Ticker symbol is required');
-        return;
-      }
-      if (formData.total_shares <= 0) {
-        setError('Total shares must be greater than 0');
-        return;
-      }
-      if (formData.average_cost_basis <= 0) {
-        setError('Average cost basis must be greater than 0');
-        return;
-      }
+  const validateForm = (): boolean => {
+    if (!formData.ticker_symbol.trim()) {
+      setError('Ticker symbol is required');
+      return false;
     }
+    if (formData.total_shares <= 0) {
+      setError('Total shares must be greater than 0');
+      return false;
+    }
+    if (formData.average_cost_basis <= 0) {
+      setError('Average cost basis must be greater than 0');
+      return false;
+    }
+    return true;
+  };
+
+  const handleSubmit = async () => {
+    if (!validateForm()) return;
 
     setLoading(true);
+    setError(null);
+
     try {
-      await assetAPI.createAsset({
-        ...formData,
-        ticker_symbol: formData.ticker_symbol.toUpperCase().trim(),
-      });
-      
-      // Reset form
-      setFormData({
-        ticker_symbol: '',
-        asset_type: 'Stock',
-        total_shares: 0,
-        average_cost_basis: 0,
-        currency: 'USD',
-      });
+      if (isEditMode) {
+        // TODO: Implement update API call when backend supports it
+        // await assetAPI.updateAsset(editAsset.asset_id, formData);
+        setError('Edit functionality will be implemented in a future update. For now, you can add a new asset with the updated information.');
+        setLoading(false);
+        return;
+      } else {
+        await assetAPI.createAsset(formData);
+      }
       
       onSuccess();
-      onClose();
     } catch (error: any) {
-      setError(error.response?.data?.message || 'Failed to create asset');
+      console.error('Failed to save asset:', error);
+      setError(error.response?.data?.message || `Failed to ${isEditMode ? 'update' : 'create'} asset`);
     } finally {
       setLoading(false);
     }
@@ -142,211 +146,226 @@ export const AssetInitForm: React.FC<AssetInitFormProps> = ({ open, onClose, onS
 
   const handleClose = () => {
     if (!loading) {
-      setError(null);
       onClose();
     }
   };
 
+  const getAssetIcon = (type: string) => {
+    switch (type) {
+      case 'Stock':
+        return <TrendingUp />;
+      case 'ETF':
+        return <ShowChart />;
+      case 'Cash':
+        return <AttachMoney />;
+      default:
+        return <AccountBalance />;
+    }
+  };
+
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="md" fullWidth>
-      <DialogTitle>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <TrendingUp color="primary" />
-          <Typography variant="h6">Initialize Asset</Typography>
-        </Box>
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-          Add an existing asset to your portfolio without entering historical transactions
-        </Typography>
-      </DialogTitle>
-
-      <form onSubmit={handleSubmit}>
-        <DialogContent>
-          {error && (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {error}
-            </Alert>
-          )}
-
-          <Grid container spacing={3}>
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label={formData.asset_type === 'Cash' ? 'Cash Description' : 'Ticker Symbol'}
-                value={formData.ticker_symbol}
-                onChange={handleChange('ticker_symbol')}
-                required
-                disabled={loading}
-                placeholder={
-                  formData.asset_type === 'Cash' 
-                    ? 'e.g., CASH-USD, Savings Account, Emergency Fund'
-                    : 'e.g., AAPL, TSLA, VTI'
-                }
-                helperText={
-                  formData.asset_type === 'Cash'
-                    ? 'Enter a description to identify this cash holding'
-                    : 'Enter the stock/ETF ticker symbol'
-                }
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      {formData.asset_type === 'Cash' ? (
-                        <AccountBalance color="action" />
-                      ) : (
-                        <ShowChart color="action" />
-                      )}
-                    </InputAdornment>
-                  ),
-                }}
-                sx={{
-                  '& .MuiOutlinedInput-root': {
-                    borderRadius: 2,
-                  }
-                }}
-              />
-            </Grid>
-
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                select
-                label="Asset Type"
-                value={formData.asset_type}
-                onChange={handleChange('asset_type')}
-                disabled={loading}
-                sx={{
-                  '& .MuiOutlinedInput-root': {
-                    borderRadius: 2,
-                  }
-                }}
-              >
-                {assetTypes.map((option) => (
-                  <MenuItem key={option.value} value={option.value}>
-                    {option.label}
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Grid>
-
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label={formData.asset_type === 'Cash' ? 'Cash Amount' : 'Total Shares'}
-                type="number"
-                value={formData.total_shares || ''}
-                onChange={handleChange('total_shares')}
-                required
-                disabled={loading}
-                inputProps={{ min: 0, step: formData.asset_type === 'Cash' ? 0.01 : 0.000001 }}
-                helperText={
-                  formData.asset_type === 'Cash'
-                    ? 'Enter the total amount of cash you hold'
-                    : 'Enter the number of shares you own'
-                }
-                sx={{
-                  '& .MuiOutlinedInput-root': {
-                    borderRadius: 2,
-                  }
-                }}
-              />
-            </Grid>
-
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                label={formData.asset_type === 'Cash' ? 'Cost Basis (should be 1)' : 'Average Cost Basis'}
-                type="number"
-                value={formData.asset_type === 'Cash' ? 1 : (formData.average_cost_basis || '')}
-                onChange={handleChange('average_cost_basis')}
-                required
-                disabled={loading || formData.asset_type === 'Cash'}
-                inputProps={{ min: 0, step: 0.01 }}
-                helperText={
-                  formData.asset_type === 'Cash'
-                    ? 'For cash, this is always 1 (1 unit of currency = 1 unit of value)'
-                    : 'Enter the average price per share you paid'
-                }
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <AttachMoney color="action" />
-                    </InputAdornment>
-                  ),
-                }}
-                sx={{
-                  '& .MuiOutlinedInput-root': {
-                    borderRadius: 2,
-                  }
-                }}
-              />
-            </Grid>
-
-            <Grid item xs={12} sm={6}>
-              <TextField
-                fullWidth
-                select
-                label="Currency"
-                value={formData.currency}
-                onChange={handleChange('currency')}
-                disabled={loading}
-                sx={{
-                  '& .MuiOutlinedInput-root': {
-                    borderRadius: 2,
-                  }
-                }}
-              >
-                {currencies.map((option) => (
-                  <MenuItem key={option.value} value={option.value}>
-                    {option.label}
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Grid>
-
-            <Grid item xs={12} sm={6}>
-              <Box sx={{ 
-                p: 2, 
-                bgcolor: 'grey.50', 
-                borderRadius: 2,
-                border: '1px solid',
-                borderColor: 'grey.200'
-              }}>
-                <Typography variant="body2" color="text.secondary" gutterBottom>
-                  Total Investment Value
-                </Typography>
-                <Typography variant="h6" color="primary">
-                  {formData.currency} {(formData.total_shares * formData.average_cost_basis).toLocaleString(undefined, {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                  })}
-                </Typography>
-              </Box>
-            </Grid>
-          </Grid>
-        </DialogContent>
-
-        <DialogActions sx={{ p: 3 }}>
-          <Button 
-            onClick={handleClose} 
-            disabled={loading}
-            variant="outlined"
-          >
-            Cancel
-          </Button>
-          <Button 
-            type="submit" 
-            variant="contained" 
-            disabled={loading}
+    <Dialog 
+      open={open} 
+      onClose={handleClose} 
+      maxWidth="md" 
+      fullWidth
+      PaperProps={{
+        sx: { borderRadius: 3 }
+      }}
+    >
+      <DialogTitle sx={{ pb: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <Box
             sx={{
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              '&:hover': {
-                background: 'linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%)',
-              },
+              width: 40,
+              height: 40,
+              borderRadius: 2,
+              bgcolor: 'primary.main',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'white'
             }}
           >
-            {loading ? 'Creating...' : 'Initialize Asset'}
-          </Button>
-        </DialogActions>
-      </form>
+            {getAssetIcon(formData.asset_type)}
+          </Box>
+          <Box>
+            <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+              {isEditMode ? 'Edit Asset' : 'Initialize Asset Position'}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {isEditMode 
+                ? 'Update your existing asset information'
+                : 'Add an existing investment to your portfolio'
+              }
+            </Typography>
+          </Box>
+        </Box>
+      </DialogTitle>
+
+      <DialogContent sx={{ pt: 2 }}>
+        {error && (
+          <Alert severity="error" sx={{ mb: 3 }}>
+            {error}
+          </Alert>
+        )}
+
+        <Grid container spacing={3}>
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth
+              label="Ticker Symbol"
+              value={formData.ticker_symbol}
+              onChange={handleInputChange('ticker_symbol')}
+              placeholder="e.g., AAPL, TSLA, VTI"
+              disabled={loading || isEditMode} // Disable editing ticker in edit mode
+              helperText={isEditMode ? "Ticker symbol cannot be changed" : "Enter the stock/ETF ticker symbol"}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <TrendingUp color="action" />
+                  </InputAdornment>
+                ),
+              }}
+            />
+          </Grid>
+
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth
+              select
+              label="Asset Type"
+              value={formData.asset_type}
+              onChange={handleInputChange('asset_type')}
+              disabled={loading}
+              helperText="Select the type of investment"
+            >
+              {assetTypes.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Grid>
+
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth
+              type="number"
+              label="Total Shares/Amount"
+              value={formData.total_shares}
+              onChange={handleInputChange('total_shares')}
+              disabled={loading}
+              helperText="Total shares or amount you currently own"
+              inputProps={{ 
+                min: 0, 
+                step: 0.000001,
+                style: { textAlign: 'right' }
+              }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <ShowChart color="action" />
+                  </InputAdornment>
+                ),
+              }}
+            />
+          </Grid>
+
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth
+              type="number"
+              label="Average Cost Basis"
+              value={formData.average_cost_basis}
+              onChange={handleInputChange('average_cost_basis')}
+              disabled={loading}
+              helperText="Average price per share you paid"
+              inputProps={{ 
+                min: 0, 
+                step: 0.01,
+                style: { textAlign: 'right' }
+              }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <AttachMoney color="action" />
+                  </InputAdornment>
+                ),
+              }}
+            />
+          </Grid>
+
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth
+              select
+              label="Currency"
+              value={formData.currency}
+              onChange={handleInputChange('currency')}
+              disabled={loading}
+              helperText="Currency of the investment"
+            >
+              {currencies.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Grid>
+
+          <Grid item xs={12} sm={6}>
+            <Box
+              sx={{
+                p: 2,
+                borderRadius: 2,
+                bgcolor: 'grey.50',
+                border: '1px solid',
+                borderColor: 'grey.200'
+              }}
+            >
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                Total Investment Value
+              </Typography>
+              <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                {(formData.total_shares * formData.average_cost_basis).toLocaleString(undefined, {
+                  style: 'currency',
+                  currency: formData.currency,
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })}
+              </Typography>
+            </Box>
+          </Grid>
+        </Grid>
+      </DialogContent>
+
+      <DialogActions sx={{ p: 3, pt: 2 }}>
+        <Button 
+          onClick={handleClose} 
+          disabled={loading}
+          sx={{ borderRadius: 2 }}
+        >
+          Cancel
+        </Button>
+        <Button
+          variant="contained"
+          onClick={handleSubmit}
+          disabled={loading}
+          startIcon={loading ? <CircularProgress size={16} /> : undefined}
+          sx={{ 
+            borderRadius: 2,
+            px: 3,
+            textTransform: 'none',
+            fontWeight: 'bold'
+          }}
+        >
+          {loading 
+            ? (isEditMode ? 'Updating...' : 'Adding...') 
+            : (isEditMode ? 'Update Asset' : 'Add Asset')
+          }
+        </Button>
+      </DialogActions>
     </Dialog>
   );
 };
