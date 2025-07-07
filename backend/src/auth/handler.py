@@ -1,5 +1,6 @@
 import jwt
-import bcrypt
+import hashlib
+import secrets
 import logging
 from datetime import datetime, timedelta
 from typing import Dict, Any, Optional
@@ -7,10 +8,23 @@ from email_validator import validate_email, EmailNotValidError
 
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-from database import execute_query, execute_update
-from utils.response import create_response, create_error_response
+# Add parent directory to path for imports
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+sys.path.insert(0, parent_dir)
+
+try:
+    from database import execute_query, execute_update
+    from utils.response import create_response, create_error_response
+except ImportError:
+    # Fallback for Lambda environment
+    import database
+    import utils.response
+    execute_query = database.execute_query
+    execute_update = database.execute_update
+    create_response = utils.response.create_response
+    create_error_response = utils.response.create_error_response
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +35,25 @@ class AuthHandler:
         self.jwt_algorithm = config['JWT_ALGORITHM']
         self.jwt_expiration_hours = config['JWT_EXPIRATION_HOURS']
         self.database_url = config['DATABASE_URL']
+    
+    def _hash_password(self, password: str) -> str:
+        """
+        Hash password using PBKDF2 with SHA256
+        """
+        salt = secrets.token_hex(16)  # 32 character hex string
+        password_hash = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), 100000)
+        return f"{salt}:{password_hash.hex()}"
+    
+    def _verify_password(self, password: str, stored_hash: str) -> bool:
+        """
+        Verify password against stored hash
+        """
+        try:
+            salt, password_hash = stored_hash.split(':')
+            new_hash = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), 100000)
+            return password_hash == new_hash.hex()
+        except ValueError:
+            return False
     
     def register(self, body: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -57,7 +90,7 @@ class AuthHandler:
                 return create_error_response(409, "User with this email already exists")
             
             # Hash password
-            password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            password_hash = self._hash_password(password)
             
             # Create user
             execute_update(
@@ -119,7 +152,7 @@ class AuthHandler:
             user = users[0]
             
             # Verify password
-            if not bcrypt.checkpw(password.encode('utf-8'), user['password_hash'].encode('utf-8')):
+            if not self._verify_password(password, user['password_hash']):
                 return create_error_response(401, "Invalid email or password")
             
             # Generate JWT token
