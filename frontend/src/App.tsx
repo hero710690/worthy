@@ -5,7 +5,7 @@ import { Login } from './components/auth/Login';
 import { Register } from './components/auth/Register';
 import { Dashboard } from './components/Dashboard';
 import { AssetsList } from './components/assets/AssetsList';
-import { Transactions } from './components/Transactions';
+import { TransactionHistory } from './components/transactions/TransactionHistory';
 import { Portfolio } from './components/Portfolio';
 import { Goals } from './components/Goals';
 import { Analytics } from './components/Analytics';
@@ -97,7 +97,7 @@ function App() {
             element={
               <ProtectedRoute>
                 <Layout>
-                  <Transactions />
+                  <TransactionHistory />
                 </Layout>
               </ProtectedRoute>
             }

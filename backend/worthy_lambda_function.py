@@ -451,6 +451,171 @@ def handle_create_transaction(body, user_id):
         logger.error(f"Create transaction error: {str(e)}")
         return create_error_response(500, "Failed to create transaction")
 
+def handle_get_transactions(user_id):
+    """Get all transactions for a user"""
+    try:
+        transactions = execute_query(
+            DATABASE_URL,
+            """
+            SELECT t.*, a.ticker_symbol, a.asset_type 
+            FROM transactions t
+            JOIN assets a ON t.asset_id = a.asset_id
+            WHERE a.user_id = %s
+            ORDER BY t.transaction_date DESC, t.created_at DESC
+            """,
+            (user_id,)
+        )
+        
+        transaction_list = []
+        for txn in transactions:
+            transaction_list.append({
+                "transaction_id": txn['transaction_id'],
+                "asset_id": txn['asset_id'],
+                "ticker_symbol": txn['ticker_symbol'],
+                "asset_type": txn['asset_type'],
+                "transaction_type": txn['transaction_type'],
+                "transaction_date": txn['transaction_date'].isoformat(),
+                "shares": float(txn['shares']),
+                "price_per_share": float(txn['price_per_share']),
+                "total_amount": float(txn['shares']) * float(txn['price_per_share']),
+                "currency": txn['currency'],
+                "created_at": txn['created_at'].isoformat()
+            })
+        
+        return create_response(200, {
+            "transactions": transaction_list,
+            "total_count": len(transaction_list)
+        })
+        
+    except Exception as e:
+        logger.error(f"Get transactions error: {str(e)}")
+        return create_error_response(500, "Failed to retrieve transactions")
+
+def handle_update_transaction(transaction_id, body, user_id):
+    """Update a transaction"""
+    try:
+        # Verify transaction belongs to user
+        transaction = execute_query(
+            DATABASE_URL,
+            """
+            SELECT t.*, a.user_id 
+            FROM transactions t
+            JOIN assets a ON t.asset_id = a.asset_id
+            WHERE t.transaction_id = %s AND a.user_id = %s
+            """,
+            (transaction_id, user_id)
+        )
+        
+        if not transaction:
+            return create_error_response(404, "Transaction not found")
+        
+        # Get update data
+        shares = body.get('shares', 0)
+        price_per_share = body.get('price_per_share', 0)
+        transaction_date = body.get('transaction_date')
+        currency = body.get('currency', '').strip()
+        
+        # Validate input
+        if shares <= 0:
+            return create_error_response(400, "Shares must be greater than 0")
+        
+        if price_per_share <= 0:
+            return create_error_response(400, "Price per share must be greater than 0")
+        
+        if not currency:
+            return create_error_response(400, "Currency is required")
+        
+        # Parse transaction date
+        if transaction_date:
+            try:
+                from datetime import datetime
+                transaction_date = datetime.strptime(transaction_date, '%Y-%m-%d').date()
+            except ValueError:
+                return create_error_response(400, "Invalid date format. Use YYYY-MM-DD")
+        else:
+            transaction_date = transaction[0]['transaction_date']
+        
+        # Update transaction
+        execute_update(
+            DATABASE_URL,
+            """
+            UPDATE transactions 
+            SET shares = %s, price_per_share = %s, transaction_date = %s, 
+                currency = %s, updated_at = CURRENT_TIMESTAMP
+            WHERE transaction_id = %s
+            """,
+            (shares, price_per_share, transaction_date, currency, transaction_id)
+        )
+        
+        # Get updated transaction
+        updated_transaction = execute_query(
+            DATABASE_URL,
+            """
+            SELECT t.*, a.ticker_symbol, a.asset_type 
+            FROM transactions t
+            JOIN assets a ON t.asset_id = a.asset_id
+            WHERE t.transaction_id = %s
+            """,
+            (transaction_id,)
+        )[0]
+        
+        return create_response(200, {
+            "message": "Transaction updated successfully",
+            "transaction": {
+                "transaction_id": updated_transaction['transaction_id'],
+                "asset_id": updated_transaction['asset_id'],
+                "ticker_symbol": updated_transaction['ticker_symbol'],
+                "asset_type": updated_transaction['asset_type'],
+                "transaction_type": updated_transaction['transaction_type'],
+                "transaction_date": updated_transaction['transaction_date'].isoformat(),
+                "shares": float(updated_transaction['shares']),
+                "price_per_share": float(updated_transaction['price_per_share']),
+                "total_amount": float(updated_transaction['shares']) * float(updated_transaction['price_per_share']),
+                "currency": updated_transaction['currency'],
+                "created_at": updated_transaction['created_at'].isoformat(),
+                "updated_at": updated_transaction['updated_at'].isoformat() if updated_transaction['updated_at'] else None
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Update transaction error: {str(e)}")
+        return create_error_response(500, "Failed to update transaction")
+
+def handle_delete_transaction(transaction_id, user_id):
+    """Delete a transaction"""
+    try:
+        # Verify transaction belongs to user
+        transaction = execute_query(
+            DATABASE_URL,
+            """
+            SELECT t.*, a.user_id, a.ticker_symbol 
+            FROM transactions t
+            JOIN assets a ON t.asset_id = a.asset_id
+            WHERE t.transaction_id = %s AND a.user_id = %s
+            """,
+            (transaction_id, user_id)
+        )
+        
+        if not transaction:
+            return create_error_response(404, "Transaction not found")
+        
+        transaction = transaction[0]
+        
+        # Delete the transaction
+        execute_update(
+            DATABASE_URL,
+            "DELETE FROM transactions WHERE transaction_id = %s",
+            (transaction_id,)
+        )
+        
+        return create_response(200, {
+            "message": f"Transaction for {transaction['ticker_symbol']} deleted successfully"
+        })
+        
+    except Exception as e:
+        logger.error(f"Delete transaction error: {str(e)}")
+        return create_error_response(500, "Failed to delete transaction")
+
 def handle_update_asset(asset_id, body, user_id):
     """Handle asset update"""
     try:
@@ -1009,6 +1174,48 @@ def lambda_handler(event, context):
                 return create_error_response(401, "Invalid or missing token")
             
             return handle_create_transaction(body, auth_result['user_id'])
+        
+        elif path == '/transactions' and http_method == 'GET':
+            # Get all user transactions - requires authentication
+            request_headers = event.get('headers', {})
+            auth_result = verify_jwt_token(request_headers.get('Authorization', ''))
+            if not auth_result['valid']:
+                return create_error_response(401, "Invalid or missing token")
+            
+            return handle_get_transactions(auth_result['user_id'])
+        
+        elif path.startswith('/transactions/') and http_method == 'PUT':
+            # Update transaction - requires authentication
+            body = {}
+            if event.get('body'):
+                try:
+                    body = json.loads(event['body'])
+                except json.JSONDecodeError:
+                    return create_error_response(400, "Invalid JSON in request body")
+            
+            request_headers = event.get('headers', {})
+            auth_result = verify_jwt_token(request_headers.get('Authorization', ''))
+            if not auth_result['valid']:
+                return create_error_response(401, "Invalid or missing token")
+            
+            try:
+                transaction_id = int(path.split('/')[-1])
+                return handle_update_transaction(transaction_id, body, auth_result['user_id'])
+            except ValueError:
+                return create_error_response(400, "Invalid transaction ID")
+        
+        elif path.startswith('/transactions/') and http_method == 'DELETE':
+            # Delete transaction - requires authentication
+            request_headers = event.get('headers', {})
+            auth_result = verify_jwt_token(request_headers.get('Authorization', ''))
+            if not auth_result['valid']:
+                return create_error_response(401, "Invalid or missing token")
+            
+            try:
+                transaction_id = int(path.split('/')[-1])
+                return handle_delete_transaction(transaction_id, auth_result['user_id'])
+            except ValueError:
+                return create_error_response(400, "Invalid transaction ID")
         
         # External API proxy endpoints (require authentication)
         elif path == '/api/exchange-rates' and http_method == 'GET':
