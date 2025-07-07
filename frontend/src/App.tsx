@@ -5,6 +5,8 @@ import { Login } from './components/auth/Login';
 import { Register } from './components/auth/Register';
 import { Dashboard } from './components/Dashboard';
 import { AssetsList } from './components/assets/AssetsList';
+import { UserProfile } from './components/UserProfile';
+import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 
 // Create Material-UI theme
@@ -68,7 +70,9 @@ function App() {
             path="/dashboard"
             element={
               <ProtectedRoute>
-                <Dashboard />
+                <Layout>
+                  <Dashboard />
+                </Layout>
               </ProtectedRoute>
             }
           />
@@ -77,7 +81,20 @@ function App() {
             path="/assets"
             element={
               <ProtectedRoute>
-                <AssetsList />
+                <Layout>
+                  <AssetsList />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/profile"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <UserProfile />
+                </Layout>
               </ProtectedRoute>
             }
           />
