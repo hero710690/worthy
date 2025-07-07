@@ -26,7 +26,6 @@ import {
   AccountBalance,
   Visibility,
   ShowChart,
-  ArrowBack,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { assetAPI } from '../../services/assetApi';
@@ -91,7 +90,7 @@ export const AssetsList: React.FC = () => {
 
   if (loading) {
     return (
-      <Box sx={{ flexGrow: 1, bgcolor: 'grey.50', minHeight: '100vh' }}>
+      <Box sx={{ minHeight: '100vh' }}>
         <Box sx={{ p: { xs: 3, md: 4 } }}>
           <Typography 
             variant="h4" 
@@ -112,7 +111,7 @@ export const AssetsList: React.FC = () => {
   }
 
   return (
-    <Box sx={{ flexGrow: 1, bgcolor: 'grey.50', minHeight: '100vh' }}>
+    <Box sx={{ minHeight: '100vh' }}>
       {/* Header */}
       <Box sx={{ p: { xs: 3, md: 4 }, pb: 0 }}>
         <Stack 
@@ -142,20 +141,6 @@ export const AssetsList: React.FC = () => {
           </Box>
           
           <Stack direction="row" spacing={2} alignItems="center">
-            <Button
-              variant="outlined"
-              startIcon={<ArrowBack />}
-              onClick={() => navigate('/dashboard')}
-              sx={{
-                borderRadius: 2,
-                px: 3,
-                py: 1.5,
-                textTransform: 'none',
-                fontWeight: 'medium',
-              }}
-            >
-              Back to Dashboard
-            </Button>
             <Button
               variant="contained"
               startIcon={<Add />}
