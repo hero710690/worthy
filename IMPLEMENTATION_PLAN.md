@@ -24,72 +24,111 @@ Worthy is a personalized financial strategy tool that helps users track investme
 
 ---
 
-## Milestone 1: Foundation & Authentication (Week 1-2)
+## Milestone 1: Foundation & Authentication (Week 1-2) 🎉 **FULLY COMPLETE**
 
-### Backend Tasks
-- [ ] Set up project structure and development environment
-- [ ] Configure database schema and migrations
-- [ ] Implement user authentication system
-  - [ ] User registration endpoint
-  - [ ] Login/logout endpoints
-  - [ ] JWT token generation and validation
-  - [ ] Password hashing (bcrypt)
-- [ ] Create base API structure with error handling
-- [ ] Set up environment configuration
-- [ ] Implement basic security middleware (CORS, rate limiting)
-- [ ] Create database models:
-  - [ ] Users table
-  - [ ] Basic validation and constraints
+### ✅ Backend Tasks - **COMPLETE**
+- [x] Set up project structure and development environment
+- [x] Configure database schema and migrations
+- [x] Implement user authentication system
+  - [x] User registration endpoint with name field (✅ WORKING)
+  - [x] Login/logout endpoints (✅ WORKING)
+  - [x] JWT token generation and validation (✅ WORKING)
+  - [x] Password hashing with hashlib (✅ WORKING)
+- [x] Create base API structure with error handling
+- [x] Set up environment configuration
+- [x] Implement basic security middleware (CORS, rate limiting)
+- [x] Create database models:
+  - [x] Users table with name, email, password, currency, birth_year
+  - [x] Basic validation and constraints
+- [x] **COMPLETED: Auth endpoints fully deployed and working**
+- [x] **COMPLETED: Single-file Lambda deployment approach**
+- [x] **COMPLETED: All auth endpoints tested and functional**
 
-### Frontend Tasks
-- [ ] Set up React project with TypeScript
-- [ ] Configure routing (React Router)
-- [ ] Set up state management
-- [ ] Create authentication components:
-  - [ ] Login form
-  - [ ] Registration form
-  - [ ] Protected route wrapper
-- [ ] Implement authentication flow
-- [ ] Set up API client with interceptors
-- [ ] Create basic layout and navigation
-- [ ] Set up responsive design foundation
+### ✅ Frontend Tasks - **COMPLETE**
+- [x] Set up React project with TypeScript
+- [x] Configure routing (React Router)
+- [x] Set up state management (Zustand)
+- [x] Create authentication components:
+  - [x] Login form with Material-UI
+  - [x] Registration form with Material-UI (including name field)
+  - [x] Protected route wrapper
+- [x] Implement authentication flow
+- [x] Set up API client with interceptors
+- [x] Create basic layout and navigation
+- [x] Set up responsive design foundation
+- [x] Deploy to S3 + CloudFront
+
+### 🎉 **MILESTONE 1: 100% COMPLETE - SUMMARY**
+
+**✅ WORKING FEATURES:**
+- **User Registration**: Full name, email, password, base currency, birth year
+- **Secure Login**: JWT-based authentication with token persistence
+- **Protected Dashboard**: Personalized with user's name
+- **User Profile**: Complete profile display with all user information
+- **Logout Functionality**: Proper session cleanup
+- **Responsive Design**: Professional Material-UI interface
+- **Database Integration**: PostgreSQL with proper schema and constraints
+- **Security**: Password hashing, JWT tokens, input validation
+- **Deployment**: Full-stack deployed on AWS (Lambda + RDS + S3 + CloudFront)
+
+**🌐 LIVE APPLICATION:**
+- **Primary URL**: https://ds8jn7fwox3fb.cloudfront.net
+- **Backup URL**: http://worthy-frontend-1751874299.s3-website-ap-northeast-1.amazonaws.com
+- **API Endpoint**: https://mreda8g340.execute-api.ap-northeast-1.amazonaws.com/development
 
 ---
 
-## Milestone 2: Core Data Models & Asset Management (Week 3-4)
+## Milestone 2: Core Data Models & Asset Management (Week 3-4) 🚀 **CURRENT FOCUS**
 
 ### Backend Tasks
 - [ ] Complete database schema implementation:
-  - [ ] Assets table
-  - [ ] Transactions table
-  - [ ] RecurringInvestments table
-  - [ ] FIREProfile table
+  - [ ] Assets table (ticker_symbol, asset_type, total_shares, average_cost_basis, currency)
+  - [ ] Transactions table (asset_id, transaction_type, date, shares, price_per_share, currency)
+  - [ ] RecurringInvestments table (user_id, ticker_symbol, amount, currency, frequency, start_date, next_run_date)
+  - [ ] FIREProfile table (user_id, annual_expenses, safe_withdrawal_rate, expected_annual_return, target_retirement_age, barista_annual_income)
 - [ ] Implement asset management endpoints:
-  - [ ] Create asset (initialization)
-  - [ ] Get user assets
-  - [ ] Update asset information
-  - [ ] Delete asset
+  - [ ] Create asset (initialization) - POST /assets
+  - [ ] Get user assets - GET /assets
+  - [ ] Update asset information - PUT /assets/:id
+  - [ ] Delete asset - DELETE /assets/:id
 - [ ] Implement transaction endpoints:
-  - [ ] Record lump-sum purchase
-  - [ ] Get transaction history
-  - [ ] Update/delete transactions
+  - [ ] Record lump-sum purchase - POST /transactions
+  - [ ] Get transaction history - GET /transactions
+  - [ ] Update/delete transactions - PUT/DELETE /transactions/:id
 - [ ] Add data validation and error handling
 - [ ] Create database indexes for performance
 - [ ] Implement user profile management (base currency setting)
 
 ### Frontend Tasks
 - [ ] Create asset management components:
-  - [ ] Asset initialization form
-  - [ ] Asset list view
-  - [ ] Asset detail view
+  - [ ] Asset initialization form (ticker, shares, cost basis, currency)
+  - [ ] Asset list view with portfolio overview
+  - [ ] Asset detail view with transaction history
 - [ ] Implement transaction recording:
   - [ ] Lump-sum purchase form
-  - [ ] Transaction history display
+  - [ ] Transaction history display with filtering
 - [ ] Create user profile settings:
   - [ ] Base currency selection
   - [ ] Profile management form
 - [ ] Add form validation and error handling
 - [ ] Implement loading states and user feedback
+- [ ] Create navigation between dashboard and asset management
+
+### 🎯 **Milestone 2 Priority Tasks:**
+
+#### Week 3 Focus:
+1. **HIGH**: Create Assets and Transactions database tables
+2. **HIGH**: Implement asset initialization endpoint (for existing portfolios)
+3. **HIGH**: Build asset initialization form in frontend
+4. **MEDIUM**: Create basic asset list view
+5. **MEDIUM**: Implement transaction recording
+
+#### Week 4 Focus:
+1. **HIGH**: Complete transaction history functionality
+2. **HIGH**: Add asset management CRUD operations
+3. **MEDIUM**: Implement user profile settings
+4. **MEDIUM**: Add data validation and error handling
+5. **LOW**: Performance optimization and indexing
 
 ---
 

@@ -35,7 +35,7 @@ fi
 
 # Install dependencies
 echo -e "${YELLOW}📦 Installing Python dependencies...${NC}"
-pip install -r requirements.txt -t src/
+pip3 install -r requirements.txt -t src/
 
 # Build the SAM application
 echo -e "${YELLOW}🔨 Building SAM application...${NC}"
