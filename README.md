@@ -23,7 +23,7 @@ Worthy enables users to:
 ### Frontend
 - **Framework**: React.js with TypeScript
 - **State Management**: Zustand
-- **UI Library**: Material-UI
+- **UI Library**: Material-UI v7
 - **Deployment**: AWS S3 + CloudFront CDN
 
 ## 🚀 Current Status
@@ -35,17 +35,21 @@ Worthy enables users to:
 - **Deployment**: Full-stack deployed on AWS
 - **Security**: Password hashing, input validation, CORS protection
 
-### 🔄 Milestone 2: Core Data Models & Asset Management (IN PROGRESS)
+### 🔄 Milestone 2: Core Data Models & Asset Management (75% COMPLETE)
 - **Database Schema**: ✅ Assets, Transactions, RecurringInvestments, FIREProfile tables
 - **Backend API**: ✅ Asset management endpoints implemented
 - **Authentication**: ✅ JWT-protected asset endpoints
-- **Frontend**: 🔄 Asset management UI components (next)
+- **Frontend Components**: ✅ Asset initialization, transaction recording, portfolio view
+- **Asset Management**: ✅ Create assets, record transactions, view portfolio
+- **Remaining**: Transaction history view, user profile settings
 
 ## 🌐 Live Application
 
 - **Primary URL**: https://ds8jn7fwox3fb.cloudfront.net
 - **Backup URL**: http://worthy-frontend-1751874299.s3-website-ap-northeast-1.amazonaws.com
 - **API Endpoint**: https://mreda8g340.execute-api.ap-northeast-1.amazonaws.com/development
+
+**Latest Deployment**: July 7, 2025 - Frontend updated with Milestone 2 asset management features
 
 ## 🔐 Features
 
@@ -56,14 +60,16 @@ Worthy enables users to:
 - User profile management
 - Logout functionality
 
-### Asset Management (Milestone 2)
-- Asset initialization for existing portfolios
-- Transaction recording (lump-sum purchases)
-- Portfolio overview and asset details
-- Multi-currency support
-- Real-time asset valuation (planned)
+### Asset Management (Milestone 2 - 75% Complete)
+- ✅ Asset initialization for existing portfolios
+- ✅ Transaction recording (lump-sum purchases)
+- ✅ Portfolio overview and asset list
+- ✅ Multi-currency support
+- ✅ Asset creation and management forms
+- 🔄 Transaction history display (next)
+- 🔄 User profile settings (next)
 
-### FIRE Calculator (Planned)
+### FIRE Calculator (Planned - Milestone 5)
 - Traditional FIRE calculation
 - Barista FIRE calculation
 - Coast FIRE calculation
@@ -91,6 +97,7 @@ cd frontend
 npm install
 npm run dev  # Development server
 npm run build  # Production build
+npm run build-with-types  # Build with TypeScript checking
 ```
 
 ### Database Schema
@@ -147,7 +154,7 @@ CREATE TABLE transactions (
 
 ## 🎯 Roadmap
 
-### Milestone 3: External API Integration (Planned)
+### Milestone 3: External API Integration (Next)
 - Stock price API integration (Alpha Vantage/Yahoo Finance)
 - Currency exchange rate API
 - Real-time portfolio valuation
@@ -168,9 +175,18 @@ CREATE TABLE transactions (
 ## 🔧 Technology Stack
 
 - **Backend**: Python, AWS Lambda, PostgreSQL, JWT
-- **Frontend**: React, TypeScript, Material-UI, Zustand
+- **Frontend**: React 19, TypeScript, Material-UI v7, Zustand
 - **Infrastructure**: AWS (Lambda, RDS, S3, CloudFront, API Gateway)
 - **Development**: Git, npm, pip, AWS CLI
+
+## 📝 Recent Updates
+
+### July 7, 2025
+- ✅ **Frontend Deployment**: Updated with Milestone 2 asset management features
+- ✅ **Asset Management UI**: Complete asset initialization and transaction forms
+- ✅ **Portfolio View**: Asset list with portfolio overview
+- ✅ **Material-UI v7**: Updated to latest version with modern components
+- ✅ **CloudFront CDN**: Cache invalidated for immediate updates
 
 ## 📝 License
 

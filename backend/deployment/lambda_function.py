@@ -161,6 +161,31 @@ def verify_token(headers):
         return {"error": "Token verification failed"}
 
 # Authentication handlers
+def verify_jwt_token(auth_header):
+    """Verify JWT token from Authorization header"""
+    try:
+        if not auth_header or not auth_header.startswith('Bearer '):
+            return {'valid': False, 'error': 'Missing or invalid authorization header'}
+        
+        token = auth_header.split(' ')[1]
+        
+        # Decode and verify the token
+        payload = jwt.decode(token, JWT_SECRET, algorithms=['HS256'])
+        
+        return {
+            'valid': True,
+            'user_id': payload.get('user_id'),
+            'email': payload.get('email')
+        }
+        
+    except jwt.ExpiredSignatureError:
+        return {'valid': False, 'error': 'Token has expired'}
+    except jwt.InvalidTokenError:
+        return {'valid': False, 'error': 'Invalid token'}
+    except Exception as e:
+        logger.error(f"Token verification error: {str(e)}")
+        return {'valid': False, 'error': 'Token verification failed'}
+
 def handle_create_asset(body, user_id):
     """Handle asset creation/initialization"""
     try:
