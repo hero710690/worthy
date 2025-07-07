@@ -139,7 +139,7 @@ export const AssetInitForm: React.FC<AssetInitFormProps> = ({ open, onClose, onS
           )}
 
           <Grid container spacing={3}>
-            <Grid size={{ xs: 12, sm: 6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
                 label="Ticker Symbol"
@@ -163,7 +163,7 @@ export const AssetInitForm: React.FC<AssetInitFormProps> = ({ open, onClose, onS
               />
             </Grid>
 
-            <Grid size={{ xs: 12, sm: 6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
                 select
@@ -185,7 +185,7 @@ export const AssetInitForm: React.FC<AssetInitFormProps> = ({ open, onClose, onS
               </TextField>
             </Grid>
 
-            <Grid size={{ xs: 12, sm: 6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
                 label="Total Shares"
@@ -203,7 +203,7 @@ export const AssetInitForm: React.FC<AssetInitFormProps> = ({ open, onClose, onS
               />
             </Grid>
 
-            <Grid size={{ xs: 12, sm: 6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
                 label="Average Cost Basis"
@@ -228,7 +228,7 @@ export const AssetInitForm: React.FC<AssetInitFormProps> = ({ open, onClose, onS
               />
             </Grid>
 
-            <Grid size={{ xs: 12, sm: 6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
                 select
@@ -250,7 +250,7 @@ export const AssetInitForm: React.FC<AssetInitFormProps> = ({ open, onClose, onS
               </TextField>
             </Grid>
 
-            <Grid size={{ xs: 12, sm: 6}>
+            <Grid item xs={12} sm={6}>
               <Box sx={{ 
                 p: 2, 
                 bgcolor: 'grey.50', 

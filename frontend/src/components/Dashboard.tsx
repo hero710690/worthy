@@ -54,19 +54,24 @@ export const Dashboard: React.FC = () => {
     { label: 'Birth Year', value: user?.birth_year, icon: <CalendarToday color="primary" /> },
   ];
 
-  const upcomingFeatures = [
+  const availableFeatures = [
     { 
       label: 'Asset Portfolio Management', 
-      icon: <TrendingUp color="warning" />, 
+      icon: <TrendingUp color="success" />, 
       description: 'Initialize and manage your investment assets',
-      status: 'In Development'
+      action: () => navigate('/assets'),
+      status: 'Available'
     },
     { 
       label: 'Investment Recording', 
-      icon: <AccountBalance color="warning" />, 
+      icon: <AccountBalance color="success" />, 
       description: 'Record lump-sum purchases and transactions',
-      status: 'In Development'
+      action: () => navigate('/assets'),
+      status: 'Available'
     },
+  ];
+
+  const upcomingFeatures = [
     { label: 'FIRE Calculator', icon: <Calculate color="info" />, status: 'Planned' },
     { label: 'Performance Analytics', icon: <Analytics color="info" />, status: 'Planned' },
     { label: 'Real-time Price Updates', icon: <ShowChart color="info" />, status: 'Planned' },
@@ -77,7 +82,7 @@ export const Dashboard: React.FC = () => {
     { title: 'Backend API', status: 'Connected', color: 'success', icon: <CheckCircle /> },
     { title: 'Database', status: 'Active', color: 'primary', icon: <AccountBalance /> },
     { title: 'Authentication', status: 'Secured', color: 'success', icon: <CheckCircle /> },
-    { title: 'Asset Management', status: 'In Development', color: 'warning', icon: <TrendingUp /> },
+    { title: 'Asset Management', status: 'Available', color: 'success', icon: <TrendingUp /> },
   ];
 
   return (
@@ -95,6 +100,22 @@ export const Dashboard: React.FC = () => {
             Worthy Dashboard
           </Typography>
           <Stack direction="row" spacing={2} alignItems="center">
+            <Button
+              color="inherit"
+              onClick={() => navigate('/assets')}
+              startIcon={<ShowChart />}
+              variant="outlined"
+              size="small"
+              sx={{ 
+                borderColor: 'rgba(255,255,255,0.3)',
+                '&:hover': { 
+                  borderColor: 'rgba(255,255,255,0.5)',
+                  bgcolor: 'rgba(255,255,255,0.1)'
+                }
+              }}
+            >
+              Assets
+            </Button>
             <Avatar sx={{ bgcolor: 'rgba(255,255,255,0.2)', width: 32, height: 32 }}>
               <AccountCircle />
             </Avatar>
@@ -144,7 +165,7 @@ export const Dashboard: React.FC = () => {
                 </Stack>
                 
                 <Typography variant="body1" color="text.secondary" sx={{ mb: 3, fontSize: '1.1rem' }}>
-                  Your financial tracking system is ready! Asset management features are being finalized and will be available soon.
+                  Your financial tracking system is ready! Start by managing your investment assets and recording transactions.
                 </Typography>
 
                 <Stack direction="row" spacing={2}>
@@ -152,7 +173,7 @@ export const Dashboard: React.FC = () => {
                     variant="contained"
                     size="large"
                     startIcon={<Add />}
-                    disabled
+                    onClick={() => navigate('/assets')}
                     sx={{
                       background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                       '&:hover': {
@@ -160,27 +181,81 @@ export const Dashboard: React.FC = () => {
                       }
                     }}
                   >
-                    Manage Assets (Coming Soon)
+                    Manage Assets
                   </Button>
                   <Button
                     variant="outlined"
                     size="large"
                     startIcon={<ShowChart />}
-                    disabled
+                    onClick={() => navigate('/assets')}
                   >
-                    View Portfolio (Coming Soon)
+                    View Portfolio
                   </Button>
                 </Stack>
               </CardContent>
             </Card>
           </Grid>
 
-          {/* Coming Soon Features */}
+          {/* Available Features */}
           <Grid item xs={12} lg={8}>
             <Card elevation={2} sx={{ borderRadius: 3, mb: 3 }}>
               <CardContent sx={{ p: 3 }}>
                 <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
-                  Features Status
+                  Available Features
+                </Typography>
+                
+                <Grid container spacing={2}>
+                  {availableFeatures.map((feature, index) => (
+                    <Grid item xs={12} key={index}>
+                      <Paper 
+                        elevation={0} 
+                        sx={{ 
+                          p: 3, 
+                          bgcolor: 'success.50',
+                          borderRadius: 2,
+                          border: '1px solid',
+                          borderColor: 'success.200',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          '&:hover': {
+                            bgcolor: 'success.100',
+                            transform: 'translateY(-2px)',
+                            boxShadow: 2
+                          }
+                        }}
+                        onClick={feature.action}
+                      >
+                        <Stack direction="row" spacing={2} alignItems="center" justifyContent="space-between">
+                          <Stack direction="row" spacing={2} alignItems="center">
+                            {feature.icon}
+                            <Box>
+                              <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+                                {feature.label}
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                {feature.description}
+                              </Typography>
+                            </Box>
+                          </Stack>
+                          <Chip 
+                            label={feature.status} 
+                            color="success" 
+                            size="small" 
+                            variant="filled"
+                          />
+                        </Stack>
+                      </Paper>
+                    </Grid>
+                  ))}
+                </Grid>
+              </CardContent>
+            </Card>
+
+            {/* Coming Soon Features */}
+            <Card elevation={2} sx={{ borderRadius: 3, mb: 3 }}>
+              <CardContent sx={{ p: 3 }}>
+                <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
+                  Coming Soon
                 </Typography>
                 
                 <List dense sx={{ p: 0 }}>
@@ -192,19 +267,14 @@ export const Dashboard: React.FC = () => {
                         </ListItemIcon>
                         <ListItemText 
                           primary={feature.label}
-                          secondary={feature.description}
                           primaryTypographyProps={{ 
                             variant: 'body1',
                             fontWeight: 'medium'
                           }}
-                          secondaryTypographyProps={{
-                            variant: 'body2',
-                            color: 'text.secondary'
-                          }}
                         />
                         <Chip 
                           label={feature.status} 
-                          color={feature.status === 'In Development' ? 'warning' : 'info'} 
+                          color="info" 
                           size="small" 
                           variant="outlined"
                         />
@@ -281,15 +351,15 @@ export const Dashboard: React.FC = () => {
             </Card>
           </Grid>
 
-          {/* Development Status */}
+          {/* Milestone Status */}
           <Grid item xs={12} lg={4}>
             <Card elevation={2} sx={{ borderRadius: 3, height: 'fit-content' }}>
               <CardContent sx={{ p: 3 }}>
                 <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', mb: 2 }}>
-                  Development Progress
+                  Milestone Progress
                 </Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  Asset management features are currently being finalized. Stay tuned for updates!
+                  Asset management features are now live and ready to use!
                 </Typography>
                 <Box sx={{ mt: 2 }}>
                   <Typography variant="body2" sx={{ mb: 1 }}>
@@ -303,14 +373,14 @@ export const Dashboard: React.FC = () => {
                     mb: 1
                   }}>
                     <Box sx={{ 
-                      width: '85%', 
-                      bgcolor: 'warning.main', 
+                      width: '100%', 
+                      bgcolor: 'success.main', 
                       height: '100%', 
                       borderRadius: 1 
                     }} />
                   </Box>
                   <Typography variant="caption" color="text.secondary">
-                    85% Complete - Asset Management UI
+                    100% Complete - Asset Management Live
                   </Typography>
                 </Box>
               </CardContent>
