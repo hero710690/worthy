@@ -144,7 +144,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
           )}
 
           <Grid container spacing={3}>
-            <Grid size={{ xs: 12, sm: 6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
                 select
@@ -166,7 +166,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
               </TextField>
             </Grid>
 
-            <Grid size={{ xs: 12, sm: 6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
                 label="Transaction Date"
@@ -189,7 +189,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
               />
             </Grid>
 
-            <Grid size={{ xs: 12, sm: 6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
                 label="Number of Shares"
@@ -207,7 +207,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
               />
             </Grid>
 
-            <Grid size={{ xs: 12, sm: 6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
                 label="Price per Share"
@@ -232,7 +232,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
               />
             </Grid>
 
-            <Grid size={{ xs: 12, sm: 6}>
+            <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
                 select
@@ -254,7 +254,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
               </TextField>
             </Grid>
 
-            <Grid size={{ xs: 12, sm: 6}>
+            <Grid item xs={12} sm={6}>
               <Box sx={{ 
                 p: 2, 
                 bgcolor: 'grey.50', 
@@ -275,7 +275,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
             </Grid>
 
             {/* Current Asset Info */}
-            <Grid size={{ xs: 12}>
+            <Grid item xs={12}>
               <Box sx={{ 
                 p: 2, 
                 bgcolor: 'info.50', 
@@ -287,7 +287,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
                   Current Asset Information
                 </Typography>
                 <Grid container spacing={2}>
-                  <Grid size={{ xs: 6, sm: 3}>
+                  <Grid item xs={6} sm={3}>
                     <Typography variant="body2" color="text.secondary">
                       Current Shares
                     </Typography>
@@ -295,7 +295,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
                       {asset.total_shares.toLocaleString()}
                     </Typography>
                   </Grid>
-                  <Grid size={{ xs: 6, sm: 3}>
+                  <Grid item xs={6} sm={3}>
                     <Typography variant="body2" color="text.secondary">
                       Avg Cost Basis
                     </Typography>
@@ -303,7 +303,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
                       {asset.currency} {asset.average_cost_basis.toFixed(2)}
                     </Typography>
                   </Grid>
-                  <Grid size={{ xs: 6, sm: 3}>
+                  <Grid item xs={6} sm={3}>
                     <Typography variant="body2" color="text.secondary">
                       Total Value
                     </Typography>
@@ -311,7 +311,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
                       {asset.currency} {(asset.total_shares * asset.average_cost_basis).toLocaleString()}
                     </Typography>
                   </Grid>
-                  <Grid size={{ xs: 6, sm: 3}>
+                  <Grid item xs={6} sm={3}>
                     <Typography variant="body2" color="text.secondary">
                       Transactions
                     </Typography>

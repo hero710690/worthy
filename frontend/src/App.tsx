@@ -4,6 +4,7 @@ import { CssBaseline } from '@mui/material';
 import { Login } from './components/auth/Login';
 import { Register } from './components/auth/Register';
 import { Dashboard } from './components/Dashboard';
+import { AssetsList } from './components/assets/AssetsList';
 import { ProtectedRoute } from './components/ProtectedRoute';
 
 // Create Material-UI theme
@@ -68,6 +69,15 @@ function App() {
             element={
               <ProtectedRoute>
                 <Dashboard />
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/assets"
+            element={
+              <ProtectedRoute>
+                <AssetsList />
               </ProtectedRoute>
             }
           />
