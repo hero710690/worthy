@@ -257,13 +257,21 @@ export const Dashboard: React.FC = () => {
                 variant="outlined"
               />
               
-              <Chip 
-                icon={portfolioValuation.apiStatus.stockPrices ? <CheckCircle /> : <Warning />}
-                label={`Stock Prices: ${portfolioValuation.apiStatus.stockPrices ? 'Live' : 'Mock'}`}
-                size="small"
-                color={portfolioValuation.apiStatus.stockPrices ? "success" : "warning"}
-                variant="outlined"
-              />
+              <Tooltip 
+                title={portfolioValuation.apiStatus.stockPrices 
+                  ? "Using live stock prices from Alpha Vantage API" 
+                  : "Using mock prices - Alpha Vantage daily limit reached (25 requests/day). Prices will update tomorrow."
+                }
+                arrow
+              >
+                <Chip 
+                  icon={portfolioValuation.apiStatus.stockPrices ? <CheckCircle /> : <Warning />}
+                  label={`Stock Prices: ${portfolioValuation.apiStatus.stockPrices ? 'Live' : 'Mock'}`}
+                  size="small"
+                  color={portfolioValuation.apiStatus.stockPrices ? "success" : "warning"}
+                  variant="outlined"
+                />
+              </Tooltip>
               
               <Typography variant="body2" color="text.secondary">
                 Last updated: {portfolioValuation.lastUpdated.toLocaleTimeString()}

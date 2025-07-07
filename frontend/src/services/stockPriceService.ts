@@ -88,6 +88,8 @@ export class StockPriceService {
   private cacheDuration: number = 5 * 60 * 1000; // 5 minutes cache for stock prices
   private rateLimitDelay: number = 12000; // 12 seconds between API calls (5 calls per minute limit)
   private lastApiCall: number = 0;
+  private dailyLimitReached: boolean = false;
+  private rateLimitMessage: string = '';
 
   private constructor() {
     // Initialize with mock data
@@ -178,12 +180,22 @@ export class StockPriceService {
    */
   private async fetchStockPriceFromAPI(symbol: string): Promise<StockPrice | null> {
     try {
+      // Check if daily limit already reached
+      if (this.dailyLimitReached) {
+        console.warn(`⚠️ Alpha Vantage daily limit reached. Using mock data for ${symbol}`);
+        const mockPrice = MOCK_STOCK_PRICES[symbol];
+        if (mockPrice) {
+          return { ...mockPrice, lastUpdated: new Date() };
+        }
+        return null;
+      }
+
       // Rate limiting
       await this.waitForRateLimit();
 
       const url = `${this.baseUrl}?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${this.apiKey}`;
       
-      console.log(`Fetching stock price for ${symbol} from Alpha Vantage...`);
+      console.log(`📡 Fetching stock price for ${symbol} from Alpha Vantage...`);
       
       const response = await fetch(url, {
         method: 'GET',
@@ -204,14 +216,37 @@ export class StockPriceService {
         throw new Error(`API Error: ${data['Error Message']}`);
       }
 
+      // Check for rate limit messages
       if (data['Note']) {
-        console.warn(`API Rate Limit: ${data['Note']}`);
+        console.warn(`⚠️ Alpha Vantage API Note: ${data['Note']}`);
+        if (data['Note'].includes('rate limit') || data['Note'].includes('25 requests per day')) {
+          this.dailyLimitReached = true;
+          this.rateLimitMessage = data['Note'];
+          console.warn(`🚫 Daily API limit reached: ${data['Note']}`);
+        }
         // Return mock data if rate limited
         const mockPrice = MOCK_STOCK_PRICES[symbol];
         if (mockPrice) {
           return { ...mockPrice, lastUpdated: new Date() };
         }
         throw new Error(`API Rate Limit: ${data['Note']}`);
+      }
+
+      // Check for Information field (daily limit message)
+      if ((data as any)['Information']) {
+        const info = (data as any)['Information'];
+        console.warn(`⚠️ Alpha Vantage API Information: ${info}`);
+        if (info.includes('rate limit') || info.includes('25 requests per day')) {
+          this.dailyLimitReached = true;
+          this.rateLimitMessage = info;
+          console.warn(`🚫 Daily API limit reached: ${info}`);
+        }
+        // Return mock data when daily limit reached
+        const mockPrice = MOCK_STOCK_PRICES[symbol];
+        if (mockPrice) {
+          return { ...mockPrice, lastUpdated: new Date() };
+        }
+        throw new Error(`Daily API Limit: ${info}`);
       }
 
       if (!data['Global Quote']) {
@@ -307,6 +342,26 @@ export class StockPriceService {
   }
 
   /**
+   * Get user-friendly status message
+   */
+  public getStatusMessage(): string {
+    if (this.dailyLimitReached) {
+      return 'Daily API limit reached (25/day). Using cached/mock prices.';
+    }
+    if (this.isUsingRealPrices) {
+      return 'Live prices from Alpha Vantage API';
+    }
+    return 'Using mock prices (API not yet called)';
+  }
+
+  /**
+   * Check if we should show "Live" or "Mock" status
+   */
+  public isShowingLivePrices(): boolean {
+    return this.isUsingRealPrices && !this.dailyLimitReached;
+  }
+
+  /**
    * Get service status
    */
   public getServiceStatus(): {
@@ -314,12 +369,16 @@ export class StockPriceService {
     cachedSymbols: string[];
     lastApiCall: Date | null;
     rateLimitStatus: string;
+    dailyLimitReached: boolean;
+    rateLimitMessage: string;
   } {
     return {
       isUsingRealPrices: this.isUsingRealPrices,
       cachedSymbols: Array.from(this.priceCache.keys()),
       lastApiCall: this.lastApiCall > 0 ? new Date(this.lastApiCall) : null,
-      rateLimitStatus: this.getRateLimitStatus()
+      rateLimitStatus: this.getRateLimitStatus(),
+      dailyLimitReached: this.dailyLimitReached,
+      rateLimitMessage: this.rateLimitMessage
     };
   }
 
