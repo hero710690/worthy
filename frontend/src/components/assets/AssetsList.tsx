@@ -162,23 +162,37 @@ export const AssetsList: React.FC = () => {
         </Toolbar>
       </AppBar>
 
-      <Container maxWidth="xl" sx={{ py: 4 }}>
+      <Container maxWidth="xl" sx={{ py: { xs: 2, md: 4 }, px: { xs: 2, md: 3 } }}>
         {error && (
-          <Alert severity="error" sx={{ mb: 3 }}>
+          <Alert severity="error" sx={{ mb: { xs: 2, md: 3 } }}>
             {error}
           </Alert>
         )}
 
         {/* Portfolio Summary */}
-        <Grid container spacing={3} sx={{ mb: 4 }}>
+        <Grid container spacing={{ xs: 2, md: 4 }} sx={{ mb: { xs: 3, md: 5 } }}>
           <Grid item xs={12} sm={4}>
-            <Card elevation={2} sx={{ borderRadius: 3 }}>
-              <CardContent sx={{ textAlign: 'center' }}>
-                <AccountBalance color="primary" sx={{ fontSize: 40, mb: 1 }} />
-                <Typography variant="h6" gutterBottom>
+            <Card elevation={2} sx={{ borderRadius: 3, height: '100%' }}>
+              <CardContent sx={{ textAlign: 'center', p: { xs: 2.5, md: 3.5 } }}>
+                <AccountBalance 
+                  color="primary" 
+                  sx={{ fontSize: { xs: 40, md: 50 }, mb: { xs: 1, md: 2 } }} 
+                />
+                <Typography 
+                  variant="h6" 
+                  gutterBottom
+                  sx={{ fontSize: { xs: '1.1rem', md: '1.25rem' } }}
+                >
                   Total Assets
                 </Typography>
-                <Typography variant="h4" color="primary" sx={{ fontWeight: 'bold' }}>
+                <Typography 
+                  variant="h4" 
+                  color="primary" 
+                  sx={{ 
+                    fontWeight: 'bold',
+                    fontSize: { xs: '2rem', md: '2.5rem' }
+                  }}
+                >
                   {assets.length}
                 </Typography>
               </CardContent>
@@ -186,13 +200,27 @@ export const AssetsList: React.FC = () => {
           </Grid>
 
           <Grid item xs={12} sm={4}>
-            <Card elevation={2} sx={{ borderRadius: 3 }}>
-              <CardContent sx={{ textAlign: 'center' }}>
-                <TrendingUp color="success" sx={{ fontSize: 40, mb: 1 }} />
-                <Typography variant="h6" gutterBottom>
+            <Card elevation={2} sx={{ borderRadius: 3, height: '100%' }}>
+              <CardContent sx={{ textAlign: 'center', p: { xs: 2.5, md: 3.5 } }}>
+                <TrendingUp 
+                  color="success" 
+                  sx={{ fontSize: { xs: 40, md: 50 }, mb: { xs: 1, md: 2 } }} 
+                />
+                <Typography 
+                  variant="h6" 
+                  gutterBottom
+                  sx={{ fontSize: { xs: '1.1rem', md: '1.25rem' } }}
+                >
                   Total Value
                 </Typography>
-                <Typography variant="h4" color="success.main" sx={{ fontWeight: 'bold' }}>
+                <Typography 
+                  variant="h4" 
+                  color="success.main" 
+                  sx={{ 
+                    fontWeight: 'bold',
+                    fontSize: { xs: '1.75rem', md: '2.25rem' }
+                  }}
+                >
                   ${calculateTotalValue().toLocaleString(undefined, {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2
@@ -203,13 +231,27 @@ export const AssetsList: React.FC = () => {
           </Grid>
 
           <Grid item xs={12} sm={4}>
-            <Card elevation={2} sx={{ borderRadius: 3 }}>
-              <CardContent sx={{ textAlign: 'center' }}>
-                <ShowChart color="info" sx={{ fontSize: 40, mb: 1 }} />
-                <Typography variant="h6" gutterBottom>
+            <Card elevation={2} sx={{ borderRadius: 3, height: '100%' }}>
+              <CardContent sx={{ textAlign: 'center', p: { xs: 2.5, md: 3.5 } }}>
+                <ShowChart 
+                  color="info" 
+                  sx={{ fontSize: { xs: 40, md: 50 }, mb: { xs: 1, md: 2 } }} 
+                />
+                <Typography 
+                  variant="h6" 
+                  gutterBottom
+                  sx={{ fontSize: { xs: '1.1rem', md: '1.25rem' } }}
+                >
                   Unique Assets
                 </Typography>
-                <Typography variant="h4" color="info.main" sx={{ fontWeight: 'bold' }}>
+                <Typography 
+                  variant="h4" 
+                  color="info.main" 
+                  sx={{ 
+                    fontWeight: 'bold',
+                    fontSize: { xs: '2rem', md: '2.5rem' }
+                  }}
+                >
                   {new Set(assets.map(asset => asset.ticker_symbol)).size}
                 </Typography>
               </CardContent>
@@ -219,13 +261,31 @@ export const AssetsList: React.FC = () => {
 
         {/* Assets Table */}
         {assets.length === 0 ? (
-          <Card elevation={2} sx={{ borderRadius: 3, textAlign: 'center', py: 6 }}>
-            <CardContent>
-              <AccountBalance sx={{ fontSize: 80, color: 'grey.300', mb: 2 }} />
-              <Typography variant="h5" gutterBottom color="text.secondary">
+          <Card elevation={2} sx={{ borderRadius: 3, textAlign: 'center', py: { xs: 4, md: 8 } }}>
+            <CardContent sx={{ p: { xs: 3, md: 5 } }}>
+              <AccountBalance sx={{ 
+                fontSize: { xs: 60, md: 100 }, 
+                color: 'grey.300', 
+                mb: { xs: 2, md: 3 } 
+              }} />
+              <Typography 
+                variant="h5" 
+                gutterBottom 
+                color="text.secondary"
+                sx={{ fontSize: { xs: '1.5rem', md: '2rem' } }}
+              >
                 No Assets Found
               </Typography>
-              <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+              <Typography 
+                variant="body1" 
+                color="text.secondary" 
+                sx={{ 
+                  mb: { xs: 3, md: 4 },
+                  fontSize: { xs: '1rem', md: '1.1rem' },
+                  maxWidth: 500,
+                  mx: 'auto'
+                }}
+              >
                 Start building your portfolio by initializing your first asset.
               </Typography>
               <Button
@@ -235,6 +295,9 @@ export const AssetsList: React.FC = () => {
                 size="large"
                 sx={{
                   background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  py: { xs: 1.5, md: 2 },
+                  px: { xs: 3, md: 4 },
+                  fontSize: { xs: '1rem', md: '1.1rem' },
                   '&:hover': {
                     background: 'linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%)',
                   },
@@ -247,79 +310,162 @@ export const AssetsList: React.FC = () => {
         ) : (
           <Card elevation={2} sx={{ borderRadius: 3 }}>
             <CardContent sx={{ p: 0 }}>
-              <Box sx={{ p: 3, borderBottom: '1px solid', borderColor: 'divider' }}>
-                <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+              <Box sx={{ 
+                p: { xs: 3, md: 4 }, 
+                borderBottom: '1px solid', 
+                borderColor: 'divider' 
+              }}>
+                <Typography 
+                  variant="h6" 
+                  sx={{ 
+                    fontWeight: 'bold',
+                    fontSize: { xs: '1.25rem', md: '1.5rem' }
+                  }}
+                >
                   Your Assets
                 </Typography>
               </Box>
               
               <TableContainer>
-                <Table>
+                <Table sx={{ minWidth: { xs: 650, md: 750 } }}>
                   <TableHead>
                     <TableRow>
-                      <TableCell sx={{ fontWeight: 'bold' }}>Asset</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold' }}>Type</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold' }} align="right">Shares</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold' }} align="right">Avg Cost</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold' }} align="right">Total Value</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold' }}>Currency</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold' }} align="center">Actions</TableCell>
+                      <TableCell sx={{ 
+                        fontWeight: 'bold',
+                        fontSize: { xs: '0.875rem', md: '1rem' },
+                        py: { xs: 2, md: 2.5 }
+                      }}>
+                        Asset
+                      </TableCell>
+                      <TableCell sx={{ 
+                        fontWeight: 'bold',
+                        fontSize: { xs: '0.875rem', md: '1rem' },
+                        py: { xs: 2, md: 2.5 }
+                      }}>
+                        Type
+                      </TableCell>
+                      <TableCell sx={{ 
+                        fontWeight: 'bold',
+                        fontSize: { xs: '0.875rem', md: '1rem' },
+                        py: { xs: 2, md: 2.5 }
+                      }} align="right">
+                        Shares
+                      </TableCell>
+                      <TableCell sx={{ 
+                        fontWeight: 'bold',
+                        fontSize: { xs: '0.875rem', md: '1rem' },
+                        py: { xs: 2, md: 2.5 }
+                      }} align="right">
+                        Avg Cost
+                      </TableCell>
+                      <TableCell sx={{ 
+                        fontWeight: 'bold',
+                        fontSize: { xs: '0.875rem', md: '1rem' },
+                        py: { xs: 2, md: 2.5 }
+                      }} align="right">
+                        Total Value
+                      </TableCell>
+                      <TableCell sx={{ 
+                        fontWeight: 'bold',
+                        fontSize: { xs: '0.875rem', md: '1rem' },
+                        py: { xs: 2, md: 2.5 }
+                      }}>
+                        Currency
+                      </TableCell>
+                      <TableCell sx={{ 
+                        fontWeight: 'bold',
+                        fontSize: { xs: '0.875rem', md: '1rem' },
+                        py: { xs: 2, md: 2.5 }
+                      }} align="center">
+                        Actions
+                      </TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {assets.map((asset) => (
-                      <TableRow key={asset.asset_id} hover>
-                        <TableCell>
+                      <TableRow key={asset.asset_id} hover sx={{ 
+                        '&:hover': { bgcolor: 'grey.50' },
+                        transition: 'background-color 0.2s ease'
+                      }}>
+                        <TableCell sx={{ py: { xs: 2, md: 2.5 } }}>
                           <Box>
-                            <Typography variant="body1" sx={{ fontWeight: 'medium' }}>
+                            <Typography 
+                              variant="body1" 
+                              sx={{ 
+                                fontWeight: 'medium',
+                                fontSize: { xs: '0.95rem', md: '1rem' }
+                              }}
+                            >
                               {asset.ticker_symbol}
                             </Typography>
-                            <Typography variant="caption" color="text.secondary">
+                            <Typography 
+                              variant="caption" 
+                              color="text.secondary"
+                              sx={{ fontSize: { xs: '0.75rem', md: '0.8rem' } }}
+                            >
                               ID: {asset.asset_id}
                             </Typography>
                           </Box>
                         </TableCell>
-                        <TableCell>
+                        <TableCell sx={{ py: { xs: 2, md: 2.5 } }}>
                           <Chip 
                             label={asset.asset_type} 
                             size="small" 
                             color="primary" 
                             variant="outlined"
+                            sx={{ fontSize: { xs: '0.75rem', md: '0.8rem' } }}
                           />
                         </TableCell>
-                        <TableCell align="right">
-                          <Typography variant="body2">
+                        <TableCell align="right" sx={{ py: { xs: 2, md: 2.5 } }}>
+                          <Typography 
+                            variant="body2"
+                            sx={{ fontSize: { xs: '0.875rem', md: '0.95rem' } }}
+                          >
                             {asset.total_shares.toLocaleString(undefined, {
                               minimumFractionDigits: 2,
                               maximumFractionDigits: 6
                             })}
                           </Typography>
                         </TableCell>
-                        <TableCell align="right">
-                          <Typography variant="body2">
+                        <TableCell align="right" sx={{ py: { xs: 2, md: 2.5 } }}>
+                          <Typography 
+                            variant="body2"
+                            sx={{ fontSize: { xs: '0.875rem', md: '0.95rem' } }}
+                          >
                             {formatCurrency(asset.average_cost_basis, asset.currency)}
                           </Typography>
                         </TableCell>
-                        <TableCell align="right">
-                          <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+                        <TableCell align="right" sx={{ py: { xs: 2, md: 2.5 } }}>
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              fontWeight: 'medium',
+                              fontSize: { xs: '0.875rem', md: '0.95rem' }
+                            }}
+                          >
                             {formatCurrency(asset.total_shares * asset.average_cost_basis, asset.currency)}
                           </Typography>
                         </TableCell>
-                        <TableCell>
+                        <TableCell sx={{ py: { xs: 2, md: 2.5 } }}>
                           <Chip 
                             label={asset.currency} 
                             size="small" 
                             color="secondary" 
                             variant="filled"
+                            sx={{ fontSize: { xs: '0.75rem', md: '0.8rem' } }}
                           />
                         </TableCell>
-                        <TableCell align="center">
+                        <TableCell align="center" sx={{ py: { xs: 2, md: 2.5 } }}>
                           <Stack direction="row" spacing={1} justifyContent="center">
                             <IconButton 
                               size="small" 
                               color="primary"
                               onClick={() => handleAddTransaction(asset)}
                               title="Add Transaction"
+                              sx={{ 
+                                '&:hover': { bgcolor: 'primary.50' },
+                                transition: 'background-color 0.2s ease'
+                              }}
                             >
                               <Add />
                             </IconButton>
@@ -327,6 +473,10 @@ export const AssetsList: React.FC = () => {
                               size="small" 
                               color="info"
                               title="View Details"
+                              sx={{ 
+                                '&:hover': { bgcolor: 'info.50' },
+                                transition: 'background-color 0.2s ease'
+                              }}
                             >
                               <Visibility />
                             </IconButton>
