@@ -1,292 +1,193 @@
 # Worthy - Personal Financial Strategy Tool
 
-A personalized financial strategy tool that helps users track investment assets and calculate FIRE (Financial Independence, Retire Early) progress across multiple currencies.
+Worthy is a personalized financial strategy tool that helps users track investment assets and calculate FIRE (Financial Independence, Retire Early) progress across multiple currencies.
 
-## Overview
+## 🎯 Project Overview
 
-Worthy solves the tedious problem of manually recording and updating multi-currency assets. Through simple initial setup and automated recurring investment tracking, it provides a clear, accurate, and motivating dashboard to help users plan their path to financial freedom.
+Worthy enables users to:
+- Track investment portfolios across multiple currencies
+- Record and manage investment transactions
+- Calculate progress toward different FIRE goals (Traditional, Barista, Coast)
+- Automate recurring investment tracking
+- Visualize financial progress and projections
 
-## Features
-
-### Core Features
-- **Multi-Currency Asset Tracking**: Track investments in different currencies (USD, TWD, etc.) with automatic conversion to your base currency
-- **Asset Initialization**: Quick setup of existing portfolio without entering historical transactions
-- **Lump-Sum Purchases**: Record one-time investment transactions
-- **Recurring Investments**: Set up automated recurring investment plans
-- **Real-Time Data**: Automatic fetching of current market prices and exchange rates
-- **Portfolio Dashboard**: Comprehensive view of total assets, allocation, and performance
-
-### FIRE Calculator
-- **Traditional FIRE**: Calculate full financial independence target
-- **Barista FIRE**: Calculate partial financial independence with part-time income
-- **Coast FIRE**: Calculate early investment target for future financial independence
-- **Progress Tracking**: Visual progress indicators for each FIRE type
-
-## Technology Stack
+## 🏗️ Architecture
 
 ### Backend
-- **Framework**: Node.js with Express.js
-- **Database**: PostgreSQL
-- **Authentication**: JWT tokens
-- **External APIs**: Alpha Vantage (stock prices), ExchangeRate-API (currency conversion)
-- **Scheduler**: node-cron for automated batch processing
+- **Framework**: Python with AWS Lambda
+- **Database**: PostgreSQL on AWS RDS
+- **Authentication**: JWT tokens with hashlib password hashing
+- **API**: RESTful API with AWS API Gateway
+- **Deployment**: Serverless architecture on AWS
 
 ### Frontend
 - **Framework**: React.js with TypeScript
-- **State Management**: Redux Toolkit
+- **State Management**: Zustand
 - **UI Library**: Material-UI
-- **Charts**: Chart.js
-- **Build Tool**: Vite
+- **Deployment**: AWS S3 + CloudFront CDN
 
-### Deployment
-- **Backend**: AWS Lambda + RDS
-- **Frontend**: AWS S3 + CloudFront
-- **Scheduling**: AWS EventBridge
+## 🚀 Current Status
 
-## Getting Started
+### ✅ Milestone 1: Foundation & Authentication (COMPLETE)
+- **User Authentication**: Registration, login, logout with JWT tokens
+- **Database Integration**: PostgreSQL with user management
+- **Frontend**: React + Material-UI with responsive design
+- **Deployment**: Full-stack deployed on AWS
+- **Security**: Password hashing, input validation, CORS protection
+
+### 🔄 Milestone 2: Core Data Models & Asset Management (IN PROGRESS)
+- **Database Schema**: ✅ Assets, Transactions, RecurringInvestments, FIREProfile tables
+- **Backend API**: ✅ Asset management endpoints implemented
+- **Authentication**: ✅ JWT-protected asset endpoints
+- **Frontend**: 🔄 Asset management UI components (next)
+
+## 🌐 Live Application
+
+- **Primary URL**: https://ds8jn7fwox3fb.cloudfront.net
+- **Backup URL**: http://worthy-frontend-1751874299.s3-website-ap-northeast-1.amazonaws.com
+- **API Endpoint**: https://mreda8g340.execute-api.ap-northeast-1.amazonaws.com/development
+
+## 🔐 Features
+
+### Authentication System
+- User registration with name, email, password, base currency, birth year
+- Secure login with JWT token persistence
+- Protected routes and dashboard
+- User profile management
+- Logout functionality
+
+### Asset Management (Milestone 2)
+- Asset initialization for existing portfolios
+- Transaction recording (lump-sum purchases)
+- Portfolio overview and asset details
+- Multi-currency support
+- Real-time asset valuation (planned)
+
+### FIRE Calculator (Planned)
+- Traditional FIRE calculation
+- Barista FIRE calculation
+- Coast FIRE calculation
+- Progress tracking and visualization
+
+## 🛠️ Development
 
 ### Prerequisites
-- Node.js 18+ 
-- PostgreSQL 15+
-- npm or yarn
+- Node.js 18+
+- Python 3.11+
+- AWS CLI configured
+- PostgreSQL access
 
-### Installation
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/yourusername/worthy.git
-   cd worthy
-   ```
-
-2. **Backend Setup**
-   ```bash
-   cd backend
-   npm install
-   
-   # Set up environment variables
-   cp .env.example .env
-   # Edit .env with your database and API credentials
-   
-   # Run database migrations
-   npm run migrate
-   
-   # Start development server
-   npm run dev
-   ```
-
-3. **Frontend Setup**
-   ```bash
-   cd frontend
-   npm install
-   
-   # Set up environment variables
-   cp .env.example .env
-   # Edit .env with your API endpoint
-   
-   # Start development server
-   npm run dev
-   ```
-
-### Environment Variables
-
-**Backend (.env)**
-```env
-DATABASE_URL=postgresql://username:password@localhost:5432/worthy
-JWT_SECRET=your-jwt-secret-key
-ALPHA_VANTAGE_API_KEY=your-alpha-vantage-key
-EXCHANGE_RATE_API_KEY=your-exchange-rate-key
-NODE_ENV=development
-PORT=3001
+### Backend Setup
+```bash
+cd backend
+pip install -r requirements.txt
+# Configure environment variables
+python -m pytest  # Run tests
 ```
 
-**Frontend (.env)**
-```env
-VITE_API_BASE_URL=http://localhost:3001/api
-VITE_APP_NAME=Worthy
+### Frontend Setup
+```bash
+cd frontend
+npm install
+npm run dev  # Development server
+npm run build  # Production build
 ```
 
-## API Documentation
+### Database Schema
+```sql
+-- Users table with authentication
+CREATE TABLE users (
+    user_id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password_hash VARCHAR(255) NOT NULL,
+    base_currency VARCHAR(3) DEFAULT 'USD',
+    birth_year INTEGER,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Assets table for portfolio tracking
+CREATE TABLE assets (
+    asset_id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(user_id),
+    ticker_symbol VARCHAR(20) NOT NULL,
+    asset_type VARCHAR(50) DEFAULT 'Stock',
+    total_shares DECIMAL(15,6) NOT NULL,
+    average_cost_basis DECIMAL(15,2) NOT NULL,
+    currency VARCHAR(3) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Transactions table for investment history
+CREATE TABLE transactions (
+    transaction_id SERIAL PRIMARY KEY,
+    asset_id INTEGER REFERENCES assets(asset_id),
+    transaction_type VARCHAR(20) NOT NULL,
+    transaction_date DATE NOT NULL,
+    shares DECIMAL(15,6) NOT NULL,
+    price_per_share DECIMAL(15,2) NOT NULL,
+    currency VARCHAR(3) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+## 📊 API Endpoints
 
 ### Authentication
-- `POST /api/auth/register` - User registration
-- `POST /api/auth/login` - User login
-- `POST /api/auth/logout` - User logout
+- `POST /auth/register` - User registration
+- `POST /auth/login` - User login
+- `GET /auth/verify` - Token verification
+- `POST /auth/logout` - User logout
 
-### Assets
-- `GET /api/assets` - Get user's assets
-- `POST /api/assets` - Create new asset (initialization)
-- `PUT /api/assets/:id` - Update asset
-- `DELETE /api/assets/:id` - Delete asset
+### Asset Management
+- `POST /assets` - Create/initialize asset
+- `GET /assets` - Get user's assets
+- `GET /assets/:id` - Get specific asset details
+- `POST /transactions` - Record transaction
 
-### Transactions
-- `GET /api/transactions` - Get transaction history
-- `POST /api/transactions` - Record new transaction
-- `PUT /api/transactions/:id` - Update transaction
-- `DELETE /api/transactions/:id` - Delete transaction
+## 🎯 Roadmap
 
-### Recurring Investments
-- `GET /api/recurring` - Get recurring investment plans
-- `POST /api/recurring` - Create recurring plan
-- `PUT /api/recurring/:id` - Update recurring plan
-- `DELETE /api/recurring/:id` - Delete recurring plan
+### Milestone 3: External API Integration (Planned)
+- Stock price API integration (Alpha Vantage/Yahoo Finance)
+- Currency exchange rate API
+- Real-time portfolio valuation
+- Automated price updates
 
-### FIRE Calculator
-- `GET /api/fire/profile` - Get FIRE profile
-- `POST /api/fire/profile` - Save FIRE profile
-- `GET /api/fire/progress` - Get FIRE progress data
+### Milestone 4: Recurring Investments (Planned)
+- Recurring investment plan setup
+- Automated batch processing
+- Market holiday handling
+- Investment calendar
 
-## Database Schema
+### Milestone 5: FIRE Calculator (Planned)
+- FIRE goal setting and tracking
+- Progress visualization
+- Financial projections
+- Scenario modeling
 
-### Users
-```sql
-CREATE TABLE users (
-  user_id SERIAL PRIMARY KEY,
-  email VARCHAR(255) UNIQUE NOT NULL,
-  password_hash VARCHAR(255) NOT NULL,
-  base_currency VARCHAR(3) DEFAULT 'USD',
-  birth_year INTEGER,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
+## 🔧 Technology Stack
 
-### Assets
-```sql
-CREATE TABLE assets (
-  asset_id SERIAL PRIMARY KEY,
-  user_id INTEGER REFERENCES users(user_id),
-  ticker_symbol VARCHAR(10) NOT NULL,
-  asset_type VARCHAR(50) DEFAULT 'Stock',
-  total_shares DECIMAL(15,6) NOT NULL,
-  average_cost_basis DECIMAL(15,2) NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
+- **Backend**: Python, AWS Lambda, PostgreSQL, JWT
+- **Frontend**: React, TypeScript, Material-UI, Zustand
+- **Infrastructure**: AWS (Lambda, RDS, S3, CloudFront, API Gateway)
+- **Development**: Git, npm, pip, AWS CLI
 
-### Transactions
-```sql
-CREATE TABLE transactions (
-  transaction_id SERIAL PRIMARY KEY,
-  asset_id INTEGER REFERENCES assets(asset_id),
-  transaction_type VARCHAR(20) NOT NULL, -- 'LumpSum', 'Recurring', 'Initialization'
-  date DATE NOT NULL,
-  shares DECIMAL(15,6) NOT NULL,
-  price_per_share DECIMAL(15,2) NOT NULL,
-  currency VARCHAR(3) NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
+## 📝 License
 
-## Deployment
+This project is licensed under the MIT License.
 
-### AWS Deployment
-
-1. **Set up AWS credentials**
-   ```bash
-   aws configure
-   ```
-
-2. **Deploy backend**
-   ```bash
-   cd backend
-   npm run deploy:prod
-   ```
-
-3. **Deploy frontend**
-   ```bash
-   cd frontend
-   npm run build
-   npm run deploy:prod
-   ```
-
-### Environment Setup
-- Development: Local PostgreSQL + Node.js
-- Production: AWS RDS + Lambda + S3 + CloudFront
-
-## Development
-
-### Running Tests
-```bash
-# Backend tests
-cd backend
-npm test
-
-# Frontend tests
-cd frontend
-npm test
-```
-
-### Code Quality
-```bash
-# Linting
-npm run lint
-
-# Formatting
-npm run format
-
-# Type checking (frontend)
-npm run type-check
-```
-
-## Contributing
+## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+2. Create a feature branch
+3. Make your changes
+4. Add tests
+5. Submit a pull request
 
-## FIRE Calculator Formulas
+## 📞 Support
 
-- **Traditional FIRE**: `Annual Expenses / Safe Withdrawal Rate`
-- **Barista FIRE**: `(Annual Expenses - Part-time Income) / Safe Withdrawal Rate`
-- **Coast FIRE**: `Traditional FIRE Target / ((1 + Expected Return)^Years to Retirement)`
-
-## External APIs
-
-- **Stock Prices**: Alpha Vantage API
-- **Exchange Rates**: ExchangeRate-API
-- **Market Holidays**: Custom holiday calendar implementation
-
-## Security
-
-- Password hashing with bcrypt
-- JWT token authentication
-- Input validation and sanitization
-- SQL injection prevention
-- CORS configuration
-- Rate limiting
-
-## Performance
-
-- Database indexing for optimal query performance
-- API response caching
-- Frontend code splitting and lazy loading
-- CDN for static assets
-- Image optimization
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## Support
-
-For support, email support@worthy-app.com or create an issue in this repository.
-
-## Roadmap
-
-### V1.0 (Current)
-- ✅ Multi-currency asset tracking
-- ✅ FIRE calculator
-- ✅ Automated recurring investments
-- ✅ Real-time market data
-
-### V2.0 (Future)
-- [ ] Mobile app
-- [ ] Advanced portfolio analytics
-- [ ] Tax optimization tools
-- [ ] Cryptocurrency support
-- [ ] Brokerage account integration
+For questions or issues, please open a GitHub issue or contact the development team.
 
 ---
 
-**Built with ❤️ for the FIRE community**
+**Worthy** - Your path to financial independence, tracked and visualized. 🎯💰
