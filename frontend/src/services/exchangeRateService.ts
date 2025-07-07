@@ -1,16 +1,20 @@
-// Exchange Rate Service with Backend Proxy Integration
+// Exchange Rate Service with Real API Integration
 // Milestone 3: External API Integration & Real-time Data
 
 export interface ExchangeRates {
   [currency: string]: number;
 }
 
-export interface ExchangeRateApiResponse {
-  success: boolean;
-  base: string;
-  rates: ExchangeRates;
-  last_updated: string;
-  source: string;
+export interface ExchangeRateResponse {
+  result: string;
+  documentation: string;
+  terms_of_use: string;
+  time_last_update_unix: number;
+  time_last_update_utc: string;
+  time_next_update_unix: number;
+  time_next_update_utc: string;
+  base_code: string;
+  conversion_rates: ExchangeRates;
 }
 
 // Fallback mock rates in case API fails
@@ -30,7 +34,8 @@ export class ExchangeRateService {
   private rates: ExchangeRates = FALLBACK_EXCHANGE_RATES;
   private lastUpdated: Date = new Date();
   private isUsingRealRates: boolean = false;
-  private apiBaseUrl: string = 'https://mreda8g340.execute-api.ap-northeast-1.amazonaws.com/development';
+  private apiKey: string = ''; // Free tier doesn't require API key for ExchangeRate-API
+  private baseUrl: string = 'https://api.exchangerate-api.com/v4/latest';
   private cacheDuration: number = 60 * 60 * 1000; // 1 hour cache
 
   private constructor() {
@@ -45,17 +50,6 @@ export class ExchangeRateService {
       ExchangeRateService.instance = new ExchangeRateService();
     }
     return ExchangeRateService.instance;
-  }
-
-  /**
-   * Get authorization header with JWT token
-   */
-  private getAuthHeaders(): { [key: string]: string } {
-    const token = localStorage.getItem('worthy_token');
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': token ? `Bearer ${token}` : ''
-    };
   }
 
   /**
@@ -172,47 +166,47 @@ export class ExchangeRateService {
   }
 
   /**
-   * Fetch latest exchange rates from backend proxy
+   * Fetch latest exchange rates from external API
    * Implements caching and error handling
    */
-  public async fetchLatestRates(baseCurrency: string = 'USD'): Promise<void> {
+  public async fetchLatestRates(): Promise<void> {
     try {
-      console.log('Fetching latest exchange rates from backend proxy...');
+      console.log('Fetching latest exchange rates from API...');
       
-      const response = await fetch(`${this.apiBaseUrl}/api/exchange-rates?base=${baseCurrency}`, {
+      // Use USD as base currency for the API call
+      const response = await fetch(`${this.baseUrl}/USD`, {
         method: 'GET',
-        headers: this.getAuthHeaders()
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'Worthy-Portfolio-App/1.0'
+        }
       });
 
       if (!response.ok) {
-        if (response.status === 401) {
-          throw new Error('Authentication required');
-        }
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const data: ExchangeRateApiResponse = await response.json();
+      const data: ExchangeRateResponse = await response.json();
 
-      if (data.success && data.rates) {
+      if (data.result === 'success' && data.conversion_rates) {
         // Update rates with real API data
         this.rates = {
-          [baseCurrency]: 1.0, // Base currency
-          ...data.rates
+          'USD': 1.0, // Base currency
+          ...data.conversion_rates
         };
         
-        this.lastUpdated = new Date(data.last_updated || new Date());
+        this.lastUpdated = new Date();
         this.isUsingRealRates = true;
         
-        console.log('✅ Successfully updated exchange rates from backend API');
+        console.log('✅ Successfully updated exchange rates from API');
         console.log(`📊 Loaded ${Object.keys(this.rates).length} currency rates`);
         console.log(`🕒 Last updated: ${this.lastUpdated.toISOString()}`);
-        console.log(`📡 Source: ${data.source}`);
       } else {
         throw new Error('Invalid API response format');
       }
 
     } catch (error) {
-      console.error('❌ Failed to fetch exchange rates from backend:', error);
+      console.error('❌ Failed to fetch exchange rates from API:', error);
       
       // Fall back to mock rates if API fails
       if (Object.keys(this.rates).length === 0) {
@@ -228,17 +222,17 @@ export class ExchangeRateService {
   /**
    * Force refresh rates (bypass cache)
    */
-  public async forceRefreshRates(baseCurrency: string = 'USD'): Promise<void> {
-    await this.fetchLatestRates(baseCurrency);
+  public async forceRefreshRates(): Promise<void> {
+    await this.fetchLatestRates();
   }
 
   /**
    * Get rates with automatic refresh if needed
    */
-  public async getRatesWithRefresh(baseCurrency: string = 'USD'): Promise<ExchangeRates> {
+  public async getRatesWithRefresh(): Promise<ExchangeRates> {
     if (this.shouldRefreshRates()) {
       try {
-        await this.fetchLatestRates(baseCurrency);
+        await this.fetchLatestRates();
       } catch (error) {
         console.warn('Failed to refresh rates, using cached rates:', error);
       }

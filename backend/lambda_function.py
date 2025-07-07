@@ -1,7 +1,6 @@
 """
 Worthy App Complete Backend - Single File Lambda Function
 Authentication system with hashlib-based password hashing
-External API integration for real-time data
 """
 import json
 import os
@@ -9,7 +8,6 @@ import logging
 import hashlib
 import secrets
 import jwt
-import requests
 from datetime import datetime, timedelta
 from email_validator import validate_email, EmailNotValidError
 
@@ -33,12 +31,6 @@ JWT_SECRET = os.environ.get('JWT_SECRET', 'REDACTED_JWT_SECRET')
 JWT_ALGORITHM = 'HS256'
 JWT_EXPIRATION_HOURS = 24
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
-
-# External API Configuration
-ALPHA_VANTAGE_API_KEY = os.environ.get('ALPHA_VANTAGE_API_KEY', 'demo')
-EXCHANGE_RATE_API_KEY = os.environ.get('EXCHANGE_RATE_API_KEY', '')
-ALPHA_VANTAGE_BASE_URL = 'https://www.alphavantage.co/query'
-EXCHANGE_RATE_BASE_URL = 'https://api.exchangerate-api.com/v4/latest'
 
 def get_cors_headers():
     """Return proper CORS headers"""
@@ -616,151 +608,6 @@ def handle_verify_token(headers):
             "email": auth_result['email']
         })
 
-def handle_get_exchange_rates(base_currency='USD'):
-    """Proxy endpoint for exchange rates"""
-    try:
-        logger.info(f"Fetching exchange rates for base currency: {base_currency}")
-        
-        # Make request to ExchangeRate-API
-        url = f"{EXCHANGE_RATE_BASE_URL}/{base_currency}"
-        
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-        
-        data = response.json()
-        
-        return create_response(200, {
-            "success": True,
-            "base": data.get('base', base_currency),
-            "rates": data.get('rates', {}),
-            "last_updated": data.get('date', datetime.utcnow().isoformat()),
-            "source": "ExchangeRate-API"
-        })
-        
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Exchange rate API error: {str(e)}")
-        return create_error_response(503, f"Exchange rate service unavailable: {str(e)}")
-    except Exception as e:
-        logger.error(f"Exchange rate handler error: {str(e)}")
-        return create_error_response(500, "Failed to fetch exchange rates")
-
-def handle_get_stock_price(symbol):
-    """Proxy endpoint for stock prices"""
-    try:
-        logger.info(f"Fetching stock price for symbol: {symbol}")
-        
-        # Make request to Alpha Vantage API
-        params = {
-            'function': 'GLOBAL_QUOTE',
-            'symbol': symbol.upper(),
-            'apikey': ALPHA_VANTAGE_API_KEY
-        }
-        
-        response = requests.get(ALPHA_VANTAGE_BASE_URL, params=params, timeout=15)
-        response.raise_for_status()
-        
-        data = response.json()
-        
-        # Check for API errors
-        if 'Error Message' in data:
-            return create_error_response(400, f"Invalid symbol: {symbol}")
-        
-        if 'Note' in data:
-            return create_error_response(429, "API rate limit exceeded")
-        
-        if 'Global Quote' not in data:
-            return create_error_response(404, f"No data found for symbol: {symbol}")
-        
-        quote = data['Global Quote']
-        
-        # Parse and format the response
-        stock_data = {
-            "symbol": quote.get('01. symbol', symbol),
-            "price": float(quote.get('05. price', 0)),
-            "change": float(quote.get('09. change', 0)),
-            "change_percent": quote.get('10. change percent', '0%').replace('%', ''),
-            "volume": quote.get('06. volume', '0'),
-            "latest_trading_day": quote.get('07. latest trading day', ''),
-            "previous_close": float(quote.get('08. previous close', 0)),
-            "currency": "USD",
-            "source": "Alpha Vantage",
-            "last_updated": datetime.utcnow().isoformat()
-        }
-        
-        return create_response(200, {
-            "success": True,
-            "data": stock_data
-        })
-        
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Stock price API error: {str(e)}")
-        return create_error_response(503, f"Stock price service unavailable: {str(e)}")
-    except ValueError as e:
-        logger.error(f"Stock price parsing error: {str(e)}")
-        return create_error_response(500, "Failed to parse stock price data")
-    except Exception as e:
-        logger.error(f"Stock price handler error: {str(e)}")
-        return create_error_response(500, "Failed to fetch stock price")
-
-def handle_get_multiple_stock_prices(symbols):
-    """Proxy endpoint for multiple stock prices"""
-    try:
-        logger.info(f"Fetching stock prices for symbols: {symbols}")
-        
-        if not symbols or len(symbols) == 0:
-            return create_error_response(400, "No symbols provided")
-        
-        if len(symbols) > 10:
-            return create_error_response(400, "Too many symbols (max 10)")
-        
-        results = {}
-        errors = []
-        
-        for symbol in symbols:
-            try:
-                # Make individual requests (Alpha Vantage doesn't support batch requests)
-                params = {
-                    'function': 'GLOBAL_QUOTE',
-                    'symbol': symbol.upper(),
-                    'apikey': ALPHA_VANTAGE_API_KEY
-                }
-                
-                response = requests.get(ALPHA_VANTAGE_BASE_URL, params=params, timeout=15)
-                response.raise_for_status()
-                
-                data = response.json()
-                
-                if 'Global Quote' in data:
-                    quote = data['Global Quote']
-                    results[symbol.upper()] = {
-                        "symbol": quote.get('01. symbol', symbol),
-                        "price": float(quote.get('05. price', 0)),
-                        "change": float(quote.get('09. change', 0)),
-                        "change_percent": quote.get('10. change percent', '0%').replace('%', ''),
-                        "currency": "USD",
-                        "last_updated": datetime.utcnow().isoformat()
-                    }
-                else:
-                    errors.append(f"No data for {symbol}")
-                
-                # Rate limiting: wait between requests
-                import time
-                time.sleep(12)  # 12 seconds between requests (5 calls per minute limit)
-                
-            except Exception as e:
-                errors.append(f"Error fetching {symbol}: {str(e)}")
-        
-        return create_response(200, {
-            "success": True,
-            "data": results,
-            "errors": errors,
-            "source": "Alpha Vantage"
-        })
-        
-    except Exception as e:
-        logger.error(f"Multiple stock prices handler error: {str(e)}")
-        return create_error_response(500, "Failed to fetch stock prices")
-
 # Main Lambda handler
 def lambda_handler(event, context):
     """Main Lambda handler for Worthy API"""
@@ -877,54 +724,6 @@ def lambda_handler(event, context):
                 return create_error_response(401, "Invalid or missing token")
             
             return handle_create_transaction(body, auth_result['user_id'])
-        
-        # External API proxy endpoints (require authentication)
-        elif path == '/api/exchange-rates' and http_method == 'GET':
-            # Get exchange rates - requires authentication
-            request_headers = event.get('headers', {})
-            auth_result = verify_jwt_token(request_headers.get('Authorization', ''))
-            if not auth_result['valid']:
-                return create_error_response(401, "Invalid or missing token")
-            
-            # Get base currency from query parameters
-            query_params = event.get('queryStringParameters') or {}
-            base_currency = query_params.get('base', 'USD')
-            
-            return handle_get_exchange_rates(base_currency)
-        
-        elif path.startswith('/api/stock-price/') and http_method == 'GET':
-            # Get single stock price - requires authentication
-            request_headers = event.get('headers', {})
-            auth_result = verify_jwt_token(request_headers.get('Authorization', ''))
-            if not auth_result['valid']:
-                return create_error_response(401, "Invalid or missing token")
-            
-            # Extract symbol from path
-            symbol = path.split('/api/stock-price/')[-1]
-            if not symbol:
-                return create_error_response(400, "Stock symbol is required")
-            
-            return handle_get_stock_price(symbol)
-        
-        elif path == '/api/stock-prices' and http_method == 'POST':
-            # Get multiple stock prices - requires authentication
-            request_headers = event.get('headers', {})
-            auth_result = verify_jwt_token(request_headers.get('Authorization', ''))
-            if not auth_result['valid']:
-                return create_error_response(401, "Invalid or missing token")
-            
-            body = {}
-            if event.get('body'):
-                try:
-                    body = json.loads(event['body'])
-                except json.JSONDecodeError:
-                    return create_error_response(400, "Invalid JSON in request body")
-            
-            symbols = body.get('symbols', [])
-            if not symbols:
-                return create_error_response(400, "Symbols array is required")
-            
-            return handle_get_multiple_stock_prices(symbols)
         
         else:
             return create_error_response(404, f"Endpoint not found: {path}")
