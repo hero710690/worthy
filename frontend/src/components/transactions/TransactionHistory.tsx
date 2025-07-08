@@ -211,6 +211,41 @@ export const TransactionHistory: React.FC = () => {
     return exchangeRateService.formatCurrency(amount, currency);
   };
 
+  // Calculate total invested by currency
+  const calculateTotalInvestedByCurrency = () => {
+    const totals: { [currency: string]: number } = {};
+    
+    filteredTransactions.forEach(transaction => {
+      const currency = transaction.currency;
+      const amount = transaction.total_amount;
+      
+      if (totals[currency]) {
+        totals[currency] += amount;
+      } else {
+        totals[currency] = amount;
+      }
+    });
+    
+    return totals;
+  };
+
+  const formatTotalInvested = () => {
+    const totalsByCurrency = calculateTotalInvestedByCurrency();
+    const currencies = Object.keys(totalsByCurrency);
+    
+    if (currencies.length === 0) return 'No investments';
+    
+    if (currencies.length === 1) {
+      const currency = currencies[0];
+      return formatCurrency(totalsByCurrency[currency], currency);
+    }
+    
+    // Multiple currencies - show breakdown
+    return currencies.map(currency => 
+      formatCurrency(totalsByCurrency[currency], currency)
+    ).join(' + ');
+  };
+
   const getTransactionTypeColor = (type: string) => {
     const colors: { [key: string]: string } = {
       'LumpSum': 'primary',
@@ -353,16 +388,22 @@ export const TransactionHistory: React.FC = () => {
                 <Box sx={{ p: 1, bgcolor: 'success.main', borderRadius: 1, color: 'white' }}>
                   <AttachMoney />
                 </Box>
-                <Box>
-                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                    {formatCurrency(
-                      filteredTransactions.reduce((sum, txn) => sum + txn.total_amount, 0),
-                      user?.base_currency || 'USD'
-                    )}
+                <Box sx={{ minWidth: 0, flex: 1 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold', fontSize: '1.1rem' }}>
+                    {formatTotalInvested()}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     Total Invested
                   </Typography>
+                  {Object.keys(calculateTotalInvestedByCurrency()).length > 1 && (
+                    <Stack spacing={0.5} sx={{ mt: 1 }}>
+                      {Object.entries(calculateTotalInvestedByCurrency()).map(([currency, amount]) => (
+                        <Typography key={currency} variant="caption" color="text.secondary">
+                          {formatCurrency(amount, currency)}
+                        </Typography>
+                      ))}
+                    </Stack>
+                  )}
                 </Box>
               </Stack>
             </CardContent>
