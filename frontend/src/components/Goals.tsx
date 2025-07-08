@@ -18,6 +18,8 @@ import {
   CircularProgress,
   Divider,
   Paper,
+  Tooltip,
+  IconButton,
 } from '@mui/material';
 import {
   GpsFixed,
@@ -29,6 +31,7 @@ import {
   CheckCircle,
   Schedule,
   AttachMoney,
+  HelpOutline,
 } from '@mui/icons-material';
 import { useAuthStore } from '../store/authStore';
 import { assetAPI } from '../services/assetApi';
@@ -396,6 +399,19 @@ export const Goals: React.FC = () => {
     }
   };
 
+  const getFIRETooltip = (fireType: string) => {
+    switch (fireType) {
+      case 'Traditional':
+        return 'Traditional FIRE: Accumulating a larger portfolio for a higher standard of living. This is the classic FIRE approach where you save enough to maintain your current lifestyle indefinitely without working.';
+      case 'Barista':
+        return 'Barista FIRE: Working part-time to supplement passive income while enjoying early retirement. You need less savings because you\'ll earn some income from flexible work.';
+      case 'Coast':
+        return 'Coast FIRE: Saving enough early so that investments grow without additional contributions. You can "coast" to traditional FIRE by letting compound interest do the work.';
+      default:
+        return '';
+    }
+  };
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
@@ -553,10 +569,21 @@ export const Goals: React.FC = () => {
                           <Box sx={{ p: 1, bgcolor: `${getProgressColor(calc.progress_percentage)}.light`, borderRadius: 2 }}>
                             {getFIREIcon(calc.fire_type)}
                           </Box>
-                          <Box>
-                            <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                              {calc.fire_type} FIRE
-                            </Typography>
+                          <Box sx={{ flex: 1 }}>
+                            <Stack direction="row" alignItems="center" spacing={1}>
+                              <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                                {calc.fire_type} FIRE
+                              </Typography>
+                              <Tooltip 
+                                title={getFIRETooltip(calc.fire_type)}
+                                arrow
+                                placement="top"
+                              >
+                                <IconButton size="small" sx={{ color: 'text.secondary' }}>
+                                  <HelpOutline fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                            </Stack>
                             <Typography variant="body2" color="text.secondary">
                               {getFIREDescription(calc.fire_type)}
                             </Typography>
