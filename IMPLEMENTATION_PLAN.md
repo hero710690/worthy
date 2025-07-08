@@ -41,8 +41,15 @@ Worthy is a personalized financial strategy tool that helps users track investme
   - [x] Users table with name, email, password, currency, birth_year
   - [x] Basic validation and constraints
 - [x] **COMPLETED: Auth endpoints fully deployed and working**
-- [x] **COMPLETED: Single-file Lambda deployment approach**
+- [x] **COMPLETED: Standardized single-file Lambda deployment approach**
+- [x] **COMPLETED: Automated deployment script with comprehensive testing**
+- [x] **COMPLETED: Cleaned up unused deployment methods and files**
 - [x] **COMPLETED: All auth endpoints tested and functional**
+- [x] **COMPLETED: Backend deployment standardization (July 8, 2025)**
+  - ✅ Single deployment approach: `deploy_lambda.sh` script
+  - ✅ Removed unused deployment methods (SAM, modular src/)
+  - ✅ Clean backend directory structure
+  - ✅ Comprehensive deployment documentation
 
 ### ✅ Frontend Tasks - **COMPLETE**
 - [x] Set up React project with TypeScript

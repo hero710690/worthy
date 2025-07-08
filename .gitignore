@@ -7,7 +7,7 @@
 # AWS credentials
 aws-credentials.txt
 credentials.txt
-
+DEPLOYMENT_GUIDELINES.md
 # Python
 __pycache__/
 *.py[cod]
