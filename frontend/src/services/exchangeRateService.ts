@@ -141,7 +141,7 @@ export class ExchangeRateService {
   public formatCurrency(amount: number, currency: string): string {
     const currencyMap: { [key: string]: { locale: string; currency: string } } = {
       'USD': { locale: 'en-US', currency: 'USD' },
-      'TWD': { locale: 'zh-TW', currency: 'TWD' },
+      'TWD': { locale: 'en-US', currency: 'TWD' }, // Use en-US for TWD to get NT$ symbol
       'EUR': { locale: 'de-DE', currency: 'EUR' },
       'GBP': { locale: 'en-GB', currency: 'GBP' },
       'JPY': { locale: 'ja-JP', currency: 'JPY' },
@@ -152,12 +152,40 @@ export class ExchangeRateService {
 
     const config = currencyMap[currency] || { locale: 'en-US', currency: currency };
 
-    return new Intl.NumberFormat(config.locale, {
-      style: 'currency',
-      currency: config.currency,
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(amount);
+    try {
+      return new Intl.NumberFormat(config.locale, {
+        style: 'currency',
+        currency: config.currency,
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(amount);
+    } catch (error) {
+      // Fallback for unsupported currencies
+      console.warn(`Currency formatting failed for ${currency}, using fallback`);
+      return `${this.getCurrencySymbol(currency)}${amount.toLocaleString('en-US', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })}`;
+    }
+  }
+
+  /**
+   * Get currency symbol for fallback formatting
+   */
+  private getCurrencySymbol(currency: string): string {
+    const symbols: { [key: string]: string } = {
+      'USD': '$',
+      'TWD': 'NT$',
+      'EUR': '€',
+      'GBP': '£',
+      'JPY': '¥',
+      'KRW': '₩',
+      'SGD': 'S$',
+      'HKD': 'HK$',
+      'CAD': 'C$',
+      'AUD': 'A$',
+    };
+    return symbols[currency] || currency + ' ';
   }
 
   /**
