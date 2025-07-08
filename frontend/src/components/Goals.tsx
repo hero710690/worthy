@@ -808,11 +808,11 @@ export const Goals: React.FC = () => {
                   <TextField
                     label="Safe Withdrawal Rate"
                     type="number"
-                    value={formData.safe_withdrawal_rate}
-                    onChange={(e) => setFormData({ ...formData, safe_withdrawal_rate: parseFloat(e.target.value) || 0.04 })}
+                    value={(formData.safe_withdrawal_rate * 100).toFixed(1)}
+                    onChange={(e) => setFormData({ ...formData, safe_withdrawal_rate: (parseFloat(e.target.value) || 4) / 100 })}
                     helperText="3-5% recommended. Lower = more conservative"
                     fullWidth
-                    inputProps={{ min: 0.03, max: 0.05, step: 0.001 }}
+                    inputProps={{ min: 3, max: 5, step: 0.1 }}
                     InputProps={{
                       endAdornment: <Typography sx={{ ml: 1 }}>%</Typography>
                     }}
@@ -822,11 +822,11 @@ export const Goals: React.FC = () => {
                   <TextField
                     label="Expected Inflation Rate"
                     type="number"
-                    value={formData.expected_inflation_rate}
-                    onChange={(e) => setFormData({ ...formData, expected_inflation_rate: parseFloat(e.target.value) || 0.025 })}
+                    value={(formData.expected_inflation_rate * 100).toFixed(1)}
+                    onChange={(e) => setFormData({ ...formData, expected_inflation_rate: (parseFloat(e.target.value) || 2.5) / 100 })}
                     helperText="Long-term inflation rate (2-3% typical)"
                     fullWidth
-                    inputProps={{ min: 0.01, max: 0.05, step: 0.001 }}
+                    inputProps={{ min: 1, max: 5, step: 0.1 }}
                     InputProps={{
                       endAdornment: <Typography sx={{ ml: 1 }}>%</Typography>
                     }}
@@ -836,11 +836,11 @@ export const Goals: React.FC = () => {
                   <TextField
                     label="Pre-Retirement Expected Return"
                     type="number"
-                    value={formData.expected_return_pre_retirement}
-                    onChange={(e) => setFormData({ ...formData, expected_return_pre_retirement: parseFloat(e.target.value) || 0.07 })}
+                    value={(formData.expected_return_pre_retirement * 100).toFixed(1)}
+                    onChange={(e) => setFormData({ ...formData, expected_return_pre_retirement: (parseFloat(e.target.value) || 7) / 100 })}
                     helperText="Expected annual return during accumulation phase (6-8%)"
                     fullWidth
-                    inputProps={{ min: 0.04, max: 0.12, step: 0.001 }}
+                    inputProps={{ min: 4, max: 12, step: 0.1 }}
                     InputProps={{
                       endAdornment: <Typography sx={{ ml: 1 }}>%</Typography>
                     }}
@@ -850,11 +850,11 @@ export const Goals: React.FC = () => {
                   <TextField
                     label="Post-Retirement Expected Return"
                     type="number"
-                    value={formData.expected_return_post_retirement}
-                    onChange={(e) => setFormData({ ...formData, expected_return_post_retirement: parseFloat(e.target.value) || 0.05 })}
+                    value={(formData.expected_return_post_retirement * 100).toFixed(1)}
+                    onChange={(e) => setFormData({ ...formData, expected_return_post_retirement: (parseFloat(e.target.value) || 5) / 100 })}
                     helperText="Expected annual return during withdrawal phase (4-6%)"
                     fullWidth
-                    inputProps={{ min: 0.03, max: 0.08, step: 0.001 }}
+                    inputProps={{ min: 3, max: 8, step: 0.1 }}
                     InputProps={{
                       endAdornment: <Typography sx={{ ml: 1 }}>%</Typography>
                     }}
@@ -877,11 +877,11 @@ export const Goals: React.FC = () => {
                   <TextField
                     label="Effective Tax Rate"
                     type="number"
-                    value={formData.effective_tax_rate}
-                    onChange={(e) => setFormData({ ...formData, effective_tax_rate: parseFloat(e.target.value) || 0.15 })}
+                    value={(formData.effective_tax_rate * 100).toFixed(1)}
+                    onChange={(e) => setFormData({ ...formData, effective_tax_rate: (parseFloat(e.target.value) || 15) / 100 })}
                     helperText="Expected tax rate on withdrawals (10-25%)"
                     fullWidth
-                    inputProps={{ min: 0, max: 0.5, step: 0.01 }}
+                    inputProps={{ min: 0, max: 50, step: 1 }}
                     InputProps={{
                       endAdornment: <Typography sx={{ ml: 1 }}>%</Typography>
                     }}
