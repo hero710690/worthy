@@ -126,6 +126,41 @@ export const Transactions: React.FC = () => {
     }
   };
 
+  // Calculate total invested by currency
+  const calculateTotalInvestedByCurrency = () => {
+    const totals: { [currency: string]: number } = {};
+    
+    transactions.forEach(transaction => {
+      const total = transaction.shares * transaction.price_per_share;
+      const currency = transaction.currency;
+      
+      if (totals[currency]) {
+        totals[currency] += total;
+      } else {
+        totals[currency] = total;
+      }
+    });
+    
+    return totals;
+  };
+
+  const totalInvestedByCurrency = calculateTotalInvestedByCurrency();
+
+  const formatTotalInvested = () => {
+    const currencies = Object.keys(totalInvestedByCurrency);
+    if (currencies.length === 0) return 'No investments';
+    
+    if (currencies.length === 1) {
+      const currency = currencies[0];
+      return formatCurrency(totalInvestedByCurrency[currency], currency);
+    }
+    
+    // Multiple currencies - show breakdown
+    return currencies.map(currency => 
+      formatCurrency(totalInvestedByCurrency[currency], currency)
+    ).join(' + ');
+  };
+
   if (loading) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
@@ -216,6 +251,44 @@ export const Transactions: React.FC = () => {
               >
                 <TrendingUp />
               </Box>
+              <Box sx={{ minWidth: 0, flex: 1 }}>
+                <Typography variant="h6" sx={{ fontWeight: 'bold', fontSize: '1.1rem' }}>
+                  {formatTotalInvested()}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Total Invested
+                </Typography>
+                {Object.keys(totalInvestedByCurrency).length > 1 && (
+                  <Stack spacing={0.5} sx={{ mt: 1 }}>
+                    {Object.entries(totalInvestedByCurrency).map(([currency, amount]) => (
+                      <Typography key={currency} variant="caption" color="text.secondary">
+                        {formatCurrency(amount, currency)}
+                      </Typography>
+                    ))}
+                  </Stack>
+                )}
+              </Box>
+            </Stack>
+          </CardContent>
+        </Card>
+
+        <Card sx={{ flex: 1, borderRadius: 3, border: '1px solid', borderColor: 'grey.200' }}>
+          <CardContent>
+            <Stack direction="row" alignItems="center" spacing={2}>
+              <Box
+                sx={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 2,
+                  bgcolor: 'info.main',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'white'
+                }}
+              >
+                <Receipt />
+              </Box>
               <Box>
                 <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
                   {transactions.filter(t => t.transaction_type === 'LumpSum').length}
@@ -236,7 +309,7 @@ export const Transactions: React.FC = () => {
                   width: 48,
                   height: 48,
                   borderRadius: 2,
-                  bgcolor: 'info.main',
+                  bgcolor: 'warning.main',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
