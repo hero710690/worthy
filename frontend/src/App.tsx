@@ -10,6 +10,7 @@ import { Portfolio } from './components/Portfolio';
 import { Goals } from './components/Goals';
 import { Analytics } from './components/Analytics';
 import { UserProfile } from './components/UserProfile';
+import { RecurringInvestments } from './components/RecurringInvestments';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { useAuth } from './hooks/useAuth';
@@ -124,6 +125,17 @@ function App() {
               <ProtectedRoute>
                 <Layout>
                   <Goals />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/recurring"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <RecurringInvestments />
                 </Layout>
               </ProtectedRoute>
             }
