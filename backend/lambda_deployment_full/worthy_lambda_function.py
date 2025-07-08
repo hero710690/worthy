@@ -808,6 +808,506 @@ def handle_delete_asset(asset_id, user_id):
         logger.error(f"Delete asset error: {str(e)}")
         return create_error_response(500, "Failed to delete asset")
 
+# ============================================================================
+# MILESTONE 4: RECURRING INVESTMENTS & AUTOMATION FUNCTIONS
+# ============================================================================
+
+def create_recurring_investments_table():
+    """Create recurring_investments table if it doesn't exist"""
+    try:
+        execute_update(
+            DATABASE_URL,
+            """
+            CREATE TABLE IF NOT EXISTS recurring_investments (
+                recurring_id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+                ticker_symbol VARCHAR(10) NOT NULL,
+                amount DECIMAL(15,2) NOT NULL,
+                currency VARCHAR(3) NOT NULL DEFAULT 'USD',
+                frequency VARCHAR(20) NOT NULL CHECK (frequency IN ('daily', 'weekly', 'monthly', 'quarterly')),
+                start_date DATE NOT NULL,
+                next_run_date DATE NOT NULL,
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        
+        # Drop and recreate the constraint if it exists with wrong values
+        try:
+            execute_update(
+                DATABASE_URL,
+                """
+                ALTER TABLE recurring_investments 
+                DROP CONSTRAINT IF EXISTS recurring_investments_frequency_check
+                """
+            )
+            execute_update(
+                DATABASE_URL,
+                """
+                ALTER TABLE recurring_investments 
+                ADD CONSTRAINT recurring_investments_frequency_check 
+                CHECK (frequency IN ('daily', 'weekly', 'monthly', 'quarterly'))
+                """
+            )
+        except Exception as constraint_error:
+            logger.warning(f"Constraint update warning: {str(constraint_error)}")
+        
+        logger.info("✅ RecurringInvestments table created/verified")
+    except Exception as e:
+        logger.error(f"❌ Failed to create recurring_investments table: {str(e)}")
+
+def create_fire_profile_table():
+    """Create fire_profile table if it doesn't exist"""
+    try:
+        execute_update(
+            DATABASE_URL,
+            """
+            CREATE TABLE IF NOT EXISTS fire_profile (
+                profile_id SERIAL PRIMARY KEY,
+                user_id INTEGER NOT NULL UNIQUE REFERENCES users(user_id) ON DELETE CASCADE,
+                annual_expenses DECIMAL(15,2),
+                safe_withdrawal_rate DECIMAL(5,4) DEFAULT 0.04,
+                expected_annual_return DECIMAL(5,4) DEFAULT 0.07,
+                target_retirement_age INTEGER,
+                barista_annual_income DECIMAL(15,2) DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        logger.info("✅ FIREProfile table created/verified")
+    except Exception as e:
+        logger.error(f"❌ Failed to create fire_profile table: {str(e)}")
+
+def create_dividends_table():
+    """Create dividends table for Milestone 4 dividend tracking"""
+    try:
+        execute_update(
+            DATABASE_URL,
+            """
+            CREATE TABLE IF NOT EXISTS dividends (
+                dividend_id SERIAL PRIMARY KEY,
+                asset_id INTEGER NOT NULL REFERENCES assets(asset_id) ON DELETE CASCADE,
+                user_id INTEGER NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+                ticker_symbol VARCHAR(10) NOT NULL,
+                ex_dividend_date DATE NOT NULL,
+                payment_date DATE,
+                dividend_per_share DECIMAL(10,4) NOT NULL,
+                total_dividend_amount DECIMAL(15,2) NOT NULL,
+                currency VARCHAR(3) NOT NULL DEFAULT 'USD',
+                dividend_type VARCHAR(20) DEFAULT 'regular',
+                is_reinvested BOOLEAN DEFAULT FALSE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        logger.info("✅ Dividends table created/verified")
+    except Exception as e:
+        logger.error(f"❌ Failed to create dividends table: {str(e)}")
+
+def handle_create_recurring_investment(body, user_id):
+    """Create a new recurring investment plan"""
+    try:
+        # Ensure table exists
+        create_recurring_investments_table()
+        
+        # Validate required fields
+        required_fields = ['ticker_symbol', 'amount', 'frequency', 'start_date']
+        for field in required_fields:
+            if field not in body:
+                return create_error_response(400, f"Missing required field: {field}")
+        
+        ticker_symbol = body['ticker_symbol'].upper()
+        amount = float(body['amount'])
+        currency = body.get('currency', 'USD').upper()
+        frequency = body['frequency'].lower()
+        start_date = body['start_date']
+        
+        # Validate frequency
+        valid_frequencies = ['daily', 'weekly', 'monthly', 'quarterly']
+        if frequency not in valid_frequencies:
+            return create_error_response(400, f"Invalid frequency. Must be one of: {', '.join(valid_frequencies)}")
+        
+        # Calculate next run date based on frequency
+        from datetime import datetime, timedelta
+        start_dt = datetime.strptime(start_date, '%Y-%m-%d').date()
+        
+        if frequency == 'daily':
+            next_run_date = start_dt + timedelta(days=1)
+        elif frequency == 'weekly':
+            next_run_date = start_dt + timedelta(weeks=1)
+        elif frequency == 'monthly':
+            next_run_date = start_dt + timedelta(days=30)  # Approximate
+        elif frequency == 'quarterly':
+            next_run_date = start_dt + timedelta(days=90)  # Approximate
+        
+        # Create recurring investment
+        execute_update(
+            DATABASE_URL,
+            """
+            INSERT INTO recurring_investments 
+            (user_id, ticker_symbol, amount, currency, frequency, start_date, next_run_date)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """,
+            (user_id, ticker_symbol, amount, currency, frequency, start_date, next_run_date)
+        )
+        
+        # Get the created recurring investment
+        recurring_investment = execute_query(
+            DATABASE_URL,
+            """
+            SELECT * FROM recurring_investments 
+            WHERE user_id = %s AND ticker_symbol = %s AND start_date = %s
+            ORDER BY created_at DESC LIMIT 1
+            """,
+            (user_id, ticker_symbol, start_date)
+        )[0]
+        
+        return create_response(201, {
+            "message": "Recurring investment plan created successfully",
+            "recurring_investment": {
+                "recurring_id": recurring_investment['recurring_id'],
+                "ticker_symbol": recurring_investment['ticker_symbol'],
+                "amount": float(recurring_investment['amount']),
+                "currency": recurring_investment['currency'],
+                "frequency": recurring_investment['frequency'],
+                "start_date": str(recurring_investment['start_date']),
+                "next_run_date": str(recurring_investment['next_run_date']),
+                "is_active": recurring_investment['is_active'],
+                "created_at": recurring_investment['created_at'].isoformat()
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Create recurring investment error: {str(e)}")
+        return create_error_response(500, "Failed to create recurring investment plan")
+
+def handle_get_recurring_investments(user_id):
+    """Get all recurring investment plans for a user"""
+    try:
+        # Ensure table exists
+        create_recurring_investments_table()
+        
+        recurring_investments = execute_query(
+            DATABASE_URL,
+            """
+            SELECT * FROM recurring_investments 
+            WHERE user_id = %s 
+            ORDER BY created_at DESC
+            """,
+            (user_id,)
+        )
+        
+        investment_list = []
+        for investment in recurring_investments:
+            investment_list.append({
+                "recurring_id": investment['recurring_id'],
+                "ticker_symbol": investment['ticker_symbol'],
+                "amount": float(investment['amount']),
+                "currency": investment['currency'],
+                "frequency": investment['frequency'],
+                "start_date": str(investment['start_date']),
+                "next_run_date": str(investment['next_run_date']),
+                "is_active": investment['is_active'],
+                "created_at": investment['created_at'].isoformat(),
+                "updated_at": investment['updated_at'].isoformat()
+            })
+        
+        return create_response(200, {
+            "recurring_investments": investment_list,
+            "total_plans": len(investment_list)
+        })
+        
+    except Exception as e:
+        logger.error(f"Get recurring investments error: {str(e)}")
+        return create_error_response(500, "Failed to retrieve recurring investment plans")
+
+def handle_update_recurring_investment(recurring_id, body, user_id):
+    """Update a recurring investment plan"""
+    try:
+        # Verify recurring investment belongs to user
+        investment = execute_query(
+            DATABASE_URL,
+            "SELECT * FROM recurring_investments WHERE recurring_id = %s AND user_id = %s",
+            (recurring_id, user_id)
+        )
+        
+        if not investment:
+            return create_error_response(404, "Recurring investment plan not found")
+        
+        investment = investment[0]
+        
+        # Update fields
+        amount = body.get('amount', investment['amount'])
+        frequency = body.get('frequency', investment['frequency']).lower()
+        is_active = body.get('is_active', investment['is_active'])
+        
+        # Validate frequency if provided
+        if 'frequency' in body:
+            valid_frequencies = ['daily', 'weekly', 'monthly', 'quarterly']
+            if frequency not in valid_frequencies:
+                return create_error_response(400, f"Invalid frequency. Must be one of: {', '.join(valid_frequencies)}")
+        
+        # Update the recurring investment
+        execute_update(
+            DATABASE_URL,
+            """
+            UPDATE recurring_investments 
+            SET amount = %s, frequency = %s, is_active = %s, updated_at = CURRENT_TIMESTAMP
+            WHERE recurring_id = %s AND user_id = %s
+            """,
+            (amount, frequency, is_active, recurring_id, user_id)
+        )
+        
+        # Get updated investment
+        updated_investment = execute_query(
+            DATABASE_URL,
+            "SELECT * FROM recurring_investments WHERE recurring_id = %s AND user_id = %s",
+            (recurring_id, user_id)
+        )[0]
+        
+        return create_response(200, {
+            "message": "Recurring investment plan updated successfully",
+            "recurring_investment": {
+                "recurring_id": updated_investment['recurring_id'],
+                "ticker_symbol": updated_investment['ticker_symbol'],
+                "amount": float(updated_investment['amount']),
+                "currency": updated_investment['currency'],
+                "frequency": updated_investment['frequency'],
+                "start_date": str(updated_investment['start_date']),
+                "next_run_date": str(updated_investment['next_run_date']),
+                "is_active": updated_investment['is_active'],
+                "updated_at": updated_investment['updated_at'].isoformat()
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Update recurring investment error: {str(e)}")
+        return create_error_response(500, "Failed to update recurring investment plan")
+
+def handle_delete_recurring_investment(recurring_id, user_id):
+    """Delete a recurring investment plan"""
+    try:
+        # Verify recurring investment belongs to user
+        investment = execute_query(
+            DATABASE_URL,
+            "SELECT * FROM recurring_investments WHERE recurring_id = %s AND user_id = %s",
+            (recurring_id, user_id)
+        )
+        
+        if not investment:
+            return create_error_response(404, "Recurring investment plan not found")
+        
+        # Delete the recurring investment
+        execute_update(
+            DATABASE_URL,
+            "DELETE FROM recurring_investments WHERE recurring_id = %s AND user_id = %s",
+            (recurring_id, user_id)
+        )
+        
+        return create_response(200, {
+            "message": f"Recurring investment plan for {investment[0]['ticker_symbol']} deleted successfully"
+        })
+        
+    except Exception as e:
+        logger.error(f"Delete recurring investment error: {str(e)}")
+        return create_error_response(500, "Failed to delete recurring investment plan")
+
+# ============================================================================
+# MILESTONE 2 & 5: FIRE PROFILE MANAGEMENT FUNCTIONS
+# ============================================================================
+
+def handle_create_or_update_fire_profile(body, user_id):
+    """Create or update FIRE profile for a user"""
+    try:
+        # Ensure table exists
+        create_fire_profile_table()
+        
+        # Extract fields
+        annual_expenses = body.get('annual_expenses')
+        safe_withdrawal_rate = body.get('safe_withdrawal_rate', 0.04)
+        expected_annual_return = body.get('expected_annual_return', 0.07)
+        target_retirement_age = body.get('target_retirement_age')
+        barista_annual_income = body.get('barista_annual_income', 0)
+        
+        # Check if profile already exists
+        existing_profile = execute_query(
+            DATABASE_URL,
+            "SELECT * FROM fire_profile WHERE user_id = %s",
+            (user_id,)
+        )
+        
+        if existing_profile:
+            # Update existing profile
+            execute_update(
+                DATABASE_URL,
+                """
+                UPDATE fire_profile 
+                SET annual_expenses = %s, safe_withdrawal_rate = %s, expected_annual_return = %s,
+                    target_retirement_age = %s, barista_annual_income = %s, updated_at = CURRENT_TIMESTAMP
+                WHERE user_id = %s
+                """,
+                (annual_expenses, safe_withdrawal_rate, expected_annual_return, 
+                 target_retirement_age, barista_annual_income, user_id)
+            )
+            message = "FIRE profile updated successfully"
+        else:
+            # Create new profile
+            execute_update(
+                DATABASE_URL,
+                """
+                INSERT INTO fire_profile 
+                (user_id, annual_expenses, safe_withdrawal_rate, expected_annual_return, 
+                 target_retirement_age, barista_annual_income)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                (user_id, annual_expenses, safe_withdrawal_rate, expected_annual_return,
+                 target_retirement_age, barista_annual_income)
+            )
+            message = "FIRE profile created successfully"
+        
+        # Get the profile
+        profile = execute_query(
+            DATABASE_URL,
+            "SELECT * FROM fire_profile WHERE user_id = %s",
+            (user_id,)
+        )[0]
+        
+        return create_response(200, {
+            "message": message,
+            "fire_profile": {
+                "profile_id": profile['profile_id'],
+                "user_id": profile['user_id'],
+                "annual_expenses": float(profile['annual_expenses']) if profile['annual_expenses'] else None,
+                "safe_withdrawal_rate": float(profile['safe_withdrawal_rate']),
+                "expected_annual_return": float(profile['expected_annual_return']),
+                "target_retirement_age": profile['target_retirement_age'],
+                "barista_annual_income": float(profile['barista_annual_income']),
+                "created_at": profile['created_at'].isoformat(),
+                "updated_at": profile['updated_at'].isoformat()
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Create/update FIRE profile error: {str(e)}")
+        return create_error_response(500, "Failed to save FIRE profile")
+
+def handle_get_fire_profile(user_id):
+    """Get FIRE profile for a user"""
+    try:
+        # Ensure table exists
+        create_fire_profile_table()
+        
+        profile = execute_query(
+            DATABASE_URL,
+            "SELECT * FROM fire_profile WHERE user_id = %s",
+            (user_id,)
+        )
+        
+        if not profile:
+            return create_response(200, {
+                "fire_profile": None,
+                "message": "No FIRE profile found. Create one to start tracking your FIRE progress."
+            })
+        
+        profile = profile[0]
+        
+        return create_response(200, {
+            "fire_profile": {
+                "profile_id": profile['profile_id'],
+                "user_id": profile['user_id'],
+                "annual_expenses": float(profile['annual_expenses']) if profile['annual_expenses'] else None,
+                "safe_withdrawal_rate": float(profile['safe_withdrawal_rate']),
+                "expected_annual_return": float(profile['expected_annual_return']),
+                "target_retirement_age": profile['target_retirement_age'],
+                "barista_annual_income": float(profile['barista_annual_income']),
+                "created_at": profile['created_at'].isoformat(),
+                "updated_at": profile['updated_at'].isoformat()
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Get FIRE profile error: {str(e)}")
+        return create_error_response(500, "Failed to retrieve FIRE profile")
+
+def calculate_fire_progress(user_id):
+    """Calculate FIRE progress for a user"""
+    try:
+        # Get user's FIRE profile
+        profile = execute_query(
+            DATABASE_URL,
+            "SELECT * FROM fire_profile WHERE user_id = %s",
+            (user_id,)
+        )
+        
+        if not profile:
+            return create_error_response(404, "FIRE profile not found. Please create a FIRE profile first.")
+        
+        profile = profile[0]
+        
+        # Get user's current total assets (this would need to be calculated from portfolio)
+        # For now, we'll return the calculation structure
+        annual_expenses = float(profile['annual_expenses']) if profile['annual_expenses'] else 0
+        safe_withdrawal_rate = float(profile['safe_withdrawal_rate'])
+        expected_annual_return = float(profile['expected_annual_return'])
+        target_retirement_age = profile['target_retirement_age']
+        barista_annual_income = float(profile['barista_annual_income'])
+        
+        # Get user's birth year for age calculation
+        user = execute_query(
+            DATABASE_URL,
+            "SELECT birth_year FROM users WHERE user_id = %s",
+            (user_id,)
+        )[0]
+        
+        current_year = datetime.now().year
+        current_age = current_year - user['birth_year']
+        years_to_retirement = target_retirement_age - current_age if target_retirement_age else 0
+        
+        # FIRE Calculations
+        traditional_fire_target = annual_expenses / safe_withdrawal_rate if annual_expenses > 0 else 0
+        barista_fire_target = (annual_expenses - barista_annual_income) / safe_withdrawal_rate if annual_expenses > 0 else 0
+        coast_fire_target = traditional_fire_target / ((1 + expected_annual_return) ** years_to_retirement) if years_to_retirement > 0 else traditional_fire_target
+        
+        # TODO: Get actual current portfolio value
+        current_portfolio_value = 0  # This should be calculated from user's assets
+        
+        # Calculate progress percentages
+        traditional_progress = (current_portfolio_value / traditional_fire_target * 100) if traditional_fire_target > 0 else 0
+        barista_progress = (current_portfolio_value / barista_fire_target * 100) if barista_fire_target > 0 else 0
+        coast_progress = (current_portfolio_value / coast_fire_target * 100) if coast_fire_target > 0 else 0
+        
+        return create_response(200, {
+            "fire_progress": {
+                "current_portfolio_value": current_portfolio_value,
+                "current_age": current_age,
+                "target_retirement_age": target_retirement_age,
+                "years_to_retirement": years_to_retirement,
+                "traditional_fire": {
+                    "target": traditional_fire_target,
+                    "progress_percentage": min(traditional_progress, 100),
+                    "remaining_amount": max(traditional_fire_target - current_portfolio_value, 0)
+                },
+                "barista_fire": {
+                    "target": barista_fire_target,
+                    "progress_percentage": min(barista_progress, 100),
+                    "remaining_amount": max(barista_fire_target - current_portfolio_value, 0)
+                },
+                "coast_fire": {
+                    "target": coast_fire_target,
+                    "progress_percentage": min(coast_progress, 100),
+                    "remaining_amount": max(coast_fire_target - current_portfolio_value, 0)
+                }
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Calculate FIRE progress error: {str(e)}")
+        return create_error_response(500, "Failed to calculate FIRE progress")
+
 def handle_get_stock_prices_multi_api(query_params):
     """Handle multi-API stock price requests with fallback"""
     try:
@@ -1668,7 +2168,109 @@ def lambda_handler(event, context):
             except ValueError:
                 return create_error_response(400, "Invalid transaction ID")
         
-        # External API proxy endpoints (require authentication)
+        # ============================================================================
+        # MILESTONE 4: RECURRING INVESTMENTS ENDPOINTS
+        # ============================================================================
+        
+        elif path == '/recurring-investments' and http_method == 'POST':
+            # Create recurring investment plan - requires authentication
+            body = {}
+            if event.get('body'):
+                try:
+                    body = json.loads(event['body'])
+                except json.JSONDecodeError:
+                    return create_error_response(400, "Invalid JSON in request body")
+            
+            request_headers = event.get('headers', {})
+            auth_result = verify_jwt_token(request_headers.get('Authorization', ''))
+            if not auth_result['valid']:
+                return create_error_response(401, "Invalid or missing token")
+            
+            return handle_create_recurring_investment(body, auth_result['user_id'])
+        
+        elif path == '/recurring-investments' and http_method == 'GET':
+            # Get user's recurring investment plans - requires authentication
+            request_headers = event.get('headers', {})
+            auth_result = verify_jwt_token(request_headers.get('Authorization', ''))
+            if not auth_result['valid']:
+                return create_error_response(401, "Invalid or missing token")
+            
+            return handle_get_recurring_investments(auth_result['user_id'])
+        
+        elif path.startswith('/recurring-investments/') and http_method == 'PUT':
+            # Update recurring investment plan - requires authentication
+            body = {}
+            if event.get('body'):
+                try:
+                    body = json.loads(event['body'])
+                except json.JSONDecodeError:
+                    return create_error_response(400, "Invalid JSON in request body")
+            
+            request_headers = event.get('headers', {})
+            auth_result = verify_jwt_token(request_headers.get('Authorization', ''))
+            if not auth_result['valid']:
+                return create_error_response(401, "Invalid or missing token")
+            
+            try:
+                recurring_id = int(path.split('/')[-1])
+                return handle_update_recurring_investment(recurring_id, body, auth_result['user_id'])
+            except ValueError:
+                return create_error_response(400, "Invalid recurring investment ID")
+        
+        elif path.startswith('/recurring-investments/') and http_method == 'DELETE':
+            # Delete recurring investment plan - requires authentication
+            request_headers = event.get('headers', {})
+            auth_result = verify_jwt_token(request_headers.get('Authorization', ''))
+            if not auth_result['valid']:
+                return create_error_response(401, "Invalid or missing token")
+            
+            try:
+                recurring_id = int(path.split('/')[-1])
+                return handle_delete_recurring_investment(recurring_id, auth_result['user_id'])
+            except ValueError:
+                return create_error_response(400, "Invalid recurring investment ID")
+        
+        # ============================================================================
+        # MILESTONE 2 & 5: FIRE PROFILE ENDPOINTS
+        # ============================================================================
+        
+        elif path == '/fire-profile' and http_method == 'POST':
+            # Create or update FIRE profile - requires authentication
+            body = {}
+            if event.get('body'):
+                try:
+                    body = json.loads(event['body'])
+                except json.JSONDecodeError:
+                    return create_error_response(400, "Invalid JSON in request body")
+            
+            request_headers = event.get('headers', {})
+            auth_result = verify_jwt_token(request_headers.get('Authorization', ''))
+            if not auth_result['valid']:
+                return create_error_response(401, "Invalid or missing token")
+            
+            return handle_create_or_update_fire_profile(body, auth_result['user_id'])
+        
+        elif path == '/fire-profile' and http_method == 'GET':
+            # Get FIRE profile - requires authentication
+            request_headers = event.get('headers', {})
+            auth_result = verify_jwt_token(request_headers.get('Authorization', ''))
+            if not auth_result['valid']:
+                return create_error_response(401, "Invalid or missing token")
+            
+            return handle_get_fire_profile(auth_result['user_id'])
+        
+        elif path == '/fire-progress' and http_method == 'GET':
+            # Calculate FIRE progress - requires authentication
+            request_headers = event.get('headers', {})
+            auth_result = verify_jwt_token(request_headers.get('Authorization', ''))
+            if not auth_result['valid']:
+                return create_error_response(401, "Invalid or missing token")
+            
+            return calculate_fire_progress(auth_result['user_id'])
+        
+        # ============================================================================
+        # EXTERNAL API PROXY ENDPOINTS
+        # ============================================================================
         elif path == '/api/exchange-rates' and http_method == 'GET':
             # Get exchange rates - requires authentication
             request_headers = event.get('headers', {})

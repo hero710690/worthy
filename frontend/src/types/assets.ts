@@ -53,3 +53,36 @@ export interface AssetsResponse {
   assets: Asset[];
   total_assets: number;
 }
+
+// Recurring Investment Types
+export interface RecurringInvestment {
+  recurring_id: number;
+  ticker_symbol: string;
+  amount: number;
+  currency: string;
+  frequency: 'daily' | 'weekly' | 'monthly' | 'quarterly';
+  start_date: string;
+  next_run_date: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateRecurringInvestmentRequest {
+  ticker_symbol: string;
+  amount: number;
+  currency: string;
+  frequency: 'daily' | 'weekly' | 'monthly' | 'quarterly';
+  start_date: string;
+}
+
+export interface UpdateRecurringInvestmentRequest {
+  amount?: number;
+  frequency?: 'daily' | 'weekly' | 'monthly' | 'quarterly';
+  is_active?: boolean;
+}
+
+export interface RecurringInvestmentsResponse {
+  recurring_investments: RecurringInvestment[];
+  total_plans: number;
+}

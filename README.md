@@ -48,24 +48,36 @@ cd backend
 - ✅ Responsive Material-UI design
 - ✅ Full-stack deployment on AWS
 
-### 🔄 **Milestone 2: Core Data Models & Asset Management** - **75% COMPLETE**
+### 🔄 **Milestone 2: Core Data Models & Asset Management** - **85% COMPLETE**
 - ✅ Asset initialization and portfolio tracking
 - ✅ Transaction recording for lump-sum purchases
 - ✅ Professional UI with portfolio overview
 - ✅ Database integration with proper relationships
-- ❌ Complete CRUD operations for assets and transactions
-- ❌ Recurring investments and FIRE profile tables
+- ✅ Complete CRUD operations for assets and transactions (backend)
+- ❌ Frontend CRUD interfaces for editing/deleting assets and transactions
+- ❌ Complete transaction history management interface
 
 ### ✅ **Milestone 3: External API Integration & Real-time Data** - **COMPLETE**
 - ✅ Real-time stock/ETF prices using multiple APIs (Finnhub, Alpha Vantage)
 - ✅ Live currency conversion using ExchangeRate-API
 - ✅ Comprehensive portfolio valuation with market data
 - ✅ Unrealized P&L tracking with real-time calculations
-- ✅ **NEW**: TTL-based caching system (5min stock prices, 1hr exchange rates)
+- ✅ TTL-based caching system (5min stock prices, 1hr exchange rates)
 - ✅ API status monitoring and fallback mechanisms
 - ✅ Performance optimization with 25x faster cached responses
 
-## 🎯 **Current Status: Milestone 3 Complete + Enhanced Caching**
+### 🎉 **Milestone 4: Recurring Investments & Automation** - **70% COMPLETE** ⭐ **NEW!**
+- ✅ **Recurring Investment Management**: Complete CRUD operations for investment plans
+- ✅ **FIRE Calculator**: Traditional, Barista, and Coast FIRE calculations
+- ✅ **Professional UI**: Recurring investments dashboard with plan management
+- ✅ **FIRE Progress Tracking**: Visual progress indicators and goal tracking
+- ✅ **Backend APIs**: All recurring investment and FIRE profile endpoints
+- ✅ **Database Integration**: Recurring investments and FIRE profile tables
+- ❌ **Automated Batch Processing**: Daily scheduler for recurring investments
+- ❌ **Dividend Tracking**: Automated dividend detection and processing
+- ❌ **Market Holiday Handling**: Skip/postpone logic for non-trading days
+
+## 🎯 **Current Status: Milestone 4 - 70% Complete** ⭐ **NEW FEATURES!**
 
 ### **✅ Working Features:**
 - **User Management**: Registration, login, profile management
@@ -74,13 +86,16 @@ cd backend
 - **Performance**: Intelligent caching reduces API calls by 95%
 - **Dashboard**: Professional FinSet-style interface with real-time metrics
 - **Portfolio Analysis**: Unrealized P&L, asset allocation, performance tracking
+- **🆕 Recurring Investments**: Create, manage, and track recurring investment plans
+- **🆕 FIRE Calculator**: Traditional, Barista, and Coast FIRE progress tracking
+- **🆕 Goal Setting**: Interactive FIRE profile configuration and progress visualization
 
 ### **🔧 Recent Enhancements:**
-- **Caching System**: Implemented TTL-based caching with cachetools
-- **Performance**: 25x faster response times for cached data
-- **Rate Limit Protection**: Intelligent caching prevents API limit hits
-- **Monitoring**: Cache status endpoints and performance metrics
-- **Reliability**: Fallback mechanisms when external APIs fail
+- **Recurring Investment Management**: Full CRUD operations for automated investment plans
+- **FIRE Progress Dashboard**: Visual tracking of Traditional, Barista, and Coast FIRE goals
+- **Interactive Calculators**: Set financial independence parameters and track progress
+- **Professional UI**: New navigation with recurring investments and goals sections
+- **Backend APIs**: Complete implementation of recurring investments and FIRE profile endpoints
 
 ## 📊 **Cache Performance Metrics**
 
@@ -190,16 +205,18 @@ curl https://mreda8g340.execute-api.ap-northeast-1.amazonaws.com/development/cac
 
 ## 📈 **Next Milestones**
 
-### **Milestone 4: Recurring Investments & Automation**
-- Automated recurring investment plans
-- Market holiday handling
-- Dividend tracking system
-- Batch processing automation
+### **Complete Milestone 4: Recurring Investments & Automation**
+- ✅ Recurring investment plan management (COMPLETE)
+- ✅ FIRE calculator and progress tracking (COMPLETE)
+- ❌ Automated batch processing for recurring investments
+- ❌ Market holiday handling and scheduling
+- ❌ Dividend tracking and automation
 
-### **Milestone 5: FIRE Calculator & Financial Planning**
-- Traditional, Barista, and Coast FIRE calculations
-- Financial projections and scenarios
-- Goal tracking and progress visualization
+### **Milestone 5: Advanced Features & Optimization**
+- Enhanced portfolio analytics and insights
+- Performance optimization and monitoring
+- Advanced FIRE projections and scenarios
+- Mobile responsiveness improvements
 
 ## 🔒 Security
 
@@ -239,5 +256,5 @@ For deployment issues or questions:
 ---
 
 **Last Updated**: July 8, 2025
-**Current Version**: Milestone 3 Complete + Enhanced Caching
+**Current Version**: Milestone 4 - 70% Complete (Recurring Investments + FIRE Calculator)
 **Status**: Production Ready ✅

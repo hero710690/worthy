@@ -24,6 +24,7 @@ import {
   Receipt,
   Assessment,
   GpsFixed,
+  Schedule,
   Help,
   Logout,
 } from '@mui/icons-material';
@@ -56,6 +57,7 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     { text: 'Assets', icon: <TrendingUp />, path: '/assets' },
     { text: 'Transactions', icon: <Receipt />, path: '/transactions' },
     { text: 'Portfolio', icon: <Assessment />, path: '/portfolio' },
+    { text: 'Recurring', icon: <Schedule />, path: '/recurring' },
     { text: 'Goals', icon: <GpsFixed />, path: '/goals' },
     { text: 'Analytics', icon: <Analytics />, path: '/analytics' },
     { text: 'Profile', icon: <Person />, path: '/profile' },
