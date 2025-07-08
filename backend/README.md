@@ -1,245 +1,224 @@
-# Worthy Backend - AWS Lambda API
+# Worthy Backend - Lambda Deployment
 
-Python-based serverless backend for the Worthy financial tracking application, designed to run on AWS Lambda.
+This directory contains the backend implementation for the Worthy financial tracking application, deployed as an AWS Lambda function.
 
-## Architecture
+## 🏗️ Architecture
 
-- **Runtime**: Python 3.11
-- **Framework**: Native AWS Lambda handlers (no web framework overhead)
-- **Database**: PostgreSQL (AWS RDS)
-- **Authentication**: JWT tokens with bcrypt password hashing
-- **Deployment**: AWS SAM (Serverless Application Model)
+- **Single-file Lambda function**: `worthy_lambda_function.py`
+- **Dependencies**: Managed via Lambda Layers
+- **Database**: PostgreSQL on AWS RDS
+- **API Gateway**: RESTful API endpoints
+- **Authentication**: JWT tokens with hashlib password hashing
 
-## Project Structure
+## 📁 Directory Structure
 
 ```
 backend/
-├── src/
-│   ├── lambda_handler.py      # Main Lambda entry point
-│   ├── config.py              # Configuration management
-│   ├── database.py            # Database connection utilities
-│   ├── auth/
-│   │   └── handler.py         # Authentication logic
-│   ├── users/
-│   │   └── handler.py         # User management logic
-│   └── utils/
-│       ├── response.py        # Response utilities
-│       └── cors.py            # CORS handling
-├── template.yaml              # AWS SAM template
-├── requirements.txt           # Python dependencies
-├── deploy.sh                  # Deployment script
-└── test_local.py             # Local testing script
+├── worthy_lambda_function.py    # Main Lambda function (single file)
+├── requirements.txt             # Python dependencies
+├── deploy_lambda.sh            # Deployment script
+├── lambda_deployment_full/     # Working deployment with dependencies
+├── .env                        # Environment variables (local)
+├── .env.example               # Environment template
+├── test_local.py              # Local testing script
+└── README.md                  # This file
 ```
 
-## Quick Start
-
-### 1. Set up environment
+## 🚀 Quick Deployment
 
 ```bash
-# Copy environment template
-cp .env.example .env
+# Make sure you're in the backend directory
+cd backend
 
-# Edit .env with your configuration
-nano .env
+# Run the deployment script
+./deploy_lambda.sh
 ```
 
-### 2. Set up database
+The deployment script will:
+1. ✅ Check prerequisites (AWS CLI, Docker, credentials)
+2. 📦 Create Lambda Layer with dependencies
+3. 🗜️ Package the function code
+4. 🚀 Deploy layer and function to AWS
+5. 🔗 Attach layer to function
+6. 🧪 Test the deployment
+7. 🧹 Clean up build artifacts
 
+## 📋 Prerequisites
+
+### Required Tools
+- **AWS CLI**: Configured with `worthy-app-user` profile
+- **Docker**: For Lambda-compatible dependency builds (recommended)
+- **Python 3.11**: For local development
+
+### AWS Configuration
 ```bash
-# Option A: Local PostgreSQL with Docker
-docker run --name worthy-postgres \
-  -e POSTGRES_DB=worthy \
-  -e POSTGRES_USER=worthy_admin \
-  -e POSTGRES_PASSWORD=WorthyApp2025! \
-  -p 5432:5432 -d postgres:15
+# Verify AWS profile exists
+aws configure list-profiles | grep worthy-app-user
 
-# Option B: Use AWS RDS (see setup-database.sh)
-./setup-database.sh
+# Test AWS credentials
+aws sts get-caller-identity --profile worthy-app-user
 ```
 
-### 3. Install dependencies
+## 🔧 Manual Deployment (Advanced)
 
+If you need to deploy manually or troubleshoot:
+
+### 1. Create Dependencies Layer
 ```bash
-pip install -r requirements.txt
+# Using Docker (recommended for macOS)
+mkdir python
+docker run --rm -v "$PWD":/var/task -w /var/task public.ecr.aws/lambda/python:3.11 \
+    pip install -r requirements.txt -t python/
+zip -r worthy-dependencies-layer.zip python/
+
+# Deploy layer
+aws lambda publish-layer-version \
+    --layer-name worthy-dependencies \
+    --zip-file fileb://worthy-dependencies-layer.zip \
+    --compatible-runtimes python3.11 \
+    --profile worthy-app-user \
+    --region ap-northeast-1
 ```
 
-### 4. Test locally
-
+### 2. Package Function Code
 ```bash
-# Run local tests
-python test_local.py
+mkdir lambda_deployment
+cp worthy_lambda_function.py lambda_deployment/
+cd lambda_deployment && zip -r ../worthy-backend-full.zip .
+cd ..
 ```
 
-### 5. Deploy to AWS
-
+### 3. Update Function
 ```bash
-# Make sure AWS credentials are configured
-export AWS_ACCESS_KEY_ID=your-access-key
-export AWS_SECRET_ACCESS_KEY=your-secret-key
-export DATABASE_URL=your-database-url
-export JWT_SECRET=your-jwt-secret
+# Update function code
+aws lambda update-function-code \
+    --function-name worthy-api-development \
+    --zip-file fileb://worthy-backend-full.zip \
+    --profile worthy-app-user \
+    --region ap-northeast-1
 
-# Deploy
-./deploy.sh development
+# Attach layer (replace VERSION with actual version number)
+aws lambda update-function-configuration \
+    --function-name worthy-api-development \
+    --layers arn:aws:lambda:ap-northeast-1:ACCOUNT_ID:layer:worthy-dependencies:VERSION \
+    --handler worthy_lambda_function.lambda_handler \
+    --profile worthy-app-user \
+    --region ap-northeast-1
 ```
 
-## API Endpoints
-
-### Authentication
-- `POST /api/auth/register` - User registration
-- `POST /api/auth/login` - User login
-- `POST /api/auth/logout` - User logout
-- `POST /api/auth/refresh` - Refresh JWT token
-
-### Users (Protected)
-- `GET /api/users/profile` - Get user profile
-- `PUT /api/users/profile` - Update user profile
-
-### Health Check
-- `GET /health` - Health check endpoint
-- `GET /` - Root endpoint
-
-## Environment Variables
-
-```bash
-# Database
-DATABASE_URL=postgresql://user:pass@host:5432/dbname
-
-# JWT
-JWT_SECRET=your-secret-key
-JWT_EXPIRATION_HOURS=24
-
-# External APIs (for future milestones)
-ALPHA_VANTAGE_API_KEY=your-api-key
-EXCHANGE_RATE_API_KEY=your-api-key
-
-# Environment
-ENVIRONMENT=development
-DEBUG=true
-```
-
-## AWS Resources Created
-
-- **Lambda Function**: `worthy-api-{environment}`
-- **API Gateway**: REST API with CORS enabled
-- **IAM Role**: Lambda execution role with necessary permissions
-- **CloudWatch Logs**: Automatic logging for debugging
-
-## Database Schema
-
-### Users Table
-```sql
-CREATE TABLE users (
-    user_id SERIAL PRIMARY KEY,
-    email VARCHAR(255) UNIQUE NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,
-    base_currency VARCHAR(3) DEFAULT 'USD',
-    birth_year INTEGER,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-```
-
-## Security Features
-
-- **Password Hashing**: bcrypt with salt
-- **JWT Authentication**: Secure token-based auth
-- **Input Validation**: Email validation and password strength
-- **SQL Injection Prevention**: Parameterized queries
-- **CORS**: Configurable cross-origin resource sharing
-
-## Testing
+## 🧪 Testing
 
 ### Local Testing
 ```bash
-# Test individual functions
+# Test the function locally
 python test_local.py
-
-# Test with curl (after deployment)
-curl https://your-api-url/health
 ```
 
-### Example API Calls
+### API Testing
+```bash
+# Health check
+curl https://mreda8g340.execute-api.ap-northeast-1.amazonaws.com/development/health
+
+# Stock prices
+curl "https://mreda8g340.execute-api.ap-northeast-1.amazonaws.com/development/api/stock-prices-multi?symbols=AAPL,TSLA"
+
+# User registration
+curl -X POST https://mreda8g340.execute-api.ap-northeast-1.amazonaws.com/development/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Test User","email":"test@example.com","password":"password123","base_currency":"USD","birth_year":1990}'
+```
+
+## 🔐 Environment Variables
+
+The Lambda function uses these environment variables (pre-configured):
 
 ```bash
-# Register user
-curl -X POST https://your-api-url/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"email":"test@example.com","password":"password123","base_currency":"USD"}'
-
-# Login
-curl -X POST https://your-api-url/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"test@example.com","password":"password123"}'
-
-# Get profile (with token)
-curl -X GET https://your-api-url/api/users/profile \
-  -H "Authorization: Bearer your-jwt-token"
+FINNHUB_API_KEY=d1lubu9r01qg4dblektgd1lubu9r01qg4dbleku0
+ALPHA_VANTAGE_API_KEY=I4FAQ1D6K5UODI1E
+DATABASE_URL=postgresql://worthy_admin:WorthyApp2025!@worthy-db-dev.ch0ccg6ycp7t.ap-northeast-1.rds.amazonaws.com:5432/worthy
+JWT_SECRET=worthy-jwt-secret-2025-production
+EXCHANGE_RATE_API_KEY=4de678c416959e681a760650
 ```
 
-## Deployment
+## 📊 API Endpoints
 
-### Prerequisites
-- AWS CLI configured
-- AWS SAM CLI installed
-- Python 3.11+
-- PostgreSQL database
+### Authentication
+- `POST /auth/register` - User registration
+- `POST /auth/login` - User login
+- `GET /auth/verify` - Token verification
+- `POST /auth/logout` - User logout
 
-### Deploy Commands
-```bash
-# Development
-./deploy.sh development
+### Asset Management
+- `POST /assets` - Create/initialize asset
+- `GET /assets` - Get user's assets
+- `GET /assets/:id` - Get specific asset details
+- `POST /transactions` - Record transaction
+- `GET /assets/:id/transactions` - Get transaction history
 
-# Production
-./deploy.sh production
-```
+### External APIs
+- `GET /api/stock-prices-multi?symbols=AAPL,TSLA` - Multi-API stock prices
+- `GET /api/exchange-rates?base=USD` - Currency exchange rates
+- `GET /health` - Health check
 
-## Monitoring
-
-- **CloudWatch Logs**: Automatic logging
-- **CloudWatch Metrics**: Lambda metrics
-- **API Gateway Metrics**: Request/response metrics
-- **Custom Metrics**: Can be added for business logic
-
-## Cost Optimization
-
-- **Lambda**: Pay per request (very cost-effective for low traffic)
-- **RDS**: Use db.t3.micro for development
-- **API Gateway**: Pay per API call
-- **CloudWatch**: Minimal logging costs
-
-## Next Steps (Milestone 2)
-
-- Add Asset management endpoints
-- Add Transaction recording endpoints
-- Implement external API integrations
-- Add automated batch processing
-- Enhanced error handling and validation
-
-## Troubleshooting
+## 🐛 Troubleshooting
 
 ### Common Issues
 
-1. **Database Connection Failed**
-   - Check DATABASE_URL format
-   - Verify database is running and accessible
-   - Check security groups for RDS
+1. **Import Errors**
+   ```bash
+   # Check if layer is attached
+   aws lambda get-function-configuration \
+     --function-name worthy-api-development \
+     --profile worthy-app-user
+   ```
 
-2. **JWT Token Issues**
-   - Verify JWT_SECRET is set
-   - Check token expiration
-   - Validate Authorization header format
+2. **API Rate Limits**
+   - Check API key quotas in external services
+   - Monitor CloudWatch logs for rate limit errors
 
-3. **Deployment Failures**
-   - Check AWS credentials
-   - Verify IAM permissions
-   - Check CloudFormation stack events
+3. **Database Connection Issues**
+   - Verify RDS security groups allow Lambda access
+   - Check DATABASE_URL environment variable
 
-### Logs
+4. **CORS Issues**
+   - Verify API Gateway CORS configuration
+   - Check preflight OPTIONS requests
+
+### Debug Commands
 ```bash
-# View Lambda logs
-aws logs tail /aws/lambda/worthy-api-development --follow
+# View function logs
+aws logs describe-log-streams \
+  --log-group-name "/aws/lambda/worthy-api-development" \
+  --profile worthy-app-user
 
-# View API Gateway logs
-aws logs tail API-Gateway-Execution-Logs_your-api-id/development --follow
+# Test function directly
+aws lambda invoke \
+  --function-name worthy-api-development \
+  --payload '{"httpMethod":"GET","path":"/health"}' \
+  --profile worthy-app-user \
+  response.json
 ```
+
+## 📈 Performance
+
+- **Cold Start**: ~2-3 seconds (with dependencies layer)
+- **Warm Execution**: ~100-500ms
+- **Memory**: 512MB allocated
+- **Timeout**: 30 seconds
+
+## 🔄 Deployment History
+
+- **July 8, 2025**: Standardized single-file deployment approach
+- **July 7, 2025**: Added multi-API fallback system
+- **July 6, 2025**: Initial Lambda deployment with asset management
+
+## 📝 Development Notes
+
+- Use `worthy_lambda_function.py` as the single source of truth
+- All dependencies are managed via Lambda Layers
+- Database schema changes require manual migration
+- API changes should maintain backward compatibility
+
+---
+
+**Ready to deploy?** Run `./deploy_lambda.sh` and you're good to go! 🚀

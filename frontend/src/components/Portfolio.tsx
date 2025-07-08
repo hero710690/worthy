@@ -11,6 +11,8 @@ import {
   Chip,
   LinearProgress,
   Paper,
+  Button,
+  Tooltip,
 } from '@mui/material';
 import {
   PieChart,
@@ -18,67 +20,91 @@ import {
   AccountBalance,
   ShowChart,
   Assessment,
+  Refresh,
+  TrendingDown,
 } from '@mui/icons-material';
 import { useAuthStore } from '../store/authStore';
 import { assetAPI } from '../services/assetApi';
+import { assetValuationService, type PortfolioValuation } from '../services/assetValuationService';
 import { exchangeRateService } from '../services/exchangeRateService';
 import type { Asset } from '../types/assets';
 
 interface PortfolioAllocation {
   byType: { [type: string]: { value: number; percentage: number } };
   byCurrency: { [currency: string]: { value: number; percentage: number } };
-  byAsset: { symbol: string; value: number; percentage: number }[];
+  byAsset: { symbol: string; value: number; percentage: number; currentPrice?: number; costBasis?: number; gainLoss?: number; gainLossPercent?: number }[];
 }
 
 export const Portfolio: React.FC = () => {
   const { user } = useAuthStore();
   const [assets, setAssets] = useState<Asset[]>([]);
+  const [portfolioValuation, setPortfolioValuation] = useState<PortfolioValuation | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [allocation, setAllocation] = useState<PortfolioAllocation | null>(null);
-  const [totalValue, setTotalValue] = useState(0);
 
   const fetchPortfolioData = async () => {
     try {
       setLoading(true);
+      setError(null);
+      
+      console.log('🔄 Fetching portfolio data...');
       const response = await assetAPI.getAssets();
+      console.log('✅ Assets fetched:', response.assets.length, 'assets');
       setAssets(response.assets);
       
-      // Calculate portfolio allocation and total value
+      // Use the same valuation service as Dashboard for consistency
       const baseCurrency = user?.base_currency || 'USD';
-      let total = 0;
+      console.log('💰 Base currency:', baseCurrency);
+      
+      console.log('📊 Calling assetValuationService...');
+      const valuation = await assetValuationService.valuatePortfolio(response.assets, baseCurrency);
+      console.log('✅ Valuation completed:', valuation);
+      setPortfolioValuation(valuation);
+      
+      // Calculate portfolio allocation using real-time values
+      const total = valuation.totalValueInBaseCurrency;
+      console.log('💵 Total portfolio value:', total);
+      
       const byType: { [type: string]: { value: number; percentage: number } } = {};
       const byCurrency: { [currency: string]: { value: number; percentage: number } } = {};
-      const byAsset: { symbol: string; value: number; percentage: number }[] = [];
+      const byAsset: { symbol: string; value: number; percentage: number; currentPrice?: number; costBasis?: number; gainLoss?: number; gainLossPercent?: number }[] = [];
 
-      // Calculate values for each asset
+      // Calculate values for each asset using real-time data
       response.assets.forEach(asset => {
-        const assetValue = asset.total_shares * asset.average_cost_basis;
-        const convertedValue = exchangeRateService.convertCurrency(
-          assetValue,
-          asset.currency,
-          baseCurrency
-        );
+        console.log('🔍 Processing asset:', asset.ticker_symbol);
+        const assetValuation = valuation.assets.find(av => av.asset.ticker_symbol === asset.ticker_symbol);
+        console.log('📈 Asset valuation found:', !!assetValuation);
         
-        total += convertedValue;
-
+        const currentValue = assetValuation?.totalValueInBaseCurrency || 0;
+        const costBasisValue = asset.total_shares * asset.average_cost_basis;
+        const gainLoss = assetValuation?.unrealizedGainLoss || 0;
+        const gainLossPercent = assetValuation?.unrealizedGainLossPercent || 0;
+        
+        console.log(`💰 ${asset.ticker_symbol}: current=${currentValue}, cost=${costBasisValue}`);
+        
         // By asset type
         if (!byType[asset.asset_type]) {
           byType[asset.asset_type] = { value: 0, percentage: 0 };
         }
-        byType[asset.asset_type].value += convertedValue;
+        byType[asset.asset_type].value += currentValue;
 
         // By currency
         if (!byCurrency[asset.currency]) {
           byCurrency[asset.currency] = { value: 0, percentage: 0 };
         }
-        byCurrency[asset.currency].value += convertedValue;
+        byCurrency[asset.currency].value += currentValue;
 
         // By individual asset
         byAsset.push({
           symbol: asset.ticker_symbol,
-          value: convertedValue,
-          percentage: 0 // Will be calculated after total is known
+          value: currentValue,
+          percentage: 0, // Will be calculated after total is known
+          currentPrice: assetValuation?.currentPrice,
+          costBasis: costBasisValue,
+          gainLoss: gainLoss,
+          gainLossPercent: gainLossPercent
         });
       });
 
@@ -99,19 +125,28 @@ export const Portfolio: React.FC = () => {
       byAsset.sort((a, b) => b.value - a.value);
 
       setAllocation({ byType, byCurrency, byAsset });
-      setTotalValue(total);
+      console.log('✅ Portfolio data processing completed');
       setError(null);
     } catch (error: any) {
-      console.error('Failed to fetch portfolio data:', error);
-      setError(error.response?.data?.message || 'Failed to fetch portfolio data');
+      console.error('❌ Failed to fetch portfolio data:', error);
+      console.error('Error details:', error.message, error.stack);
+      setError(error.response?.data?.message || error.message || 'Failed to fetch portfolio data');
     } finally {
       setLoading(false);
     }
   };
 
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchPortfolioData();
+    setRefreshing(false);
+  };
+
   useEffect(() => {
-    fetchPortfolioData();
-  }, [user?.base_currency]);
+    if (user) {
+      fetchPortfolioData();
+    }
+  }, [user]);
 
   const formatCurrency = (amount: number) => {
     const baseCurrency = user?.base_currency || 'USD';
@@ -138,23 +173,48 @@ export const Portfolio: React.FC = () => {
     );
   }
 
+  if (error) {
+    return (
+      <Alert severity="error" sx={{ mb: 2 }}>
+        {error}
+        <Button onClick={() => fetchPortfolioData()} sx={{ ml: 2 }}>
+          Retry
+        </Button>
+      </Alert>
+    );
+  }
+
+  if (!portfolioValuation || !allocation) {
+    return (
+      <Alert severity="info">
+        No portfolio data available. Start by adding some assets to your portfolio.
+      </Alert>
+    );
+  }
+
   return (
     <Box sx={{ p: { xs: 2, md: 3 } }}>
       {/* Header */}
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 1 }}>
-          Portfolio Analysis
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          Comprehensive view of your investment portfolio allocation and performance
-        </Typography>
+      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Box>
+          <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 1 }}>
+            Portfolio Analysis
+          </Typography>
+          <Typography variant="body1" color="text.secondary">
+            Comprehensive view of your investment portfolio allocation and performance
+          </Typography>
+        </Box>
+        <Tooltip title="Refresh portfolio data">
+          <Button
+            variant="outlined"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            startIcon={refreshing ? <CircularProgress size={20} /> : <Refresh />}
+          >
+            {refreshing ? 'Refreshing...' : 'Refresh'}
+          </Button>
+        </Tooltip>
       </Box>
-
-      {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
-          {error}
-        </Alert>
-      )}
 
       {/* Portfolio Summary */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
@@ -178,7 +238,7 @@ export const Portfolio: React.FC = () => {
                 </Box>
                 <Box>
                   <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
-                    {formatCurrency(totalValue)}
+                    {portfolioValuation ? formatCurrency(portfolioValuation.totalValueInBaseCurrency) : '$0.00'}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     Total Portfolio Value
@@ -198,21 +258,21 @@ export const Portfolio: React.FC = () => {
                     width: 48,
                     height: 48,
                     borderRadius: 2,
-                    bgcolor: 'success.main',
+                    bgcolor: portfolioValuation && portfolioValuation.totalUnrealizedGainLoss >= 0 ? 'success.main' : 'error.main',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     color: 'white'
                   }}
                 >
-                  <ShowChart />
+                  {portfolioValuation && portfolioValuation.totalUnrealizedGainLoss >= 0 ? <TrendingUp /> : <TrendingDown />}
                 </Box>
                 <Box>
-                  <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
-                    {assets.length}
+                  <Typography variant="h5" sx={{ fontWeight: 'bold', color: portfolioValuation && portfolioValuation.totalUnrealizedGainLoss >= 0 ? 'success.main' : 'error.main' }}>
+                    {portfolioValuation ? formatCurrency(portfolioValuation.totalUnrealizedGainLoss) : '$0.00'}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Total Assets
+                    Unrealized P&L ({portfolioValuation ? `${portfolioValuation.totalUnrealizedGainLossPercent >= 0 ? '+' : ''}${portfolioValuation.totalUnrealizedGainLossPercent.toFixed(2)}%` : '0.00%'})
                   </Typography>
                 </Box>
               </Stack>
@@ -236,14 +296,14 @@ export const Portfolio: React.FC = () => {
                     color: 'white'
                   }}
                 >
-                  <PieChart />
+                  <Assessment />
                 </Box>
                 <Box>
                   <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
-                    {allocation ? Object.keys(allocation.byType).length : 0}
+                    {assets.length}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Asset Types
+                    Total Assets
                   </Typography>
                 </Box>
               </Stack>
@@ -267,11 +327,14 @@ export const Portfolio: React.FC = () => {
                     color: 'white'
                   }}
                 >
-                  <Assessment />
+                  <PieChart />
                 </Box>
                 <Box>
                   <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
-                    {allocation ? Object.keys(allocation.byCurrency).length : 0}
+                    {allocation ? Object.keys(allocation.byType).length : 0}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Asset Types
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     Currencies
