@@ -731,15 +731,15 @@ export const Goals: React.FC = () => {
               </Typography>
             </Alert>
 
-            {/* 財務現況 (Current Financial Snapshot) */}
+            {/* Current Financial Snapshot */}
             <Paper elevation={0} sx={{ p: 3, bgcolor: 'grey.50' }}>
               <Typography variant="h6" sx={{ mb: 2, color: 'primary.main' }}>
-                💰 財務現況 (Current Financial Snapshot)
+                💰 Current Financial Snapshot
               </Typography>
               <Grid container spacing={2}>
                 <Grid item xs={12} sm={6}>
                   <TextField
-                    label="年收入 (Annual Income)"
+                    label="Annual Income"
                     type="number"
                     value={formData.annual_income}
                     onChange={(e) => setFormData({ ...formData, annual_income: parseFloat(e.target.value) || 0 })}
@@ -752,7 +752,7 @@ export const Goals: React.FC = () => {
                 </Grid>
                 <Grid item xs={12} sm={6}>
                   <TextField
-                    label="年儲蓄金額 (Annual Savings)"
+                    label="Annual Savings"
                     type="number"
                     value={formData.annual_savings}
                     onChange={(e) => setFormData({ ...formData, annual_savings: parseFloat(e.target.value) || 0 })}
@@ -766,15 +766,15 @@ export const Goals: React.FC = () => {
               </Grid>
             </Paper>
 
-            {/* 退休目標 (Retirement Goals) */}
+            {/* Retirement Goals */}
             <Paper elevation={0} sx={{ p: 3, bgcolor: 'grey.50' }}>
               <Typography variant="h6" sx={{ mb: 2, color: 'success.main' }}>
-                🎯 退休目標 (Retirement Goals)
+                🎯 Retirement Goals
               </Typography>
               <Grid container spacing={2}>
                 <Grid item xs={12} sm={6}>
                   <TextField
-                    label="退休後年支出 (Annual Expenses)"
+                    label="Annual Expenses in Retirement"
                     type="number"
                     value={formData.annual_expenses}
                     onChange={(e) => setFormData({ ...formData, annual_expenses: parseFloat(e.target.value) || 0 })}
@@ -787,7 +787,7 @@ export const Goals: React.FC = () => {
                 </Grid>
                 <Grid item xs={12} sm={6}>
                   <TextField
-                    label="目標退休年齡 (Target Retirement Age)"
+                    label="Target Retirement Age"
                     type="number"
                     value={formData.target_retirement_age}
                     onChange={(e) => setFormData({ ...formData, target_retirement_age: parseInt(e.target.value) || 65 })}
@@ -798,15 +798,15 @@ export const Goals: React.FC = () => {
               </Grid>
             </Paper>
 
-            {/* 核心假設 (Core Assumptions) */}
+            {/* Core Assumptions */}
             <Paper elevation={0} sx={{ p: 3, bgcolor: 'grey.50' }}>
               <Typography variant="h6" sx={{ mb: 2, color: 'warning.main' }}>
-                ⚙️ 核心假設 (Core Assumptions)
+                ⚙️ Core Assumptions
               </Typography>
               <Grid container spacing={2}>
                 <Grid item xs={12} sm={6}>
                   <TextField
-                    label="安全提領率 (Safe Withdrawal Rate)"
+                    label="Safe Withdrawal Rate"
                     type="number"
                     value={formData.safe_withdrawal_rate}
                     onChange={(e) => setFormData({ ...formData, safe_withdrawal_rate: parseFloat(e.target.value) || 0.04 })}
@@ -820,7 +820,7 @@ export const Goals: React.FC = () => {
                 </Grid>
                 <Grid item xs={12} sm={6}>
                   <TextField
-                    label="預期通膨率 (Expected Inflation)"
+                    label="Expected Inflation Rate"
                     type="number"
                     value={formData.expected_inflation_rate}
                     onChange={(e) => setFormData({ ...formData, expected_inflation_rate: parseFloat(e.target.value) || 0.025 })}
@@ -834,7 +834,7 @@ export const Goals: React.FC = () => {
                 </Grid>
                 <Grid item xs={12} sm={6}>
                   <TextField
-                    label="退休前預期報酬率 (Pre-Retirement Return)"
+                    label="Pre-Retirement Expected Return"
                     type="number"
                     value={formData.expected_return_pre_retirement}
                     onChange={(e) => setFormData({ ...formData, expected_return_pre_retirement: parseFloat(e.target.value) || 0.07 })}
@@ -848,7 +848,7 @@ export const Goals: React.FC = () => {
                 </Grid>
                 <Grid item xs={12} sm={6}>
                   <TextField
-                    label="退休後預期報酬率 (Post-Retirement Return)"
+                    label="Post-Retirement Expected Return"
                     type="number"
                     value={formData.expected_return_post_retirement}
                     onChange={(e) => setFormData({ ...formData, expected_return_post_retirement: parseFloat(e.target.value) || 0.05 })}
@@ -862,7 +862,7 @@ export const Goals: React.FC = () => {
                 </Grid>
                 <Grid item xs={12} sm={6}>
                   <TextField
-                    label="其他被動收入 (Other Passive Income)"
+                    label="Other Passive Income"
                     type="number"
                     value={formData.other_passive_income}
                     onChange={(e) => setFormData({ ...formData, other_passive_income: parseFloat(e.target.value) || 0 })}
@@ -875,7 +875,7 @@ export const Goals: React.FC = () => {
                 </Grid>
                 <Grid item xs={12} sm={6}>
                   <TextField
-                    label="有效稅率 (Effective Tax Rate)"
+                    label="Effective Tax Rate"
                     type="number"
                     value={formData.effective_tax_rate}
                     onChange={(e) => setFormData({ ...formData, effective_tax_rate: parseFloat(e.target.value) || 0.15 })}
