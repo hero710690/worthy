@@ -240,10 +240,22 @@ export const TransactionHistory: React.FC = () => {
       return formatCurrency(totalsByCurrency[currency], currency);
     }
     
-    // Multiple currencies - show breakdown
+    // Multiple currencies - show count of currencies
+    return `${currencies.length} Currencies`;
+  };
+
+  const getTotalInvestedSubtext = () => {
+    const totalsByCurrency = calculateTotalInvestedByCurrency();
+    const currencies = Object.keys(totalsByCurrency);
+    
+    if (currencies.length <= 1) {
+      return 'Total Invested';
+    }
+    
+    // Show the actual amounts for multi-currency in subtext
     return currencies.map(currency => 
       formatCurrency(totalsByCurrency[currency], currency)
-    ).join(' + ');
+    ).join(', ');
   };
 
   const getTransactionTypeColor = (type: string) => {
@@ -388,22 +400,13 @@ export const TransactionHistory: React.FC = () => {
                 <Box sx={{ p: 1, bgcolor: 'success.main', borderRadius: 1, color: 'white' }}>
                   <AttachMoney />
                 </Box>
-                <Box sx={{ minWidth: 0, flex: 1 }}>
-                  <Typography variant="h6" sx={{ fontWeight: 'bold', fontSize: '1.1rem' }}>
+                <Box>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
                     {formatTotalInvested()}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Total Invested
+                    {getTotalInvestedSubtext()}
                   </Typography>
-                  {Object.keys(calculateTotalInvestedByCurrency()).length > 1 && (
-                    <Stack spacing={0.5} sx={{ mt: 1 }}>
-                      {Object.entries(calculateTotalInvestedByCurrency()).map(([currency, amount]) => (
-                        <Typography key={currency} variant="caption" color="text.secondary">
-                          {formatCurrency(amount, currency)}
-                        </Typography>
-                      ))}
-                    </Stack>
-                  )}
                 </Box>
               </Stack>
             </CardContent>
