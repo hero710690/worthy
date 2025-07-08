@@ -1233,7 +1233,7 @@ def handle_get_fire_profile(user_id):
         logger.error(f"Get FIRE profile error: {str(e)}")
         return create_error_response(500, "Failed to retrieve FIRE profile")
 
-def calculate_fire_progress(user_id)::
+def calculate_fire_progress(user_id):
     """Calculate FIRE progress for a user"""
     try:
         # Get user's FIRE profile
