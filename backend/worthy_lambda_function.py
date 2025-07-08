@@ -1248,65 +1248,161 @@ def calculate_fire_progress(user_id):
         
         profile = profile[0]
         
-        # Get user's current total assets (this would need to be calculated from portfolio)
-        # For now, we'll return the calculation structure
+        # Get user info for age calculation and base currency
+        user = execute_query(
+            DATABASE_URL,
+            "SELECT birth_year, base_currency FROM users WHERE user_id = %s",
+            (user_id,)
+        )[0]
+        
+        current_year = datetime.now().year
+        current_age = current_year - user['birth_year']
+        base_currency = user['base_currency']
+        
+        # Get user's current portfolio value (simplified calculation)
+        assets = execute_query(
+            DATABASE_URL,
+            """
+            SELECT a.ticker_symbol, a.total_shares, a.average_cost_basis, a.currency
+            FROM assets a
+            WHERE a.user_id = %s AND a.total_shares > 0
+            """,
+            (user_id,)
+        )
+        
+        # Calculate current portfolio value (using cost basis for now)
+        # In a real implementation, this would use current market prices
+        current_portfolio_value = 0
+        for asset in assets:
+            asset_value = float(asset['total_shares']) * float(asset['average_cost_basis'])
+            # For simplicity, assume all values are in base currency
+            # In production, you'd convert currencies here
+            current_portfolio_value += asset_value
+        
+        # FIRE profile values
         annual_expenses = float(profile['annual_expenses']) if profile['annual_expenses'] else 0
         safe_withdrawal_rate = float(profile['safe_withdrawal_rate'])
         expected_annual_return = float(profile['expected_annual_return'])
         target_retirement_age = profile['target_retirement_age']
         barista_annual_income = float(profile['barista_annual_income'])
         
-        # Get user's birth year for age calculation
-        user = execute_query(
-            DATABASE_URL,
-            "SELECT birth_year FROM users WHERE user_id = %s",
-            (user_id,)
-        )[0]
-        
-        current_year = datetime.now().year
-        current_age = current_year - user['birth_year']
-        years_to_retirement = target_retirement_age - current_age if target_retirement_age else 0
+        years_to_retirement = max(target_retirement_age - current_age, 0) if target_retirement_age else 0
         
         # FIRE Calculations
-        traditional_fire_target = annual_expenses / safe_withdrawal_rate if annual_expenses > 0 else 0
-        barista_fire_target = (annual_expenses - barista_annual_income) / safe_withdrawal_rate if annual_expenses > 0 else 0
-        coast_fire_target = traditional_fire_target / ((1 + expected_annual_return) ** years_to_retirement) if years_to_retirement > 0 else traditional_fire_target
-        
-        # TODO: Get actual current portfolio value
-        current_portfolio_value = 0  # This should be calculated from user's assets
+        traditional_fire_target = annual_expenses / safe_withdrawal_rate if annual_expenses > 0 and safe_withdrawal_rate > 0 else 0
+        barista_fire_target = max((annual_expenses - barista_annual_income) / safe_withdrawal_rate, 0) if annual_expenses > 0 and safe_withdrawal_rate > 0 else 0
+        coast_fire_target = traditional_fire_target / ((1 + expected_annual_return) ** years_to_retirement) if years_to_retirement > 0 and expected_annual_return > 0 else traditional_fire_target
         
         # Calculate progress percentages
         traditional_progress = (current_portfolio_value / traditional_fire_target * 100) if traditional_fire_target > 0 else 0
         barista_progress = (current_portfolio_value / barista_fire_target * 100) if barista_fire_target > 0 else 0
         coast_progress = (current_portfolio_value / coast_fire_target * 100) if coast_fire_target > 0 else 0
         
+        # Calculate years remaining and monthly investment needed
+        def calculate_years_remaining(target, current_value, monthly_investment, annual_return):
+            if target <= current_value:
+                return 0
+            if monthly_investment <= 0:
+                return 999  # Infinite years if no monthly investment
+            
+            # Financial calculation for years to reach target with monthly investments
+            monthly_rate = annual_return / 12
+            if monthly_rate == 0:
+                return (target - current_value) / (monthly_investment * 12)
+            
+            # Future value of current investments + future value of monthly investments
+            import math
+            try:
+                years = math.log((target * monthly_rate / monthly_investment) + 1) / (12 * math.log(1 + monthly_rate))
+                return max(years, 0)
+            except:
+                return 999
+        
+        def calculate_monthly_needed(target, current_value, years, annual_return):
+            if years <= 0 or target <= current_value:
+                return 0
+            
+            monthly_rate = annual_return / 12
+            months = years * 12
+            
+            if monthly_rate == 0:
+                return (target - current_value) / months
+            
+            # Calculate monthly payment needed
+            future_value_current = current_value * ((1 + monthly_rate) ** months)
+            remaining_needed = target - future_value_current
+            
+            if remaining_needed <= 0:
+                return 0
+            
+            # Monthly payment for annuity
+            monthly_payment = remaining_needed * monthly_rate / (((1 + monthly_rate) ** months) - 1)
+            return max(monthly_payment, 0)
+        
+        # Calculate metrics for each FIRE type
+        traditional_years = calculate_years_remaining(traditional_fire_target, current_portfolio_value, 0, expected_annual_return)
+        barista_years = calculate_years_remaining(barista_fire_target, current_portfolio_value, 0, expected_annual_return)
+        coast_years = calculate_years_remaining(coast_fire_target, current_portfolio_value, 0, expected_annual_return)
+        
+        traditional_monthly = calculate_monthly_needed(traditional_fire_target, current_portfolio_value, min(traditional_years, 30), expected_annual_return)
+        barista_monthly = calculate_monthly_needed(barista_fire_target, current_portfolio_value, min(barista_years, 30), expected_annual_return)
+        coast_monthly = calculate_monthly_needed(coast_fire_target, current_portfolio_value, min(coast_years, 30), expected_annual_return)
+        
+        # Create calculation objects for frontend
+        calculations = [
+            {
+                "fire_type": "Traditional",
+                "target_amount": traditional_fire_target,
+                "current_progress": current_portfolio_value,
+                "progress_percentage": min(traditional_progress, 100),
+                "years_remaining": traditional_years,
+                "monthly_investment_needed": traditional_monthly,
+                "achieved": traditional_progress >= 100
+            },
+            {
+                "fire_type": "Barista", 
+                "target_amount": barista_fire_target,
+                "current_progress": current_portfolio_value,
+                "progress_percentage": min(barista_progress, 100),
+                "years_remaining": barista_years,
+                "monthly_investment_needed": barista_monthly,
+                "achieved": barista_progress >= 100
+            },
+            {
+                "fire_type": "Coast",
+                "target_amount": coast_fire_target,
+                "current_progress": current_portfolio_value,
+                "progress_percentage": min(coast_progress, 100),
+                "years_remaining": coast_years,
+                "monthly_investment_needed": coast_monthly,
+                "achieved": coast_progress >= 100
+            }
+        ]
+        
         return create_response(200, {
             "fire_progress": {
-                "current_portfolio_value": current_portfolio_value,
-                "current_age": current_age,
-                "target_retirement_age": target_retirement_age,
-                "years_to_retirement": years_to_retirement,
-                "traditional_fire": {
-                    "target": traditional_fire_target,
-                    "progress_percentage": min(traditional_progress, 100),
-                    "remaining_amount": max(traditional_fire_target - current_portfolio_value, 0)
-                },
-                "barista_fire": {
-                    "target": barista_fire_target,
-                    "progress_percentage": min(barista_progress, 100),
-                    "remaining_amount": max(barista_fire_target - current_portfolio_value, 0)
-                },
-                "coast_fire": {
-                    "target": coast_fire_target,
-                    "progress_percentage": min(coast_progress, 100),
-                    "remaining_amount": max(coast_fire_target - current_portfolio_value, 0)
-                }
-            }
+                "current_total_assets": current_portfolio_value,
+                "traditional_fire_target": traditional_fire_target,
+                "barista_fire_target": barista_fire_target,
+                "coast_fire_target": coast_fire_target,
+                "traditional_fire_progress": min(traditional_progress, 100),
+                "barista_fire_progress": min(barista_progress, 100),
+                "coast_fire_progress": min(coast_progress, 100),
+                "years_to_traditional_fire": traditional_years,
+                "years_to_barista_fire": barista_years,
+                "years_to_coast_fire": coast_years,
+                "monthly_investment_needed_traditional": traditional_monthly,
+                "monthly_investment_needed_barista": barista_monthly,
+                "is_coast_fire_achieved": coast_progress >= 100
+            },
+            "calculations": calculations,
+            "user_age": current_age,
+            "base_currency": base_currency
         })
         
     except Exception as e:
         logger.error(f"Calculate FIRE progress error: {str(e)}")
-        return create_error_response(500, "Failed to calculate FIRE progress")
+        return create_error_response(500, f"Failed to calculate FIRE progress: {str(e)}")
 
 def handle_get_stock_prices_multi_api(query_params):
     """Handle multi-API stock price requests with fallback"""
