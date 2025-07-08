@@ -1233,7 +1233,7 @@ def handle_get_fire_profile(user_id):
         logger.error(f"Get FIRE profile error: {str(e)}")
         return create_error_response(500, "Failed to retrieve FIRE profile")
 
-def calculate_fire_progress(user_id):
+def calculate_fire_progress(user_id)::
     """Calculate FIRE progress for a user"""
     try:
         # Get user's FIRE profile
@@ -1259,7 +1259,7 @@ def calculate_fire_progress(user_id):
         current_age = current_year - user['birth_year']
         base_currency = user['base_currency']
         
-        # Get user's current portfolio value (simplified calculation)
+        # Get user's current portfolio value using real-time market prices
         assets = execute_query(
             DATABASE_URL,
             """
@@ -1270,14 +1270,35 @@ def calculate_fire_progress(user_id):
             (user_id,)
         )
         
-        # Calculate current portfolio value (using cost basis for now)
-        # In a real implementation, this would use current market prices
+        # Calculate current portfolio value using real-time market prices
         current_portfolio_value = 0
         for asset in assets:
-            asset_value = float(asset['total_shares']) * float(asset['average_cost_basis'])
-            # For simplicity, assume all values are in base currency
-            # In production, you'd convert currencies here
+            ticker = asset['ticker_symbol']
+            shares = float(asset['total_shares'])
+            currency = asset['currency']
+            cost_basis = float(asset['average_cost_basis'])
+            
+            # Get current market price with fallback to cost basis
+            try:
+                # Try to get real-time price using existing function
+                stock_price = fetch_stock_price_with_fallback(ticker)
+                if stock_price and 'current_price' in stock_price:
+                    current_price = float(stock_price['current_price'])
+                    logger.info(f"Using real-time price for {ticker}: {current_price}")
+                else:
+                    # Fallback to cost basis
+                    current_price = cost_basis
+                    logger.info(f"Using cost basis for {ticker}: {current_price}")
+            except Exception as e:
+                # Fallback to cost basis if API fails
+                current_price = cost_basis
+                logger.warning(f"API error for {ticker}, using cost basis: {str(e)}")
+            
+            # Calculate asset value (simplified - assume base currency for now)
+            asset_value = shares * current_price
             current_portfolio_value += asset_value
+            
+            logger.info(f"Asset {ticker}: {shares} shares × {current_price} = {asset_value}")
         
         # FIRE profile values
         annual_expenses = float(profile['annual_expenses']) if profile['annual_expenses'] else 0
