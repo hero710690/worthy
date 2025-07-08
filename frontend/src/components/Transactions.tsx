@@ -30,6 +30,7 @@ import {
 } from '@mui/icons-material';
 import { useAuthStore } from '../store/authStore';
 import { assetAPI } from '../services/assetApi';
+import { exchangeRateService } from '../services/exchangeRateService';
 import { TransactionForm } from './assets/TransactionForm';
 import type { Asset, Transaction } from '../types/assets';
 
@@ -84,12 +85,7 @@ export const Transactions: React.FC = () => {
   };
 
   const formatCurrency = (amount: number, currency: string) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: currency,
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    }).format(amount);
+    return exchangeRateService.formatCurrency(amount, currency);
   };
 
   const formatDate = (dateString: string) => {
