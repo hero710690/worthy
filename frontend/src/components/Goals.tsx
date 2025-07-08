@@ -646,40 +646,58 @@ export const Goals: React.FC = () => {
                 Current FIRE Settings
               </Typography>
               
-              <Grid container spacing={3}>
+              {/* Current Financial Snapshot */}
+              <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 'bold', color: 'primary.main' }}>
+                💰 Current Financial Snapshot
+              </Typography>
+              <Grid container spacing={2} sx={{ mb: 3 }}>
                 <Grid item xs={12} sm={6} md={4}>
                   <Paper sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      Annual Expenses
+                      Annual Income
                     </Typography>
                     <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                      {formatCurrency(fireProfile.annual_expenses)}
+                      {formatBaseCurrency(formData.annual_income)}
                     </Typography>
                   </Paper>
                 </Grid>
-
                 <Grid item xs={12} sm={6} md={4}>
                   <Paper sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      Safe Withdrawal Rate
+                      Annual Savings
                     </Typography>
                     <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                      {formatPercentage(fireProfile.safe_withdrawal_rate)}
+                      {formatBaseCurrency(formData.annual_savings)}
                     </Typography>
                   </Paper>
                 </Grid>
-
                 <Grid item xs={12} sm={6} md={4}>
                   <Paper sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      Expected Annual Return
+                      Savings Rate
                     </Typography>
                     <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                      {formatPercentage(fireProfile.expected_annual_return)}
+                      {formData.annual_income > 0 ? ((formData.annual_savings / formData.annual_income) * 100).toFixed(1) : 0}%
                     </Typography>
                   </Paper>
                 </Grid>
+              </Grid>
 
+              {/* Retirement Goals */}
+              <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 'bold', color: 'success.main' }}>
+                🎯 Retirement Goals
+              </Typography>
+              <Grid container spacing={2} sx={{ mb: 3 }}>
+                <Grid item xs={12} sm={6} md={4}>
+                  <Paper sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                      Annual Expenses in Retirement
+                    </Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                      {formatBaseCurrency(fireProfile.annual_expenses)}
+                    </Typography>
+                  </Paper>
+                </Grid>
                 <Grid item xs={12} sm={6} md={4}>
                   <Paper sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
@@ -690,18 +708,6 @@ export const Goals: React.FC = () => {
                     </Typography>
                   </Paper>
                 </Grid>
-
-                <Grid item xs={12} sm={6} md={4}>
-                  <Paper sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      Barista Annual Income
-                    </Typography>
-                    <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                      {formatCurrency(fireProfile.barista_annual_income)}
-                    </Typography>
-                  </Paper>
-                </Grid>
-
                 <Grid item xs={12} sm={6} md={4}>
                   <Paper sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
@@ -709,6 +715,90 @@ export const Goals: React.FC = () => {
                     </Typography>
                     <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
                       {userAge}
+                    </Typography>
+                  </Paper>
+                </Grid>
+              </Grid>
+
+              {/* Core Assumptions */}
+              <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 'bold', color: 'warning.main' }}>
+                ⚙️ Core Assumptions
+              </Typography>
+              <Grid container spacing={2} sx={{ mb: 3 }}>
+                <Grid item xs={12} sm={6} md={4}>
+                  <Paper sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                      Safe Withdrawal Rate
+                    </Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                      {(formData.safe_withdrawal_rate * 100).toFixed(1)}%
+                    </Typography>
+                  </Paper>
+                </Grid>
+                <Grid item xs={12} sm={6} md={4}>
+                  <Paper sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                      Expected Inflation Rate
+                    </Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                      {(formData.expected_inflation_rate * 100).toFixed(1)}%
+                    </Typography>
+                  </Paper>
+                </Grid>
+                <Grid item xs={12} sm={6} md={4}>
+                  <Paper sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                      Pre-Retirement Return
+                    </Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                      {(formData.expected_return_pre_retirement * 100).toFixed(1)}%
+                    </Typography>
+                  </Paper>
+                </Grid>
+                <Grid item xs={12} sm={6} md={4}>
+                  <Paper sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                      Post-Retirement Return
+                    </Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                      {(formData.expected_return_post_retirement * 100).toFixed(1)}%
+                    </Typography>
+                  </Paper>
+                </Grid>
+                <Grid item xs={12} sm={6} md={4}>
+                  <Paper sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                      Other Passive Income
+                    </Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                      {formatBaseCurrency(formData.other_passive_income)}
+                    </Typography>
+                  </Paper>
+                </Grid>
+                <Grid item xs={12} sm={6} md={4}>
+                  <Paper sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                      Effective Tax Rate
+                    </Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                      {(formData.effective_tax_rate * 100).toFixed(1)}%
+                    </Typography>
+                  </Paper>
+                </Grid>
+              </Grid>
+
+              {/* Barista FIRE Options */}
+              <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 'bold', color: 'info.main' }}>
+                ☕ Barista FIRE Options
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6} md={4}>
+                  <Paper sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                      Barista Annual Income
+                    </Typography>
+                    <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                      {formatBaseCurrency(fireProfile.barista_annual_income)}
                     </Typography>
                   </Paper>
                 </Grid>
