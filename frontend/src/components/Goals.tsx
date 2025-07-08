@@ -50,55 +50,102 @@ export const Goals: React.FC = () => {
   const [userAge, setUserAge] = useState<number>(30);
   const [baseCurrency, setBaseCurrency] = useState<string>('USD');
 
-  // Form state
+  // Enhanced form state with comprehensive FIRE planning fields
   const [formData, setFormData] = useState<CreateFIREProfileRequest>({
-    annual_expenses: 50000,
-    safe_withdrawal_rate: 0.04,
-    expected_annual_return: 0.07,
+    // 財務現況 (Current Financial Snapshot)
+    annual_income: 1000000, // NT$1,000,000 default
+    annual_savings: 200000, // NT$200,000 default (20% savings rate)
+    
+    // 退休目標 (Retirement Goals)
+    annual_expenses: 600000, // NT$600,000 default
     target_retirement_age: 65,
-    barista_annual_income: 25000,
+    
+    // 核心假設 (Core Assumptions)
+    safe_withdrawal_rate: 0.04, // 4% default
+    expected_return_pre_retirement: 0.07, // 7% pre-retirement
+    expected_return_post_retirement: 0.05, // 5% post-retirement
+    expected_inflation_rate: 0.025, // 2.5% inflation
+    other_passive_income: 0, // No passive income by default
+    effective_tax_rate: 0.15, // 15% effective tax rate
+    
+    // Legacy fields for backward compatibility
+    expected_annual_return: 0.07,
+    barista_annual_income: 300000, // NT$300,000 part-time income
   });
 
   const calculateFIREProgress = (profile: FIREProfile, currentPortfolioValue: number): { progress: FIREProgress; calculations: FIRECalculation[] } => {
     const currentYear = new Date().getFullYear();
-    const currentAge = user?.birth_year ? currentYear - user.birth_year : 30;
+    const currentAge = profile.current_age || (user?.birth_year ? currentYear - user.birth_year : 30);
     const yearsToRetirement = Math.max(profile.target_retirement_age - currentAge, 0);
     
-    // FIRE Calculations
+    // Calculate inflation-adjusted values
+    const inflationFactor = Math.pow(1 + profile.expected_inflation_rate, yearsToRetirement);
+    const realAnnualExpenses = profile.annual_expenses * inflationFactor;
+    
+    // Calculate current savings rate
+    const currentSavingsRate = profile.annual_income > 0 ? (profile.annual_savings / profile.annual_income) : 0;
+    
+    // FIRE Target Calculations (both nominal and real values)
     const traditionalFireTarget = profile.annual_expenses / profile.safe_withdrawal_rate;
-    const baristaFireTarget = Math.max((profile.annual_expenses - profile.barista_annual_income) / profile.safe_withdrawal_rate, 0);
+    const traditionalFireTargetReal = realAnnualExpenses / profile.safe_withdrawal_rate;
+    
+    const netAnnualExpensesBarista = Math.max(profile.annual_expenses - profile.barista_annual_income, 0);
+    const baristaFireTarget = netAnnualExpensesBarista / profile.safe_withdrawal_rate;
+    const baristaFireTargetReal = (netAnnualExpensesBarista * inflationFactor) / profile.safe_withdrawal_rate;
+    
     const coastFireTarget = yearsToRetirement > 0 
-      ? traditionalFireTarget / Math.pow(1 + profile.expected_annual_return, yearsToRetirement)
+      ? traditionalFireTarget / Math.pow(1 + profile.expected_return_post_retirement, yearsToRetirement)
       : traditionalFireTarget;
+    const coastFireTargetReal = yearsToRetirement > 0
+      ? traditionalFireTargetReal / Math.pow(1 + profile.expected_return_post_retirement, yearsToRetirement)
+      : traditionalFireTargetReal;
     
-    // Progress percentages
-    const traditionalProgress = traditionalFireTarget > 0 ? (currentPortfolioValue / traditionalFireTarget * 100) : 0;
-    const baristaProgress = baristaFireTarget > 0 ? (currentPortfolioValue / baristaFireTarget * 100) : 0;
-    const coastProgress = coastFireTarget > 0 ? (currentPortfolioValue / coastFireTarget * 100) : 0;
+    // Progress percentages (based on real targets for more accuracy)
+    const traditionalProgress = traditionalFireTargetReal > 0 ? (currentPortfolioValue / traditionalFireTargetReal * 100) : 0;
+    const baristaProgress = baristaFireTargetReal > 0 ? (currentPortfolioValue / baristaFireTargetReal * 100) : 0;
+    const coastProgress = coastFireTargetReal > 0 ? (currentPortfolioValue / coastFireTargetReal * 100) : 0;
     
-    // Helper functions for years and monthly calculations
-    const calculateYearsRemaining = (target: number, currentValue: number, monthlyInvestment: number = 0, annualReturn: number = profile.expected_annual_return): number => {
+    // Enhanced calculation functions
+    const calculateYearsToFI = (target: number, currentValue: number, annualSavings: number, returnRate: number): number => {
       if (target <= currentValue) return 0;
-      if (monthlyInvestment <= 0) return 999;
-      
-      const monthlyRate = annualReturn / 12;
-      if (monthlyRate === 0) return (target - currentValue) / (monthlyInvestment * 12);
+      if (annualSavings <= 0) return 999;
       
       try {
-        const years = Math.log((target * monthlyRate / monthlyInvestment) + 1) / (12 * Math.log(1 + monthlyRate));
+        // Using the compound interest formula for regular contributions
+        const monthlyRate = returnRate / 12;
+        const monthlyContribution = annualSavings / 12;
+        const remainingNeeded = target - currentValue;
+        
+        if (monthlyRate === 0) {
+          return remainingNeeded / annualSavings;
+        }
+        
+        // Future value of current assets
+        const futureValueCurrent = currentValue * Math.pow(1 + monthlyRate, 12 * 30); // Max 30 years
+        
+        // If current assets will grow to exceed target
+        if (futureValueCurrent >= target) {
+          return Math.log(target / currentValue) / (12 * Math.log(1 + monthlyRate));
+        }
+        
+        // Calculate years needed with monthly contributions
+        const years = Math.log((target * monthlyRate / monthlyContribution) + 1) / (12 * Math.log(1 + monthlyRate));
         return Math.max(years, 0);
       } catch {
         return 999;
       }
     };
     
-    const calculateMonthlyNeeded = (target: number, currentValue: number, years: number = 30, annualReturn: number = profile.expected_annual_return): number => {
-      if (years <= 0 || target <= currentValue) return 0;
+    const calculateRequiredSavingsRate = (target: number, currentValue: number, years: number, returnRate: number, income: number): number => {
+      if (years <= 0 || target <= currentValue || income <= 0) return 0;
       
-      const monthlyRate = annualReturn / 12;
+      const monthlyRate = returnRate / 12;
       const months = years * 12;
       
-      if (monthlyRate === 0) return (target - currentValue) / months;
+      if (monthlyRate === 0) {
+        const requiredSavings = (target - currentValue) / years;
+        return requiredSavings / income;
+      }
       
       const futureValueCurrent = currentValue * Math.pow(1 + monthlyRate, months);
       const remainingNeeded = target - futureValueCurrent;
@@ -106,61 +153,102 @@ export const Goals: React.FC = () => {
       if (remainingNeeded <= 0) return 0;
       
       const monthlyPayment = remainingNeeded * monthlyRate / (Math.pow(1 + monthlyRate, months) - 1);
-      return Math.max(monthlyPayment, 0);
+      const annualPayment = monthlyPayment * 12;
+      
+      return annualPayment / income;
     };
     
     // Calculate metrics for each FIRE type
-    const traditionalYears = calculateYearsRemaining(traditionalFireTarget, currentPortfolioValue);
-    const baristaYears = calculateYearsRemaining(baristaFireTarget, currentPortfolioValue);
-    const coastYears = calculateYearsRemaining(coastFireTarget, currentPortfolioValue);
+    const traditionalYears = calculateYearsToFI(traditionalFireTargetReal, currentPortfolioValue, profile.annual_savings, profile.expected_return_pre_retirement);
+    const baristaYears = calculateYearsToFI(baristaFireTargetReal, currentPortfolioValue, profile.annual_savings, profile.expected_return_pre_retirement);
+    const coastYears = calculateYearsToFI(coastFireTargetReal, currentPortfolioValue, profile.annual_savings, profile.expected_return_pre_retirement);
     
-    const traditionalMonthly = calculateMonthlyNeeded(traditionalFireTarget, currentPortfolioValue, Math.min(traditionalYears, 30));
-    const baristaMonthly = calculateMonthlyNeeded(baristaFireTarget, currentPortfolioValue, Math.min(baristaYears, 30));
-    const coastMonthly = calculateMonthlyNeeded(coastFireTarget, currentPortfolioValue, Math.min(coastYears, 30));
+    const traditionalSavingsRate = calculateRequiredSavingsRate(traditionalFireTargetReal, currentPortfolioValue, Math.min(traditionalYears, 30), profile.expected_return_pre_retirement, profile.annual_income);
+    const baristaSavingsRate = calculateRequiredSavingsRate(baristaFireTargetReal, currentPortfolioValue, Math.min(baristaYears, 30), profile.expected_return_pre_retirement, profile.annual_income);
+    
+    // Calculate projected FI dates
+    const traditionalFIDate = traditionalYears < 999 ? new Date(currentYear + traditionalYears, 0, 1).toISOString().split('T')[0] : undefined;
+    const baristaFIDate = baristaYears < 999 ? new Date(currentYear + baristaYears, 0, 1).toISOString().split('T')[0] : undefined;
+    
+    // Calculate purchasing power at retirement
+    const purchasingPowerAtRetirement = traditionalFireTargetReal / Math.pow(1 + profile.expected_inflation_rate, traditionalYears);
+    
+    // Tax-adjusted withdrawal calculations
+    const taxAdjustedWithdrawalTraditional = (traditionalFireTarget * profile.safe_withdrawal_rate) * (1 - profile.effective_tax_rate);
+    const taxAdjustedWithdrawalBarista = (baristaFireTarget * profile.safe_withdrawal_rate) * (1 - profile.effective_tax_rate);
     
     const progress: FIREProgress = {
       current_total_assets: currentPortfolioValue,
+      current_age: currentAge,
+      years_to_retirement: yearsToRetirement,
+      
       traditional_fire_target: traditionalFireTarget,
+      traditional_fire_target_real: traditionalFireTargetReal,
       barista_fire_target: baristaFireTarget,
+      barista_fire_target_real: baristaFireTargetReal,
       coast_fire_target: coastFireTarget,
+      coast_fire_target_real: coastFireTargetReal,
+      
       traditional_fire_progress: Math.min(traditionalProgress, 100),
       barista_fire_progress: Math.min(baristaProgress, 100),
       coast_fire_progress: Math.min(coastProgress, 100),
+      
       years_to_traditional_fire: traditionalYears,
       years_to_barista_fire: baristaYears,
       years_to_coast_fire: coastYears,
-      monthly_investment_needed_traditional: traditionalMonthly,
-      monthly_investment_needed_barista: baristaMonthly,
-      is_coast_fire_achieved: coastProgress >= 100
+      
+      monthly_investment_needed_traditional: (profile.annual_savings / 12),
+      monthly_investment_needed_barista: (profile.annual_savings / 12),
+      annual_savings_rate: currentSavingsRate,
+      required_savings_rate_traditional: traditionalSavingsRate,
+      
+      is_coast_fire_achieved: coastProgress >= 100,
+      financial_independence_date: traditionalFIDate,
+      purchasing_power_at_retirement: purchasingPowerAtRetirement
     };
     
     const calculations: FIRECalculation[] = [
       {
         fire_type: 'Traditional',
         target_amount: traditionalFireTarget,
+        target_amount_real: traditionalFireTargetReal,
         current_progress: currentPortfolioValue,
         progress_percentage: Math.min(traditionalProgress, 100),
         years_remaining: traditionalYears,
-        monthly_investment_needed: traditionalMonthly,
-        achieved: traditionalProgress >= 100
+        monthly_investment_needed: profile.annual_savings / 12,
+        annual_savings_rate_required: traditionalSavingsRate,
+        achieved: traditionalProgress >= 100,
+        projected_fi_date: traditionalFIDate,
+        real_purchasing_power: purchasingPowerAtRetirement,
+        tax_adjusted_withdrawal: taxAdjustedWithdrawalTraditional
       },
       {
         fire_type: 'Barista',
         target_amount: baristaFireTarget,
+        target_amount_real: baristaFireTargetReal,
         current_progress: currentPortfolioValue,
         progress_percentage: Math.min(baristaProgress, 100),
         years_remaining: baristaYears,
-        monthly_investment_needed: baristaMonthly,
-        achieved: baristaProgress >= 100
+        monthly_investment_needed: profile.annual_savings / 12,
+        annual_savings_rate_required: baristaSavingsRate,
+        achieved: baristaProgress >= 100,
+        projected_fi_date: baristaFIDate,
+        real_purchasing_power: baristaFireTargetReal / Math.pow(1 + profile.expected_inflation_rate, baristaYears),
+        tax_adjusted_withdrawal: taxAdjustedWithdrawalBarista
       },
       {
         fire_type: 'Coast',
         target_amount: coastFireTarget,
+        target_amount_real: coastFireTargetReal,
         current_progress: currentPortfolioValue,
         progress_percentage: Math.min(coastProgress, 100),
         years_remaining: coastYears,
-        monthly_investment_needed: coastMonthly,
-        achieved: coastProgress >= 100
+        monthly_investment_needed: 0, // Coast FIRE doesn't require additional contributions
+        annual_savings_rate_required: 0,
+        achieved: coastProgress >= 100,
+        projected_fi_date: undefined,
+        real_purchasing_power: coastFireTargetReal,
+        tax_adjusted_withdrawal: (coastFireTarget * profile.safe_withdrawal_rate) * (1 - profile.effective_tax_rate)
       }
     ];
     
@@ -205,13 +293,22 @@ export const Goals: React.FC = () => {
         setFireProgress(progress);
         setCalculations(calculations);
         
-        // Update form with existing data
+        // Update form with existing data, mapping to new comprehensive structure
+        const existingProfile = profileResponse.fire_profile;
         setFormData({
-          annual_expenses: profileResponse.fire_profile.annual_expenses,
-          safe_withdrawal_rate: profileResponse.fire_profile.safe_withdrawal_rate,
-          expected_annual_return: profileResponse.fire_profile.expected_annual_return,
-          target_retirement_age: profileResponse.fire_profile.target_retirement_age,
-          barista_annual_income: profileResponse.fire_profile.barista_annual_income,
+          // Map existing fields to new structure
+          annual_income: 1000000, // Default, will be user-configurable
+          annual_savings: 200000, // Default, will be user-configurable
+          annual_expenses: existingProfile.annual_expenses,
+          target_retirement_age: existingProfile.target_retirement_age,
+          safe_withdrawal_rate: existingProfile.safe_withdrawal_rate,
+          expected_return_pre_retirement: existingProfile.expected_annual_return,
+          expected_return_post_retirement: existingProfile.expected_annual_return * 0.8, // Conservative estimate
+          expected_inflation_rate: 0.025, // Default 2.5%
+          other_passive_income: 0, // Default
+          effective_tax_rate: 0.15, // Default 15%
+          expected_annual_return: existingProfile.expected_annual_return,
+          barista_annual_income: existingProfile.barista_annual_income,
         });
       }
       
@@ -627,60 +724,189 @@ export const Goals: React.FC = () => {
           {fireProfile ? 'Update FIRE Goals' : 'Set FIRE Goals'}
         </DialogTitle>
         <DialogContent>
-          <Stack spacing={3} sx={{ mt: 1 }}>
+          <Stack spacing={4} sx={{ mt: 1 }}>
             <Alert severity="info">
               <Typography variant="body2">
-                Configure your FIRE parameters to calculate your progress toward different types of financial independence.
+                Configure your comprehensive FIRE parameters for accurate financial independence calculations including inflation, taxes, and multiple income sources.
               </Typography>
             </Alert>
 
-            <TextField
-              label="Annual Expenses (after retirement)"
-              type="number"
-              value={formData.annual_expenses}
-              onChange={(e) => setFormData({ ...formData, annual_expenses: parseFloat(e.target.value) || 0 })}
-              helperText="How much you expect to spend per year in retirement"
-              fullWidth
-            />
+            {/* 財務現況 (Current Financial Snapshot) */}
+            <Paper elevation={0} sx={{ p: 3, bgcolor: 'grey.50' }}>
+              <Typography variant="h6" sx={{ mb: 2, color: 'primary.main' }}>
+                💰 財務現況 (Current Financial Snapshot)
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="年收入 (Annual Income)"
+                    type="number"
+                    value={formData.annual_income}
+                    onChange={(e) => setFormData({ ...formData, annual_income: parseFloat(e.target.value) || 0 })}
+                    helperText="Your total annual income before taxes"
+                    fullWidth
+                    InputProps={{
+                      startAdornment: <Typography sx={{ mr: 1 }}>NT$</Typography>
+                    }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="年儲蓄金額 (Annual Savings)"
+                    type="number"
+                    value={formData.annual_savings}
+                    onChange={(e) => setFormData({ ...formData, annual_savings: parseFloat(e.target.value) || 0 })}
+                    helperText={`Savings rate: ${formData.annual_income > 0 ? ((formData.annual_savings / formData.annual_income) * 100).toFixed(1) : 0}%`}
+                    fullWidth
+                    InputProps={{
+                      startAdornment: <Typography sx={{ mr: 1 }}>NT$</Typography>
+                    }}
+                  />
+                </Grid>
+              </Grid>
+            </Paper>
 
-            <TextField
-              label="Safe Withdrawal Rate"
-              type="number"
-              value={formData.safe_withdrawal_rate}
-              onChange={(e) => setFormData({ ...formData, safe_withdrawal_rate: parseFloat(e.target.value) || 0 })}
-              helperText="Percentage of portfolio you can safely withdraw annually (typically 3-4%)"
-              inputProps={{ step: 0.01, min: 0.01, max: 0.1 }}
-              fullWidth
-            />
+            {/* 退休目標 (Retirement Goals) */}
+            <Paper elevation={0} sx={{ p: 3, bgcolor: 'grey.50' }}>
+              <Typography variant="h6" sx={{ mb: 2, color: 'success.main' }}>
+                🎯 退休目標 (Retirement Goals)
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="退休後年支出 (Annual Expenses)"
+                    type="number"
+                    value={formData.annual_expenses}
+                    onChange={(e) => setFormData({ ...formData, annual_expenses: parseFloat(e.target.value) || 0 })}
+                    helperText="Expected annual spending in retirement (may differ from current expenses)"
+                    fullWidth
+                    InputProps={{
+                      startAdornment: <Typography sx={{ mr: 1 }}>NT$</Typography>
+                    }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="目標退休年齡 (Target Retirement Age)"
+                    type="number"
+                    value={formData.target_retirement_age}
+                    onChange={(e) => setFormData({ ...formData, target_retirement_age: parseInt(e.target.value) || 65 })}
+                    helperText="Your ideal retirement age"
+                    fullWidth
+                  />
+                </Grid>
+              </Grid>
+            </Paper>
 
-            <TextField
-              label="Expected Annual Return"
-              type="number"
-              value={formData.expected_annual_return}
-              onChange={(e) => setFormData({ ...formData, expected_annual_return: parseFloat(e.target.value) || 0 })}
-              helperText="Expected annual return on your investments (typically 6-8%)"
-              inputProps={{ step: 0.01, min: 0.01, max: 0.2 }}
-              fullWidth
-            />
+            {/* 核心假設 (Core Assumptions) */}
+            <Paper elevation={0} sx={{ p: 3, bgcolor: 'grey.50' }}>
+              <Typography variant="h6" sx={{ mb: 2, color: 'warning.main' }}>
+                ⚙️ 核心假設 (Core Assumptions)
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="安全提領率 (Safe Withdrawal Rate)"
+                    type="number"
+                    value={formData.safe_withdrawal_rate}
+                    onChange={(e) => setFormData({ ...formData, safe_withdrawal_rate: parseFloat(e.target.value) || 0.04 })}
+                    helperText="3-5% recommended. Lower = more conservative"
+                    fullWidth
+                    inputProps={{ min: 0.03, max: 0.05, step: 0.001 }}
+                    InputProps={{
+                      endAdornment: <Typography sx={{ ml: 1 }}>%</Typography>
+                    }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="預期通膨率 (Expected Inflation)"
+                    type="number"
+                    value={formData.expected_inflation_rate}
+                    onChange={(e) => setFormData({ ...formData, expected_inflation_rate: parseFloat(e.target.value) || 0.025 })}
+                    helperText="Long-term inflation rate (2-3% typical)"
+                    fullWidth
+                    inputProps={{ min: 0.01, max: 0.05, step: 0.001 }}
+                    InputProps={{
+                      endAdornment: <Typography sx={{ ml: 1 }}>%</Typography>
+                    }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="退休前預期報酬率 (Pre-Retirement Return)"
+                    type="number"
+                    value={formData.expected_return_pre_retirement}
+                    onChange={(e) => setFormData({ ...formData, expected_return_pre_retirement: parseFloat(e.target.value) || 0.07 })}
+                    helperText="Expected annual return during accumulation phase (6-8%)"
+                    fullWidth
+                    inputProps={{ min: 0.04, max: 0.12, step: 0.001 }}
+                    InputProps={{
+                      endAdornment: <Typography sx={{ ml: 1 }}>%</Typography>
+                    }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="退休後預期報酬率 (Post-Retirement Return)"
+                    type="number"
+                    value={formData.expected_return_post_retirement}
+                    onChange={(e) => setFormData({ ...formData, expected_return_post_retirement: parseFloat(e.target.value) || 0.05 })}
+                    helperText="Expected annual return during withdrawal phase (4-6%)"
+                    fullWidth
+                    inputProps={{ min: 0.03, max: 0.08, step: 0.001 }}
+                    InputProps={{
+                      endAdornment: <Typography sx={{ ml: 1 }}>%</Typography>
+                    }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="其他被動收入 (Other Passive Income)"
+                    type="number"
+                    value={formData.other_passive_income}
+                    onChange={(e) => setFormData({ ...formData, other_passive_income: parseFloat(e.target.value) || 0 })}
+                    helperText="Rental income, royalties, pensions, etc."
+                    fullWidth
+                    InputProps={{
+                      startAdornment: <Typography sx={{ mr: 1 }}>NT$</Typography>
+                    }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="有效稅率 (Effective Tax Rate)"
+                    type="number"
+                    value={formData.effective_tax_rate}
+                    onChange={(e) => setFormData({ ...formData, effective_tax_rate: parseFloat(e.target.value) || 0.15 })}
+                    helperText="Expected tax rate on withdrawals (10-25%)"
+                    fullWidth
+                    inputProps={{ min: 0, max: 0.5, step: 0.01 }}
+                    InputProps={{
+                      endAdornment: <Typography sx={{ ml: 1 }}>%</Typography>
+                    }}
+                  />
+                </Grid>
+              </Grid>
+            </Paper>
 
-            <TextField
-              label="Target Retirement Age"
-              type="number"
-              value={formData.target_retirement_age}
-              onChange={(e) => setFormData({ ...formData, target_retirement_age: parseInt(e.target.value) || 0 })}
-              helperText="Age at which you want to achieve traditional FIRE"
-              inputProps={{ min: 30, max: 100 }}
-              fullWidth
-            />
-
-            <TextField
-              label="Barista Annual Income"
-              type="number"
-              value={formData.barista_annual_income}
-              onChange={(e) => setFormData({ ...formData, barista_annual_income: parseFloat(e.target.value) || 0 })}
-              helperText="Expected annual income from part-time work (for Barista FIRE)"
-              fullWidth
-            />
+            {/* Barista FIRE Section */}
+            <Paper elevation={0} sx={{ p: 3, bgcolor: 'grey.50' }}>
+              <Typography variant="h6" sx={{ mb: 2, color: 'info.main' }}>
+                ☕ Barista FIRE Options
+              </Typography>
+              <TextField
+                label="Barista Annual Income"
+                type="number"
+                value={formData.barista_annual_income}
+                onChange={(e) => setFormData({ ...formData, barista_annual_income: parseFloat(e.target.value) || 0 })}
+                helperText="Expected annual income from part-time work (for Barista FIRE)"
+                fullWidth
+                InputProps={{
+                  startAdornment: <Typography sx={{ mr: 1 }}>NT$</Typography>
+                }}
+              />
+            </Paper>
           </Stack>
         </DialogContent>
         <DialogActions>
