@@ -623,22 +623,32 @@ export const Goals: React.FC = () => {
   }
 
   return (
-    <Box sx={{ p: { xs: 2, md: 3 } }}>
-      {/* Header */}
-      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1400, mx: 'auto' }}>
+      {/* Enhanced Header */}
+      <Box sx={{ mb: 4, display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' }, gap: 2 }}>
         <Box>
-          <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 1 }}>
-            FIRE Goals & Planning
+          <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 1, color: 'primary.main' }}>
+            FIRE Dashboard
           </Typography>
           <Typography variant="body1" color="text.secondary">
-            Track your progress toward Financial Independence, Retire Early (FIRE)
+            Track your journey to Financial Independence, Retire Early
           </Typography>
         </Box>
         <Button
           variant="contained"
           startIcon={fireProfile ? <Settings /> : <Calculate />}
           onClick={() => setOpenDialog(true)}
-          sx={{ borderRadius: 2 }}
+          sx={{ 
+            borderRadius: 2,
+            px: 3,
+            py: 1.5,
+            textTransform: 'none',
+            fontWeight: 'bold',
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            '&:hover': {
+              background: 'linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%)',
+            }
+          }}
         >
           {fireProfile ? 'Update Goals' : 'Set Goals'}
         </Button>
@@ -651,25 +661,41 @@ export const Goals: React.FC = () => {
       )}
 
       {!fireProfile ? (
-        // No FIRE profile - show setup prompt
-        <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', textAlign: 'center', py: 6 }}>
+        // Enhanced FIRE setup prompt
+        <Card sx={{ 
+          borderRadius: 3, 
+          border: '1px solid', 
+          borderColor: 'grey.200', 
+          textAlign: 'center', 
+          py: 8,
+          background: 'linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)'
+        }}>
           <CardContent>
-            <Calculate sx={{ fontSize: 64, color: 'primary.main', mb: 2 }} />
-            <Typography variant="h5" sx={{ fontWeight: 'bold', mb: 2 }}>
-              Set Your FIRE Goals
+            <Calculate sx={{ fontSize: 80, color: 'primary.main', mb: 3 }} />
+            <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 2 }}>
+              Welcome to Your FIRE Journey
             </Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 4, maxWidth: 600, mx: 'auto' }}>
-              Configure your financial independence goals to track your progress toward Traditional FIRE, 
-              Barista FIRE, and Coast FIRE. We'll calculate how close you are to each milestone.
+            <Typography variant="body1" color="text.secondary" sx={{ mb: 4, maxWidth: 700, mx: 'auto', fontSize: '1.1rem' }}>
+              Set up your Financial Independence goals to unlock powerful insights about your path to early retirement. 
+              We'll calculate your Traditional FIRE, Barista FIRE, and Coast FIRE targets based on your personal situation.
             </Typography>
             <Button
               variant="contained"
               size="large"
               startIcon={<Calculate />}
               onClick={() => setOpenDialog(true)}
-              sx={{ borderRadius: 2 }}
+              sx={{ 
+                borderRadius: 3,
+                px: 4,
+                py: 1.5,
+                fontSize: '1.1rem',
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                '&:hover': {
+                  background: 'linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%)',
+                }
+              }}
             >
-              Configure FIRE Goals
+              Start Your FIRE Planning
             </Button>
           </CardContent>
         </Card>
