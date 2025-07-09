@@ -23,6 +23,7 @@ import {
   Analytics,
   Receipt,
   Assessment,
+  Paid,
   GpsFixed,
   Schedule,
   Help,
@@ -58,9 +59,9 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
     { text: 'Transactions', icon: <Receipt />, path: '/transactions' },
     { text: 'Portfolio', icon: <Assessment />, path: '/portfolio' },
     { text: 'Recurring', icon: <Schedule />, path: '/recurring' },
+    { text: 'Dividends', icon: <Paid />, path: '/dividends' },
     { text: 'Goals', icon: <GpsFixed />, path: '/goals' },
     { text: 'Analytics', icon: <Analytics />, path: '/analytics' },
-    { text: 'Profile', icon: <Person />, path: '/profile' },
     { text: 'Settings', icon: <Settings />, path: '/settings' },
   ];
 
@@ -93,8 +94,52 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
 
       {/* Navigation Menu */}
       <Box sx={{ flex: 1, py: 2 }}>
-        {/* User Profile Section */}
-        <Box sx={{ px: 3, mb: 3 }}>
+        <List sx={{ px: 2 }}>
+          {menuItems.map((item) => {
+            const isActive = location.pathname === item.path;
+            return (
+              <ListItem key={item.text} disablePadding sx={{ mb: 1 }}>
+                <ListItemButton
+                  onClick={() => navigate(item.path)}
+                  sx={{
+                    borderRadius: 2,
+                    py: 1.5,
+                    px: 2,
+                    ...(isActive && {
+                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                      color: 'white',
+                      '&:hover': {
+                        background: 'linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%)',
+                      }
+                    }),
+                    ...(!isActive && {
+                      '&:hover': {
+                        bgcolor: 'grey.100'
+                      }
+                    })
+                  }}
+                >
+                  <ListItemIcon sx={{ 
+                    minWidth: 40,
+                    color: isActive ? 'white' : 'text.secondary'
+                  }}>
+                    {item.icon}
+                  </ListItemIcon>
+                  <ListItemText 
+                    primary={item.text}
+                    primaryTypographyProps={{
+                      fontWeight: isActive ? 'bold' : 'medium',
+                      fontSize: '0.95rem'
+                    }}
+                  />
+                </ListItemButton>
+              </ListItem>
+            );
+          })}
+        </List>
+        
+        {/* User Profile Section - At Bottom */}
+        <Box sx={{ px: 3, mt: 'auto', pb: 2 }}>
           <Paper 
             elevation={0}
             sx={{ 
@@ -157,50 +202,6 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
             </Stack>
           </Paper>
         </Box>
-
-        <List sx={{ px: 2 }}>
-          {menuItems.map((item) => {
-            const isActive = location.pathname === item.path;
-            return (
-              <ListItem key={item.text} disablePadding sx={{ mb: 1 }}>
-                <ListItemButton
-                  onClick={() => navigate(item.path)}
-                  sx={{
-                    borderRadius: 2,
-                    py: 1.5,
-                    px: 2,
-                    ...(isActive && {
-                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                      color: 'white',
-                      '&:hover': {
-                        background: 'linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%)',
-                      }
-                    }),
-                    ...(!isActive && {
-                      '&:hover': {
-                        bgcolor: 'grey.100'
-                      }
-                    })
-                  }}
-                >
-                  <ListItemIcon sx={{ 
-                    minWidth: 40,
-                    color: isActive ? 'white' : 'text.secondary'
-                  }}>
-                    {item.icon}
-                  </ListItemIcon>
-                  <ListItemText 
-                    primary={item.text}
-                    primaryTypographyProps={{
-                      fontWeight: isActive ? 'bold' : 'medium',
-                      fontSize: '0.95rem'
-                    }}
-                  />
-                </ListItemButton>
-              </ListItem>
-            );
-          })}
-        </List>
       </Box>
 
       {/* Bottom Section */}

@@ -15,7 +15,7 @@ export interface Transaction {
   id?: number;
   transaction_id?: number;
   asset_id: number;
-  transaction_type: 'Initialization' | 'LumpSum' | 'Recurring';
+  transaction_type: 'Initialization' | 'LumpSum' | 'Recurring' | 'Dividend' | 'Split' | 'Sell';
   date: string;
   transaction_date?: string;
   shares: number;
@@ -25,6 +25,12 @@ export interface Transaction {
   // Additional fields for display
   asset_ticker?: string;
   asset_type?: string;
+  // Dividend-specific fields
+  dividend_per_share?: number;
+  total_dividend_amount?: number;
+  ex_dividend_date?: string;
+  payment_date?: string;
+  is_reinvested?: boolean;
 }
 
 export interface AssetWithTransactions {
@@ -42,11 +48,19 @@ export interface CreateAssetRequest {
 
 export interface CreateTransactionRequest {
   asset_id: number;
-  transaction_type: 'LumpSum' | 'Recurring';
+  transaction_type: 'LumpSum' | 'Recurring' | 'Dividend' | 'Split' | 'Sell';
   shares: number;
   price_per_share: number;
   currency: string;
   transaction_date?: string;
+  // Dividend-specific fields
+  dividend_per_share?: number;
+  total_dividend_amount?: number;
+  ex_dividend_date?: string;
+  payment_date?: string;
+  is_reinvested?: boolean;
+  // Split-specific fields
+  split_ratio?: string; // e.g., "2:1", "3:2"
 }
 
 export interface AssetsResponse {
@@ -80,6 +94,8 @@ export interface UpdateRecurringInvestmentRequest {
   amount?: number;
   frequency?: 'daily' | 'weekly' | 'monthly' | 'quarterly';
   is_active?: boolean;
+  start_date?: string;
+  next_run_date?: string;
 }
 
 export interface RecurringInvestmentsResponse {

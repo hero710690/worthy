@@ -11,6 +11,7 @@ import { Goals } from './components/Goals';
 import { Analytics } from './components/Analytics';
 import { UserProfile } from './components/UserProfile';
 import { RecurringInvestments } from './components/RecurringInvestments';
+import { Dividends } from './components/Dividends';
 import { Layout } from './components/Layout';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { useAuth } from './hooks/useAuth';
@@ -136,6 +137,17 @@ function App() {
               <ProtectedRoute>
                 <Layout>
                   <RecurringInvestments />
+                </Layout>
+              </ProtectedRoute>
+            }
+          />
+          
+          <Route
+            path="/dividends"
+            element={
+              <ProtectedRoute>
+                <Layout>
+                  <Dividends />
                 </Layout>
               </ProtectedRoute>
             }
