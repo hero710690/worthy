@@ -44,10 +44,14 @@ import {
 } from '@mui/icons-material';
 import { RecurringInvestment, CreateRecurringInvestmentRequest } from '../types/assets';
 import { recurringInvestmentApi } from '../services/recurringInvestmentApi';
+import { useAuthStore } from '../store/authStore';
+import { exchangeRateService } from '../services/exchangeRateService';
 
 export const RecurringInvestments: React.FC = () => {
+  const { user } = useAuthStore();
   const [recurringInvestments, setRecurringInvestments] = useState<RecurringInvestment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [exchangeRates, setExchangeRates] = useState<{ [key: string]: number }>({});
   const [error, setError] = useState<string | null>(null);
   const [openDialog, setOpenDialog] = useState(false);
   const [editingInvestment, setEditingInvestment] = useState<RecurringInvestment | null>(null);
@@ -64,6 +68,7 @@ export const RecurringInvestments: React.FC = () => {
 
   useEffect(() => {
     loadRecurringInvestments();
+    loadExchangeRates();
   }, []);
 
   const loadRecurringInvestments = async () => {
@@ -77,6 +82,62 @@ export const RecurringInvestments: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadExchangeRates = async () => {
+    try {
+      const baseCurrency = user?.base_currency || 'USD';
+      const rates = await exchangeRateService.getExchangeRates(baseCurrency);
+      setExchangeRates(rates);
+    } catch (err) {
+      console.error('Failed to load exchange rates:', err);
+      // Continue without exchange rates - will show original currencies
+    }
+  };
+
+  const calculateMonthlyTotal = () => {
+    const baseCurrency = user?.base_currency || 'USD';
+    
+    return recurringInvestments
+      .filter(inv => inv.is_active)
+      .reduce((sum, inv) => {
+        let convertedAmount = inv.amount;
+        
+        // Convert to base currency if different and exchange rate is available
+        if (inv.currency !== baseCurrency) {
+          if (exchangeRates[inv.currency]) {
+            convertedAmount = inv.amount / exchangeRates[inv.currency];
+          } else {
+            // If no exchange rate available, skip this investment from total
+            // or you could show a warning
+            console.warn(`No exchange rate available for ${inv.currency}`);
+            return sum; // Skip this investment
+          }
+        }
+        
+        return sum + convertedAmount;
+      }, 0);
+  };
+
+  const getMonthlyTotalDisplay = () => {
+    const baseCurrency = user?.base_currency || 'USD';
+    const activeInvestments = recurringInvestments.filter(inv => inv.is_active);
+    
+    // Check if we have investments in different currencies
+    const currencies = new Set(activeInvestments.map(inv => inv.currency));
+    const hasMultipleCurrencies = currencies.size > 1;
+    
+    // If we have multiple currencies but no exchange rates yet, show loading
+    if (hasMultipleCurrencies && Object.keys(exchangeRates).length === 0) {
+      return 'Loading...';
+    }
+    
+    // If all investments are in base currency, simple sum
+    if (!hasMultipleCurrencies || currencies.has(baseCurrency)) {
+      return exchangeRateService.formatCurrency(calculateMonthlyTotal(), baseCurrency);
+    }
+    
+    return exchangeRateService.formatCurrency(calculateMonthlyTotal(), baseCurrency);
   };
 
   const handleCreateInvestment = async () => {
@@ -284,15 +345,10 @@ export const RecurringInvestments: React.FC = () => {
                 </Box>
                 <Box>
                   <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                    {formatCurrency(
-                      recurringInvestments
-                        .filter(inv => inv.is_active)
-                        .reduce((sum, inv) => sum + inv.amount, 0),
-                      'USD'
-                    )}
+                    {getMonthlyTotalDisplay()}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Monthly Total
+                    Monthly Total ({user?.base_currency || 'USD'})
                   </Typography>
                 </Box>
               </Stack>
