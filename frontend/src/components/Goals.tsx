@@ -20,6 +20,13 @@ import {
   Paper,
   Tooltip,
   IconButton,
+  Tabs,
+  Tab,
+  Slider,
+  FormControl,
+  InputLabel,
+  OutlinedInput,
+  InputAdornment,
 } from '@mui/material';
 import {
   GpsFixed,
@@ -32,6 +39,10 @@ import {
   Schedule,
   AttachMoney,
   HelpOutline,
+  Timeline,
+  PieChart,
+  TuneRounded,
+  ShowChart,
 } from '@mui/icons-material';
 import { useAuthStore } from '../store/authStore';
 import { assetAPI } from '../services/assetApi';
@@ -56,6 +67,18 @@ export const Goals: React.FC = () => {
   const [openDialog, setOpenDialog] = useState(false);
   const [userAge, setUserAge] = useState<number>(30);
   const [baseCurrency, setBaseCurrency] = useState<string>('USD');
+  
+  // Tab navigation state
+  const [activeTab, setActiveTab] = useState(0);
+  
+  // What-If Simulator State
+  const [whatIfValues, setWhatIfValues] = useState({
+    monthlyContribution: 5000,
+    annualExpenses: 1200000,
+    targetRetirementAge: 60,
+    expectedReturn: 7,
+    partTimeIncome: 300000,
+  });
 
   // Enhanced form state with comprehensive FIRE planning fields
   const [formData, setFormData] = useState<CreateFIREProfileRequest>({
@@ -681,24 +704,34 @@ export const Goals: React.FC = () => {
             Track your journey to Financial Independence, Retire Early
           </Typography>
         </Box>
-        <Button
-          variant="contained"
-          startIcon={fireProfile ? <Settings /> : <Calculate />}
-          onClick={() => setOpenDialog(true)}
-          sx={{ 
-            borderRadius: 2,
-            px: 3,
-            py: 1.5,
-            textTransform: 'none',
-            fontWeight: 'bold',
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            '&:hover': {
-              background: 'linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%)',
-            }
-          }}
-        >
-          {fireProfile ? 'Update Goals' : 'Set Goals'}
-        </Button>
+        <Stack direction="row" spacing={2}>
+          <Button
+            variant="outlined"
+            startIcon={<Calculate />}
+            onClick={() => setActiveTab(2)}
+            sx={{ borderRadius: 2 }}
+          >
+            What-If Simulator
+          </Button>
+          <Button
+            variant="contained"
+            startIcon={fireProfile ? <Settings /> : <Calculate />}
+            onClick={() => setOpenDialog(true)}
+            sx={{ 
+              borderRadius: 2,
+              px: 3,
+              py: 1.5,
+              textTransform: 'none',
+              fontWeight: 'bold',
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              '&:hover': {
+                background: 'linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%)',
+              }
+            }}
+          >
+            {fireProfile ? 'Update Goals' : 'Set Goals'}
+          </Button>
+        </Stack>
       </Box>
 
       {error && (
@@ -957,7 +990,81 @@ export const Goals: React.FC = () => {
             </Card>
           )}
 
-          {/* FIRE Progress Cards */}
+          {/* Tab Navigation */}
+          <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 4 }}>
+            <Tabs 
+              value={activeTab} 
+              onChange={(e, newValue) => setActiveTab(newValue)}
+              sx={{
+                '& .MuiTab-root': {
+                  textTransform: 'none',
+                  fontSize: '1rem',
+                  fontWeight: 'bold',
+                  minWidth: 120,
+                }
+              }}
+            >
+              <Tab 
+                icon={<ShowChart />} 
+                label="Dashboard" 
+                iconPosition="start"
+              />
+              <Tab 
+                icon={<Timeline />} 
+                label="Projections" 
+                iconPosition="start"
+              />
+              <Tab 
+                icon={<TuneRounded />} 
+                label="What-If Simulator" 
+                iconPosition="start"
+              />
+              <Tab 
+                icon={<PieChart />} 
+                label="Income Breakdown" 
+                iconPosition="start"
+              />
+            </Tabs>
+          </Box>
+
+          {/* Tab Content */}
+          {activeTab === 0 && (
+            <FIREDashboardContent 
+              calculations={calculations}
+              portfolioValuation={portfolioValuation}
+              fireProfile={fireProfile}
+              user={user}
+            />
+          )}
+          
+          {activeTab === 1 && (
+            <ProjectionsTab 
+              fireProgress={fireProgress}
+              calculations={calculations}
+              portfolioValuation={portfolioValuation}
+              fireProfile={fireProfile}
+            />
+          )}
+          
+          {activeTab === 2 && (
+            <WhatIfSimulatorTab 
+              whatIfValues={whatIfValues}
+              setWhatIfValues={setWhatIfValues}
+              fireProfile={fireProfile}
+              portfolioValuation={portfolioValuation}
+              recurringInvestments={recurringInvestments}
+              calculateMonthlyRecurringTotal={calculateMonthlyRecurringTotal}
+            />
+          )}
+          
+          {activeTab === 3 && (
+            <IncomeBreakdownTab 
+              fireProfile={fireProfile}
+              calculations={calculations}
+            />
+          )}
+
+          {/* Legacy FIRE Progress Cards - Only show in Dashboard tab */}
           {calculations.length > 0 && (
             <Grid container spacing={3} sx={{ mb: 4 }}>
               {calculations.map((calc) => (
@@ -1296,6 +1403,329 @@ export const Goals: React.FC = () => {
           </Button>
         </DialogActions>
       </Dialog>
+    </Box>
+  );
+};
+
+// FIRE Dashboard Content Component (Tab 0)
+const FIREDashboardContent: React.FC<{
+  calculations: FIRECalculation[];
+  portfolioValuation: PortfolioValuation | null;
+  fireProfile: FIREProfile | null;
+  user: any;
+}> = ({ calculations, portfolioValuation, fireProfile, user }) => {
+  
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: user?.base_currency || 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  const getTimeToFIRE = (calculation: FIRECalculation) => {
+    if (!calculation.years_to_fire || calculation.years_to_fire <= 0) {
+      return 'Already achieved!';
+    }
+    
+    const years = Math.floor(calculation.years_to_fire);
+    const months = Math.round((calculation.years_to_fire - years) * 12);
+    
+    if (years === 0) {
+      return `${months} months`;
+    } else if (months === 0) {
+      return `${years} years`;
+    } else {
+      return `${years} years, ${months} months`;
+    }
+  };
+
+  const getFIREColor = (fireType: string) => {
+    switch (fireType) {
+      case 'Coast': return '#4CAF50';
+      case 'Barista': return '#FF9800';
+      case 'Traditional': return '#2196F3';
+      default: return '#666';
+    }
+  };
+
+  const getFIREDescription = (fireType: string) => {
+    switch (fireType) {
+      case 'Traditional':
+        return 'Complete financial independence - live entirely off investment returns';
+      case 'Barista':
+        return 'Partial financial independence - supplement with part-time income';
+      case 'Coast':
+        return 'Stop investing now and still reach Traditional FIRE by retirement';
+      default:
+        return '';
+    }
+  };
+
+  const currentPortfolioValue = portfolioValuation?.totalValueInBaseCurrency || 0;
+
+  return (
+    <Grid container spacing={3}>
+      {calculations.map((calc, index) => {
+        const progress = currentPortfolioValue / calc.target_amount;
+        const progressPercentage = Math.min(progress * 100, 100);
+        
+        return (
+          <Grid item xs={12} md={4} key={calc.fire_type}>
+            <Card 
+              elevation={0}
+              sx={{ 
+                borderRadius: 3,
+                border: '2px solid',
+                borderColor: progress >= 1 ? getFIREColor(calc.fire_type) : 'grey.200',
+                background: progress >= 1 
+                  ? `linear-gradient(135deg, ${getFIREColor(calc.fire_type)}15 0%, ${getFIREColor(calc.fire_type)}05 100%)`
+                  : 'white',
+                transition: 'all 0.3s ease',
+                '&:hover': {
+                  transform: 'translateY(-2px)',
+                  boxShadow: 3
+                }
+              }}
+            >
+              <CardContent sx={{ p: 3 }}>
+                <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
+                  <Box
+                    sx={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: 2,
+                      bgcolor: `${getFIREColor(calc.fire_type)}20`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: getFIREColor(calc.fire_type)
+                    }}
+                  >
+                    {calc.fire_type === 'Coast' && <GpsFixed />}
+                    {calc.fire_type === 'Barista' && <Coffee />}
+                    {calc.fire_type === 'Traditional' && <BeachAccess />}
+                  </Box>
+                  <Box sx={{ flex: 1 }}>
+                    <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                      {calc.fire_type} FIRE
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem' }}>
+                      {getFIREDescription(calc.fire_type)}
+                    </Typography>
+                  </Box>
+                  {progress >= 1 && (
+                    <CheckCircle sx={{ color: getFIREColor(calc.fire_type) }} />
+                  )}
+                </Stack>
+
+                <Typography 
+                  variant="h4" 
+                  sx={{ 
+                    fontWeight: 'bold',
+                    mb: 2,
+                    color: progress >= 1 ? getFIREColor(calc.fire_type) : 'text.primary'
+                  }}
+                >
+                  {formatCurrency(calc.target_amount)}
+                </Typography>
+
+                <Box sx={{ mb: 2 }}>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      Progress
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                      {progressPercentage.toFixed(1)}%
+                    </Typography>
+                  </Stack>
+                  <LinearProgress 
+                    variant="determinate" 
+                    value={progressPercentage}
+                    sx={{
+                      height: 8,
+                      borderRadius: 4,
+                      backgroundColor: 'grey.200',
+                      '& .MuiLinearProgress-bar': {
+                        backgroundColor: getFIREColor(calc.fire_type),
+                        borderRadius: 4,
+                      }
+                    }}
+                  />
+                </Box>
+
+                <Stack direction="row" alignItems="center" spacing={1}>
+                  <Schedule sx={{ fontSize: 16, color: 'text.secondary' }} />
+                  <Typography variant="body2" color="text.secondary">
+                    {progress >= 1 ? 'Achieved!' : `${getTimeToFIRE(calc)} to go`}
+                  </Typography>
+                </Stack>
+              </CardContent>
+            </Card>
+          </Grid>
+        );
+      })}
+    </Grid>
+  );
+};
+
+// Projections Tab Component
+const ProjectionsTab: React.FC<{
+  fireProgress: FIREProgress | null;
+  calculations: FIRECalculation[];
+  portfolioValuation: PortfolioValuation | null;
+  fireProfile: FIREProfile | null;
+}> = ({ fireProgress, calculations, portfolioValuation, fireProfile }) => {
+  return (
+    <Box>
+      <Card elevation={0} sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', p: 4, textAlign: 'center' }}>
+        <Timeline sx={{ fontSize: 64, color: 'primary.main', mb: 2 }} />
+        <Typography variant="h5" sx={{ fontWeight: 'bold', mb: 2 }}>
+          Interactive Projection Graph
+        </Typography>
+        <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+          Coming soon: Interactive charts showing your portfolio growth over time with FIRE target lines.
+        </Typography>
+        <Chip label="Phase 4 Feature" color="primary" variant="outlined" />
+      </Card>
+    </Box>
+  );
+};
+
+// What-If Simulator Tab Component
+const WhatIfSimulatorTab: React.FC<{
+  whatIfValues: any;
+  setWhatIfValues: (values: any) => void;
+  fireProfile: FIREProfile | null;
+  portfolioValuation: PortfolioValuation | null;
+  recurringInvestments: RecurringInvestment[];
+  calculateMonthlyRecurringTotal: () => number;
+}> = ({ whatIfValues, setWhatIfValues, fireProfile, portfolioValuation, recurringInvestments, calculateMonthlyRecurringTotal }) => {
+  
+  const handleSliderChange = (key: string) => (event: Event, newValue: number | number[]) => {
+    setWhatIfValues(prev => ({
+      ...prev,
+      [key]: newValue as number
+    }));
+  };
+
+  const currentMonthlyInvestment = calculateMonthlyRecurringTotal();
+
+  return (
+    <Box>
+      <Grid container spacing={4}>
+        <Grid item xs={12} md={6}>
+          <Card elevation={0} sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', p: 3 }}>
+            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3 }}>
+              Adjust Your Parameters
+            </Typography>
+            
+            <Box sx={{ mb: 4 }}>
+              <Typography variant="body2" sx={{ mb: 1 }}>
+                Monthly Contribution: ${whatIfValues.monthlyContribution.toLocaleString()}
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
+                Current actual: ${currentMonthlyInvestment.toLocaleString()}
+              </Typography>
+              <Slider
+                value={whatIfValues.monthlyContribution}
+                onChange={handleSliderChange('monthlyContribution')}
+                min={1000}
+                max={20000}
+                step={500}
+                valueLabelDisplay="auto"
+                valueLabelFormat={(value) => `$${value.toLocaleString()}`}
+              />
+            </Box>
+
+            <Box sx={{ mb: 4 }}>
+              <Typography variant="body2" sx={{ mb: 2 }}>
+                Annual Expenses: ${whatIfValues.annualExpenses.toLocaleString()}
+              </Typography>
+              <Slider
+                value={whatIfValues.annualExpenses}
+                onChange={handleSliderChange('annualExpenses')}
+                min={500000}
+                max={3000000}
+                step={50000}
+                valueLabelDisplay="auto"
+                valueLabelFormat={(value) => `$${value.toLocaleString()}`}
+              />
+            </Box>
+
+            <Box sx={{ mb: 4 }}>
+              <Typography variant="body2" sx={{ mb: 2 }}>
+                Target Retirement Age: {whatIfValues.targetRetirementAge}
+              </Typography>
+              <Slider
+                value={whatIfValues.targetRetirementAge}
+                onChange={handleSliderChange('targetRetirementAge')}
+                min={40}
+                max={70}
+                step={1}
+                valueLabelDisplay="auto"
+              />
+            </Box>
+
+            <Box sx={{ mb: 4 }}>
+              <Typography variant="body2" sx={{ mb: 2 }}>
+                Expected Annual Return: {whatIfValues.expectedReturn}%
+              </Typography>
+              <Slider
+                value={whatIfValues.expectedReturn}
+                onChange={handleSliderChange('expectedReturn')}
+                min={4}
+                max={12}
+                step={0.5}
+                valueLabelDisplay="auto"
+                valueLabelFormat={(value) => `${value}%`}
+              />
+            </Box>
+          </Card>
+        </Grid>
+
+        <Grid item xs={12} md={6}>
+          <Card elevation={0} sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', p: 3 }}>
+            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3 }}>
+              Impact Analysis
+            </Typography>
+            <Box sx={{ textAlign: 'center', py: 4 }}>
+              <TuneRounded sx={{ fontSize: 64, color: 'primary.main', mb: 2 }} />
+              <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
+                Real-time calculations will appear here as you adjust the sliders above.
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Current monthly investment: ${currentMonthlyInvestment.toLocaleString()}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Active plans: {recurringInvestments.filter(inv => inv.is_active).length}
+              </Typography>
+            </Box>
+          </Card>
+        </Grid>
+      </Grid>
+    </Box>
+  );
+};
+
+// Income Breakdown Tab Component
+const IncomeBreakdownTab: React.FC<{
+  fireProfile: FIREProfile | null;
+  calculations: FIRECalculation[];
+}> = ({ fireProfile, calculations }) => {
+  return (
+    <Box>
+      <Card elevation={0} sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', p: 4, textAlign: 'center' }}>
+        <PieChart sx={{ fontSize: 64, color: 'primary.main', mb: 2 }} />
+        <Typography variant="h5" sx={{ fontWeight: 'bold', mb: 2 }}>
+          Retirement Income Breakdown
+        </Typography>
+        <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+          Coming soon: Visual breakdown of your retirement income sources for each FIRE strategy.
+        </Typography>
+        <Chip label="Phase 4 Feature" color="primary" variant="outlined" />
+      </Card>
     </Box>
   );
 };
