@@ -45,6 +45,12 @@ export const dividendAPI = {
     return response.data.dividend;
   },
 
+  // Update dividend (mainly for tax rate changes)
+  updateDividend: async (dividendId: number, data: Partial<CreateDividendRequest & { tax_rate: number }>): Promise<Dividend> => {
+    const response = await apiClient.put(`/dividends/${dividendId}`, data);
+    return response.data.dividend;
+  },
+
   // Process dividend (reinvest or add to cash)
   processDividend: async (data: ProcessDividendRequest): Promise<{ message: string }> => {
     const response = await apiClient.post(`/dividends/${data.dividend_id}/process`, data);

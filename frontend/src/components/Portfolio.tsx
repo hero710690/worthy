@@ -193,54 +193,63 @@ export const Portfolio: React.FC = () => {
   }
 
   return (
-    <Box sx={{ p: { xs: 2, md: 3 } }}>
+    <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1400, mx: 'auto' }}>
       {/* Header */}
-      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <Box sx={{ mb: 4, display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' }, gap: 2 }}>
         <Box>
-          <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 1 }}>
-            Portfolio Analysis
+          <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 1, color: 'primary.main' }}>
+            Portfolio Overview
           </Typography>
           <Typography variant="body1" color="text.secondary">
-            Comprehensive view of your investment portfolio allocation and performance
+            Track your investments, allocation, and performance in real-time
           </Typography>
         </Box>
         <Tooltip title="Refresh portfolio data">
           <Button
-            variant="outlined"
+            variant="contained"
             onClick={handleRefresh}
             disabled={refreshing}
             startIcon={refreshing ? <CircularProgress size={20} /> : <Refresh />}
+            sx={{ borderRadius: 2, px: 3 }}
           >
-            {refreshing ? 'Refreshing...' : 'Refresh'}
+            {refreshing ? 'Refreshing...' : 'Refresh Data'}
           </Button>
         </Tooltip>
       </Box>
 
-      {/* Portfolio Summary */}
+      {/* Portfolio Summary Cards */}
       <Grid container spacing={3} sx={{ mb: 4 }}>
-        <Grid item xs={12} md={3}>
-          <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', height: '100%' }}>
-            <CardContent>
+        <Grid item xs={12} sm={6} lg={3}>
+          <Card sx={{ 
+            borderRadius: 3, 
+            border: '1px solid', 
+            borderColor: 'grey.200', 
+            height: '100%',
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            color: 'white',
+            '&:hover': { transform: 'translateY(-2px)', transition: 'transform 0.2s' }
+          }}>
+            <CardContent sx={{ p: 3 }}>
               <Stack direction="row" alignItems="center" spacing={2}>
                 <Box
                   sx={{
-                    width: 48,
-                    height: 48,
+                    width: 56,
+                    height: 56,
                     borderRadius: 2,
-                    bgcolor: 'primary.main',
+                    bgcolor: 'rgba(255,255,255,0.2)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     color: 'white'
                   }}
                 >
-                  <AccountBalance />
+                  <AccountBalance fontSize="large" />
                 </Box>
-                <Box>
-                  <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 0.5 }}>
                     {portfolioValuation ? formatCurrency(portfolioValuation.totalValueInBaseCurrency) : '$0.00'}
                   </Typography>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" sx={{ opacity: 0.9 }}>
                     Total Portfolio Value
                   </Typography>
                 </Box>
@@ -249,29 +258,40 @@ export const Portfolio: React.FC = () => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={3}>
-          <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', height: '100%' }}>
-            <CardContent>
+        <Grid item xs={12} sm={6} lg={3}>
+          <Card sx={{ 
+            borderRadius: 3, 
+            border: '1px solid', 
+            borderColor: 'grey.200', 
+            height: '100%',
+            background: portfolioValuation && portfolioValuation.totalUnrealizedGainLoss >= 0 
+              ? 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)'
+              : 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+            color: 'white',
+            '&:hover': { transform: 'translateY(-2px)', transition: 'transform 0.2s' }
+          }}>
+            <CardContent sx={{ p: 3 }}>
               <Stack direction="row" alignItems="center" spacing={2}>
                 <Box
                   sx={{
-                    width: 48,
-                    height: 48,
+                    width: 56,
+                    height: 56,
                     borderRadius: 2,
-                    bgcolor: portfolioValuation && portfolioValuation.totalUnrealizedGainLoss >= 0 ? 'success.main' : 'error.main',
+                    bgcolor: 'rgba(255,255,255,0.2)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     color: 'white'
                   }}
                 >
-                  {portfolioValuation && portfolioValuation.totalUnrealizedGainLoss >= 0 ? <TrendingUp /> : <TrendingDown />}
+                  {portfolioValuation && portfolioValuation.totalUnrealizedGainLoss >= 0 ? 
+                    <TrendingUp fontSize="large" /> : <TrendingDown fontSize="large" />}
                 </Box>
-                <Box>
-                  <Typography variant="h5" sx={{ fontWeight: 'bold', color: portfolioValuation && portfolioValuation.totalUnrealizedGainLoss >= 0 ? 'success.main' : 'error.main' }}>
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 0.5 }}>
                     {portfolioValuation ? formatCurrency(portfolioValuation.totalUnrealizedGainLoss) : '$0.00'}
                   </Typography>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography variant="body2" sx={{ opacity: 0.9 }}>
                     Unrealized P&L ({portfolioValuation ? `${portfolioValuation.totalUnrealizedGainLossPercent >= 0 ? '+' : ''}${portfolioValuation.totalUnrealizedGainLossPercent.toFixed(2)}%` : '0.00%'})
                   </Typography>
                 </Box>
@@ -280,26 +300,34 @@ export const Portfolio: React.FC = () => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={3}>
-          <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', height: '100%' }}>
-            <CardContent>
+        <Grid item xs={12} sm={6} lg={3}>
+          <Card sx={{ 
+            borderRadius: 3, 
+            border: '1px solid', 
+            borderColor: 'grey.200', 
+            height: '100%',
+            background: 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)',
+            color: 'text.primary',
+            '&:hover': { transform: 'translateY(-2px)', transition: 'transform 0.2s' }
+          }}>
+            <CardContent sx={{ p: 3 }}>
               <Stack direction="row" alignItems="center" spacing={2}>
                 <Box
                   sx={{
-                    width: 48,
-                    height: 48,
+                    width: 56,
+                    height: 56,
                     borderRadius: 2,
-                    bgcolor: 'info.main',
+                    bgcolor: 'rgba(0,0,0,0.1)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    color: 'white'
+                    color: 'text.primary'
                   }}
                 >
-                  <Assessment />
+                  <Assessment fontSize="large" />
                 </Box>
-                <Box>
-                  <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 0.5 }}>
                     {assets.length}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
@@ -311,33 +339,38 @@ export const Portfolio: React.FC = () => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} md={3}>
-          <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', height: '100%' }}>
-            <CardContent>
+        <Grid item xs={12} sm={6} lg={3}>
+          <Card sx={{ 
+            borderRadius: 3, 
+            border: '1px solid', 
+            borderColor: 'grey.200', 
+            height: '100%',
+            background: 'linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%)',
+            color: 'text.primary',
+            '&:hover': { transform: 'translateY(-2px)', transition: 'transform 0.2s' }
+          }}>
+            <CardContent sx={{ p: 3 }}>
               <Stack direction="row" alignItems="center" spacing={2}>
                 <Box
                   sx={{
-                    width: 48,
-                    height: 48,
+                    width: 56,
+                    height: 56,
                     borderRadius: 2,
-                    bgcolor: 'warning.main',
+                    bgcolor: 'rgba(0,0,0,0.1)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    color: 'white'
+                    color: 'text.primary'
                   }}
                 >
-                  <PieChart />
+                  <PieChart fontSize="large" />
                 </Box>
-                <Box>
-                  <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 0.5 }}>
                     {allocation ? Object.keys(allocation.byType).length : 0}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     Asset Types
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Currencies
                   </Typography>
                 </Box>
               </Stack>
@@ -346,179 +379,241 @@ export const Portfolio: React.FC = () => {
         </Grid>
       </Grid>
 
-      {/* Allocation Analysis */}
-      <Grid container spacing={3}>
-        {/* Asset Type Allocation */}
-        <Grid item xs={12} md={6}>
-          <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', height: '100%' }}>
-            <CardContent>
-              <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3 }}>
-                Allocation by Asset Type
-              </Typography>
-              
-              {allocation && Object.keys(allocation.byType).length > 0 ? (
-                <Stack spacing={2}>
-                  {Object.entries(allocation.byType)
-                    .sort(([,a], [,b]) => b.value - a.value)
-                    .map(([type, data]) => (
-                      <Box key={type}>
-                        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-                          <Stack direction="row" alignItems="center" spacing={1}>
-                            <Box
-                              sx={{
-                                width: 12,
-                                height: 12,
-                                borderRadius: 1,
-                                bgcolor: getTypeColor(type)
-                              }}
-                            />
-                            <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
-                              {type}
-                            </Typography>
-                          </Stack>
-                          <Stack direction="row" alignItems="center" spacing={2}>
-                            <Typography variant="body2" color="text.secondary">
-                              {formatCurrency(data.value)}
-                            </Typography>
-                            <Typography variant="body2" sx={{ fontWeight: 'bold', minWidth: 45 }}>
-                              {data.percentage.toFixed(1)}%
-                            </Typography>
-                          </Stack>
-                        </Stack>
-                        <LinearProgress
-                          variant="determinate"
-                          value={data.percentage}
-                          sx={{
-                            height: 8,
-                            borderRadius: 4,
-                            bgcolor: 'grey.200',
-                            '& .MuiLinearProgress-bar': {
-                              bgcolor: getTypeColor(type),
-                              borderRadius: 4
-                            }
-                          }}
-                        />
-                      </Box>
-                    ))}
-                </Stack>
-              ) : (
-                <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
-                  No assets to display
-                </Typography>
-              )}
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Currency Allocation */}
-        <Grid item xs={12} md={6}>
-          <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', height: '100%' }}>
-            <CardContent>
-              <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3 }}>
-                Allocation by Currency
-              </Typography>
-              
-              {allocation && Object.keys(allocation.byCurrency).length > 0 ? (
-                <Stack spacing={2}>
-                  {Object.entries(allocation.byCurrency)
-                    .sort(([,a], [,b]) => b.value - a.value)
-                    .map(([currency, data]) => (
-                      <Box key={currency}>
-                        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-                          <Stack direction="row" alignItems="center" spacing={1}>
-                            <Chip
-                              label={currency}
-                              size="small"
-                              variant="outlined"
-                              sx={{ fontSize: '0.75rem', height: 24 }}
-                            />
-                          </Stack>
-                          <Stack direction="row" alignItems="center" spacing={2}>
-                            <Typography variant="body2" color="text.secondary">
-                              {formatCurrency(data.value)}
-                            </Typography>
-                            <Typography variant="body2" sx={{ fontWeight: 'bold', minWidth: 45 }}>
-                              {data.percentage.toFixed(1)}%
-                            </Typography>
-                          </Stack>
-                        </Stack>
-                        <LinearProgress
-                          variant="determinate"
-                          value={data.percentage}
-                          sx={{
-                            height: 8,
-                            borderRadius: 4,
-                            bgcolor: 'grey.200',
-                            '& .MuiLinearProgress-bar': {
-                              borderRadius: 4
-                            }
-                          }}
-                        />
-                      </Box>
-                    ))}
-                </Stack>
-              ) : (
-                <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
-                  No currencies to display
-                </Typography>
-              )}
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Top Holdings */}
+      {/* Main Content Grid */}
+      <Grid container spacing={4}>
+        {/* Top Holdings - Featured Section */}
         <Grid item xs={12}>
-          <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200' }}>
-            <CardContent>
-              <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3 }}>
-                Top Holdings
-              </Typography>
+          <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', mb: 2 }}>
+            <CardContent sx={{ p: 4 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+                <ShowChart sx={{ mr: 2, color: 'primary.main' }} />
+                <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
+                  Top Holdings
+                </Typography>
+              </Box>
               
               {allocation && allocation.byAsset.length > 0 ? (
-                <Grid container spacing={2}>
+                <Grid container spacing={3}>
                   {allocation.byAsset.slice(0, 6).map((asset, index) => (
-                    <Grid item xs={12} sm={6} md={4} key={asset.symbol}>
+                    <Grid item xs={12} sm={6} lg={4} key={asset.symbol}>
                       <Paper
                         sx={{
-                          p: 2,
-                          borderRadius: 2,
+                          p: 3,
+                          borderRadius: 3,
                           border: '1px solid',
                           borderColor: 'grey.200',
-                          bgcolor: 'grey.50'
+                          bgcolor: 'background.paper',
+                          position: 'relative',
+                          height: 180, // Fixed height for consistent box sizes
+                          display: 'flex',
+                          flexDirection: 'column',
+                          '&:hover': { 
+                            boxShadow: 3,
+                            transform: 'translateY(-2px)',
+                            transition: 'all 0.2s ease-in-out'
+                          }
                         }}
                       >
-                        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-                          <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-                            {asset.symbol}
-                          </Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                            #{index + 1}
-                          </Typography>
-                        </Stack>
-                        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-                          <Typography variant="body2" color="text.secondary">
-                            Value
-                          </Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
-                            {formatCurrency(asset.value)}
-                          </Typography>
-                        </Stack>
-                        <Stack direction="row" justifyContent="space-between" alignItems="center">
-                          <Typography variant="body2" color="text.secondary">
-                            Allocation
-                          </Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                            {asset.percentage.toFixed(1)}%
-                          </Typography>
+                        <Box sx={{ position: 'absolute', top: 12, right: 12 }}>
+                          <Chip 
+                            label={`#${index + 1}`} 
+                            size="small" 
+                            color="primary" 
+                            variant="outlined"
+                          />
+                        </Box>
+                        
+                        <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, pr: 4 }}>
+                          {asset.symbol}
+                        </Typography>
+                        
+                        <Stack spacing={1.5} sx={{ flex: 1 }}>
+                          <Stack direction="row" justifyContent="space-between" alignItems="center">
+                            <Typography variant="body2" color="text.secondary">
+                              Market Value
+                            </Typography>
+                            <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+                              {formatCurrency(asset.value)}
+                            </Typography>
+                          </Stack>
+                          
+                          <Stack direction="row" justifyContent="space-between" alignItems="center">
+                            <Typography variant="body2" color="text.secondary">
+                              Portfolio %
+                            </Typography>
+                            <Typography variant="body1" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
+                              {asset.percentage.toFixed(1)}%
+                            </Typography>
+                          </Stack>
+                          
+                          {asset.gainLoss !== undefined && (
+                            <Stack direction="row" justifyContent="space-between" alignItems="center">
+                              <Typography variant="body2" color="text.secondary">
+                                Unrealized P&L
+                              </Typography>
+                              <Typography 
+                                variant="body1" 
+                                sx={{ 
+                                  fontWeight: 'bold',
+                                  color: asset.gainLoss >= 0 ? 'success.main' : 'error.main'
+                                }}
+                              >
+                                {formatCurrency(asset.gainLoss)}
+                                {asset.gainLossPercent !== undefined && (
+                                  <Typography component="span" variant="body2" sx={{ ml: 0.5 }}>
+                                    ({asset.gainLossPercent >= 0 ? '+' : ''}{asset.gainLossPercent.toFixed(1)}%)
+                                  </Typography>
+                                )}
+                              </Typography>
+                            </Stack>
+                          )}
                         </Stack>
                       </Paper>
                     </Grid>
                   ))}
                 </Grid>
               ) : (
-                <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
-                  No holdings to display
+                <Box sx={{ textAlign: 'center', py: 6 }}>
+                  <Assessment sx={{ fontSize: 64, color: 'grey.300', mb: 2 }} />
+                  <Typography variant="h6" color="text.secondary" sx={{ mb: 1 }}>
+                    No Holdings Yet
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Start by adding some assets to your portfolio
+                  </Typography>
+                </Box>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Allocation Analysis */}
+        <Grid item xs={12} lg={6}>
+          <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', height: '100%' }}>
+            <CardContent sx={{ p: 4 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+                <PieChart sx={{ mr: 2, color: 'primary.main' }} />
+                <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                  Asset Type Allocation
                 </Typography>
+              </Box>
+              
+              {allocation && Object.keys(allocation.byType).length > 0 ? (
+                <Stack spacing={3}>
+                  {Object.entries(allocation.byType)
+                    .sort(([,a], [,b]) => b.value - a.value)
+                    .map(([type, data]) => (
+                      <Box key={type}>
+                        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
+                          <Stack direction="row" alignItems="center" spacing={2}>
+                            <Box
+                              sx={{
+                                width: 16,
+                                height: 16,
+                                borderRadius: 2,
+                                bgcolor: getTypeColor(type)
+                              }}
+                            />
+                            <Typography variant="body1" sx={{ fontWeight: 'medium' }}>
+                              {type}
+                            </Typography>
+                          </Stack>
+                          <Stack direction="row" alignItems="center" spacing={3}>
+                            <Typography variant="body2" color="text.secondary">
+                              {formatCurrency(data.value)}
+                            </Typography>
+                            <Typography variant="h6" sx={{ fontWeight: 'bold', minWidth: 50, color: 'primary.main' }}>
+                              {data.percentage.toFixed(1)}%
+                            </Typography>
+                          </Stack>
+                        </Stack>
+                        <LinearProgress
+                          variant="determinate"
+                          value={data.percentage}
+                          sx={{
+                            height: 10,
+                            borderRadius: 5,
+                            bgcolor: 'grey.200',
+                            '& .MuiLinearProgress-bar': {
+                              bgcolor: getTypeColor(type),
+                              borderRadius: 5
+                            }
+                          }}
+                        />
+                      </Box>
+                    ))}
+                </Stack>
+              ) : (
+                <Box sx={{ textAlign: 'center', py: 6 }}>
+                  <PieChart sx={{ fontSize: 64, color: 'grey.300', mb: 2 }} />
+                  <Typography variant="body1" color="text.secondary">
+                    No asset types to display
+                  </Typography>
+                </Box>
+              )}
+            </CardContent>
+          </Card>
+        </Grid>
+
+        {/* Currency Allocation */}
+        <Grid item xs={12} lg={6}>
+          <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', height: '100%' }}>
+            <CardContent sx={{ p: 4 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+                <AccountBalance sx={{ mr: 2, color: 'primary.main' }} />
+                <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                  Currency Allocation
+                </Typography>
+              </Box>
+              
+              {allocation && Object.keys(allocation.byCurrency).length > 0 ? (
+                <Stack spacing={3}>
+                  {Object.entries(allocation.byCurrency)
+                    .sort(([,a], [,b]) => b.value - a.value)
+                    .map(([currency, data], index) => (
+                      <Box key={currency}>
+                        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1.5 }}>
+                          <Stack direction="row" alignItems="center" spacing={2}>
+                            <Chip
+                              label={currency}
+                              size="medium"
+                              variant="outlined"
+                              color="primary"
+                              sx={{ fontSize: '0.875rem', fontWeight: 'bold' }}
+                            />
+                          </Stack>
+                          <Stack direction="row" alignItems="center" spacing={3}>
+                            <Typography variant="body2" color="text.secondary">
+                              {formatCurrency(data.value)}
+                            </Typography>
+                            <Typography variant="h6" sx={{ fontWeight: 'bold', minWidth: 50, color: 'primary.main' }}>
+                              {data.percentage.toFixed(1)}%
+                            </Typography>
+                          </Stack>
+                        </Stack>
+                        <LinearProgress
+                          variant="determinate"
+                          value={data.percentage}
+                          sx={{
+                            height: 10,
+                            borderRadius: 5,
+                            bgcolor: 'grey.200',
+                            '& .MuiLinearProgress-bar': {
+                              borderRadius: 5,
+                              bgcolor: index === 0 ? 'primary.main' : index === 1 ? 'secondary.main' : 'info.main'
+                            }
+                          }}
+                        />
+                      </Box>
+                    ))}
+                </Stack>
+              ) : (
+                <Box sx={{ textAlign: 'center', py: 6 }}>
+                  <AccountBalance sx={{ fontSize: 64, color: 'grey.300', mb: 2 }} />
+                  <Typography variant="body1" color="text.secondary">
+                    No currencies to display
+                  </Typography>
+                </Box>
               )}
             </CardContent>
           </Card>
