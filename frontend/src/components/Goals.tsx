@@ -700,71 +700,204 @@ export const Goals: React.FC = () => {
           </CardContent>
         </Card>
       ) : (
-        // FIRE profile exists - show progress
+        // Enhanced FIRE Dashboard with Progress Gauges
         <>
-          {/* Progress Overview */}
-          {fireProgress && (
+          {/* FIRE Targets Overview with Progress Gauges */}
+          {calculations.length > 0 && (
             <Grid container spacing={3} sx={{ mb: 4 }}>
-              <Grid item xs={12} md={4}>
-                <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200' }}>
-                  <CardContent>
-                    <Stack direction="row" alignItems="center" spacing={2}>
-                      <Box sx={{ p: 1, bgcolor: 'primary.light', borderRadius: 2 }}>
-                        <AttachMoney sx={{ color: 'primary.main' }} />
-                      </Box>
-                      <Box>
-                        <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                          {formatCurrency(fireProgress.current_total_assets)}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Current Assets
-                        </Typography>
-                      </Box>
-                    </Stack>
-                  </CardContent>
-                </Card>
-              </Grid>
+              {calculations.map((calc, index) => {
+                const currentPortfolioValue = portfolioValuation?.totalValueInBaseCurrency || 0;
+                const progress = currentPortfolioValue / calc.target_amount;
+                const progressPercentage = Math.min(progress * 100, 100);
+                
+                const getFIREColor = (fireType: string) => {
+                  switch (fireType) {
+                    case 'Coast': return '#4CAF50';
+                    case 'Barista': return '#FF9800';
+                    case 'Traditional': return '#2196F3';
+                    default: return '#666';
+                  }
+                };
 
-              <Grid item xs={12} md={4}>
-                <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200' }}>
-                  <CardContent>
-                    <Stack direction="row" alignItems="center" spacing={2}>
-                      <Box sx={{ p: 1, bgcolor: 'success.light', borderRadius: 2 }}>
-                        <TrendingUp sx={{ color: 'success.main' }} />
-                      </Box>
-                      <Box>
-                        <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                          {formatPercentage(fireProfile.expected_annual_return)}
-                        </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Expected Return
-                        </Typography>
-                      </Box>
-                    </Stack>
-                  </CardContent>
-                </Card>
-              </Grid>
+                const getTimeToFIRE = (calculation: FIRECalculation) => {
+                  if (!calculation.years_to_fire || calculation.years_to_fire <= 0) {
+                    return 'Already achieved!';
+                  }
+                  
+                  const years = Math.floor(calculation.years_to_fire);
+                  const months = Math.round((calculation.years_to_fire - years) * 12);
+                  
+                  if (years === 0) {
+                    return `${months} months`;
+                  } else if (months === 0) {
+                    return `${years} years`;
+                  } else {
+                    return `${years} years, ${months} months`;
+                  }
+                };
 
-              <Grid item xs={12} md={4}>
-                <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200' }}>
-                  <CardContent>
-                    <Stack direction="row" alignItems="center" spacing={2}>
-                      <Box sx={{ p: 1, bgcolor: 'info.light', borderRadius: 2 }}>
-                        <Schedule sx={{ color: 'info.main' }} />
-                      </Box>
-                      <Box>
-                        <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                          {fireProfile.target_retirement_age}
+                const getFIREDescription = (fireType: string) => {
+                  switch (fireType) {
+                    case 'Traditional':
+                      return 'Complete financial independence - live entirely off investment returns';
+                    case 'Barista':
+                      return 'Partial financial independence - supplement with part-time income';
+                    case 'Coast':
+                      return 'Stop investing now and still reach Traditional FIRE by retirement';
+                    default:
+                      return '';
+                  }
+                };
+                
+                return (
+                  <Grid item xs={12} md={4} key={calc.fire_type}>
+                    <Card 
+                      elevation={0}
+                      sx={{ 
+                        borderRadius: 3,
+                        border: '2px solid',
+                        borderColor: progress >= 1 ? getFIREColor(calc.fire_type) : 'grey.200',
+                        background: progress >= 1 
+                          ? `linear-gradient(135deg, ${getFIREColor(calc.fire_type)}15 0%, ${getFIREColor(calc.fire_type)}05 100%)`
+                          : 'white',
+                        transition: 'all 0.3s ease',
+                        '&:hover': {
+                          transform: 'translateY(-2px)',
+                          boxShadow: 3
+                        }
+                      }}
+                    >
+                      <CardContent sx={{ p: 3 }}>
+                        <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
+                          <Box
+                            sx={{
+                              width: 48,
+                              height: 48,
+                              borderRadius: 2,
+                              bgcolor: `${getFIREColor(calc.fire_type)}20`,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              color: getFIREColor(calc.fire_type)
+                            }}
+                          >
+                            {calc.fire_type === 'Coast' && <GpsFixed />}
+                            {calc.fire_type === 'Barista' && <Coffee />}
+                            {calc.fire_type === 'Traditional' && <BeachAccess />}
+                          </Box>
+                          <Box sx={{ flex: 1 }}>
+                            <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                              {calc.fire_type} FIRE
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem' }}>
+                              {getFIREDescription(calc.fire_type)}
+                            </Typography>
+                          </Box>
+                          {progress >= 1 && (
+                            <CheckCircle sx={{ color: getFIREColor(calc.fire_type) }} />
+                          )}
+                        </Stack>
+
+                        <Typography 
+                          variant="h4" 
+                          sx={{ 
+                            fontWeight: 'bold',
+                            mb: 2,
+                            color: progress >= 1 ? getFIREColor(calc.fire_type) : 'text.primary'
+                          }}
+                        >
+                          {formatCurrency(calc.target_amount)}
                         </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          Target Age
-                        </Typography>
-                      </Box>
-                    </Stack>
-                  </CardContent>
-                </Card>
-              </Grid>
+
+                        <Box sx={{ mb: 2 }}>
+                          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+                            <Typography variant="body2" color="text.secondary">
+                              Progress
+                            </Typography>
+                            <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                              {progressPercentage.toFixed(1)}%
+                            </Typography>
+                          </Stack>
+                          <LinearProgress 
+                            variant="determinate" 
+                            value={progressPercentage}
+                            sx={{
+                              height: 8,
+                              borderRadius: 4,
+                              backgroundColor: 'grey.200',
+                              '& .MuiLinearProgress-bar': {
+                                backgroundColor: getFIREColor(calc.fire_type),
+                                borderRadius: 4,
+                              }
+                            }}
+                          />
+                        </Box>
+
+                        <Stack direction="row" alignItems="center" spacing={1}>
+                          <Schedule sx={{ fontSize: 16, color: 'text.secondary' }} />
+                          <Typography variant="body2" color="text.secondary">
+                            {progress >= 1 ? 'Achieved!' : `${getTimeToFIRE(calc)} to go`}
+                          </Typography>
+                        </Stack>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                );
+              })}
             </Grid>
+          )}
+
+          {/* Current Portfolio Status Dashboard */}
+          {fireProgress && (
+            <Card elevation={0} sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', mb: 4 }}>
+              <CardContent sx={{ p: 4 }}>
+                <Typography variant="h5" sx={{ fontWeight: 'bold', mb: 3 }}>
+                  Current Portfolio Status
+                </Typography>
+                <Grid container spacing={4}>
+                  <Grid item xs={12} sm={6} md={3}>
+                    <Box sx={{ textAlign: 'center' }}>
+                      <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'primary.main', mb: 1 }}>
+                        {formatCurrency(fireProgress.current_total_assets)}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Current Portfolio Value
+                      </Typography>
+                    </Box>
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={3}>
+                    <Box sx={{ textAlign: 'center' }}>
+                      <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'success.main', mb: 1 }}>
+                        {calculations.length}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        FIRE Strategies Tracked
+                      </Typography>
+                    </Box>
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={3}>
+                    <Box sx={{ textAlign: 'center' }}>
+                      <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'warning.main', mb: 1 }}>
+                        {calculations.filter(c => (portfolioValuation?.totalValueInBaseCurrency || 0) >= c.target_amount).length}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Goals Achieved
+                      </Typography>
+                    </Box>
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={3}>
+                    <Box sx={{ textAlign: 'center' }}>
+                      <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'info.main', mb: 1 }}>
+                        {fireProfile?.expected_annual_return || 7}%
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Expected Annual Return
+                      </Typography>
+                    </Box>
+                  </Grid>
+                </Grid>
+              </CardContent>
+            </Card>
           )}
 
           {/* FIRE Progress Cards */}
