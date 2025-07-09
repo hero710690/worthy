@@ -167,8 +167,19 @@ export const Portfolio: React.FC = () => {
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
-        <CircularProgress />
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        minHeight: '60vh',
+        flexDirection: 'column',
+        gap: 2,
+        p: { xs: 2, md: 3 }
+      }}>
+        <CircularProgress size={60} />
+        <Typography variant="h6" color="text.secondary">
+          Loading your portfolio...
+        </Typography>
       </Box>
     );
   }

@@ -204,8 +204,18 @@ export const AssetsList: React.FC = () => {
   if (loading) {
     return (
       <Container maxWidth="xl" sx={{ py: 4 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
-          <CircularProgress />
+        <Box sx={{ 
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center', 
+          minHeight: '60vh',
+          flexDirection: 'column',
+          gap: 2
+        }}>
+          <CircularProgress size={60} />
+          <Typography variant="h6" color="text.secondary">
+            Loading your assets...
+          </Typography>
         </Box>
       </Container>
     );
@@ -286,10 +296,12 @@ export const AssetsList: React.FC = () => {
               height: '100%',
               border: '1px solid',
               borderColor: 'grey.200',
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              color: 'white',
               transition: 'all 0.3s ease',
               '&:hover': {
-                borderColor: 'primary.main',
-                boxShadow: '0 8px 32px rgba(102, 126, 234, 0.1)'
+                transform: 'translateY(-2px)',
+                boxShadow: 4
               }
             }}
           >
@@ -297,18 +309,21 @@ export const AssetsList: React.FC = () => {
               <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
                 <Box
                   sx={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: '8px',
-                    bgcolor: '#667eea15',
+                    width: 40,
+                    height: 40,
+                    borderRadius: 2,
+                    bgcolor: 'rgba(255,255,255,0.2)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    color: '#667eea'
+                    color: 'white'
                   }}
                 >
                   <AccountBalance />
                 </Box>
+                <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                  Portfolio Value
+                </Typography>
               </Stack>
               <Typography 
                 variant="h4" 
@@ -320,20 +335,9 @@ export const AssetsList: React.FC = () => {
               >
                 {formatCurrency(portfolioValue, user?.base_currency || 'USD')}
               </Typography>
-              <Stack direction="row" alignItems="center" spacing={1}>
-                <Typography 
-                  variant="body2" 
-                  sx={{ 
-                    color: totalUnrealizedPL >= 0 ? 'success.main' : 'error.main',
-                    fontWeight: 'medium'
-                  }}
-                >
-                  {totalUnrealizedPL >= 0 ? '+' : ''}{formatCurrency(totalUnrealizedPL, user?.base_currency || 'USD')}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  unrealized P&L
-                </Typography>
-              </Stack>
+              <Typography variant="body2" sx={{ opacity: 0.9 }}>
+                Total market value
+              </Typography>
             </CardContent>
           </Card>
         </Grid>
