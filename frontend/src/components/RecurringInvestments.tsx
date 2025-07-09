@@ -90,7 +90,7 @@ export const RecurringInvestments: React.FC = () => {
       setExchangeRatesLoading(true);
       const baseCurrency = user?.base_currency || 'USD';
       console.log('Loading exchange rates for base currency:', baseCurrency);
-      const rates = await exchangeRateService.getExchangeRates(baseCurrency);
+      const rates = await exchangeRateService.getRatesWithRefresh(baseCurrency);
       console.log('Exchange rates loaded:', rates);
       setExchangeRates(rates);
     } catch (err) {
