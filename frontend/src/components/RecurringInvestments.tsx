@@ -108,19 +108,14 @@ export const RecurringInvestments: React.FC = () => {
     return recurringInvestments
       .filter(inv => inv.is_active)
       .reduce((sum, inv) => {
-        let convertedAmount = inv.amount;
+        // Use the proper convertCurrency method from exchange rate service
+        const convertedAmount = exchangeRateService.convertCurrency(
+          inv.amount, 
+          inv.currency, 
+          baseCurrency
+        );
         
-        // Convert to base currency if different and exchange rate is available
-        if (inv.currency !== baseCurrency) {
-          if (exchangeRates[inv.currency]) {
-            convertedAmount = inv.amount / exchangeRates[inv.currency];
-          } else {
-            // If no exchange rate available, skip this investment from total
-            // or you could show a warning
-            console.warn(`No exchange rate available for ${inv.currency}`);
-            return sum; // Skip this investment
-          }
-        }
+        console.log(`Converting ${inv.amount} ${inv.currency} to ${baseCurrency}: ${convertedAmount}`);
         
         return sum + convertedAmount;
       }, 0);
@@ -138,27 +133,19 @@ export const RecurringInvestments: React.FC = () => {
     const currencies = new Set(activeInvestments.map(inv => inv.currency));
     const hasMultipleCurrencies = currencies.size > 1;
     
-    // If all investments are in the base currency, no conversion needed
-    if (!hasMultipleCurrencies && currencies.has(baseCurrency)) {
-      const total = activeInvestments.reduce((sum, inv) => sum + inv.amount, 0);
-      return exchangeRateService.formatCurrency(total, baseCurrency);
-    }
-    
     // If we have multiple currencies or non-base currency, we need exchange rates
     if (hasMultipleCurrencies || !currencies.has(baseCurrency)) {
       // If exchange rates are still loading, show loading
       if (exchangeRatesLoading) {
         return 'Loading...';
       }
-      
-      // If exchange rates failed to load, show error or fallback
-      if (Object.keys(exchangeRates).length === 0) {
-        return 'Exchange rates unavailable';
-      }
     }
     
-    // Calculate with currency conversion
-    return exchangeRateService.formatCurrency(calculateMonthlyTotal(), baseCurrency);
+    // Calculate with currency conversion using the exchange rate service
+    const total = calculateMonthlyTotal();
+    console.log(`Monthly total calculated: ${total} ${baseCurrency}`);
+    
+    return exchangeRateService.formatCurrency(total, baseCurrency);
   };
 
   const handleCreateInvestment = async () => {
