@@ -686,6 +686,7 @@ export const AssetsList: React.FC = () => {
         onClose={handleCloseAssetForm}
         onSuccess={handleAssetSuccess}
         editAsset={editingAsset}
+        existingAssets={assets}
       />
 
       {/* Delete Confirmation Dialog */}

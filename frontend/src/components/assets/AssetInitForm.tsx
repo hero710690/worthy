@@ -13,21 +13,29 @@ import {
   Typography,
   Box,
   CircularProgress,
+  Stack,
+  Chip,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import {
   TrendingUp,
   AttachMoney,
   ShowChart,
   AccountBalance,
+  Add,
+  Receipt,
+  Paid,
 } from '@mui/icons-material';
 import { assetAPI } from '../../services/assetApi';
-import type { CreateAssetRequest, Asset } from '../../types/assets';
+import type { CreateAssetRequest, Asset, CreateTransactionRequest } from '../../types/assets';
 
 interface AssetInitFormProps {
   open: boolean;
   onClose: () => void;
   onSuccess: () => void;
   editAsset?: Asset | null;
+  existingAssets?: Asset[]; // For lump sum purchases
 }
 
 const currencies = [
@@ -53,8 +61,12 @@ export const AssetInitForm: React.FC<AssetInitFormProps> = ({
   open, 
   onClose, 
   onSuccess, 
-  editAsset 
+  editAsset,
+  existingAssets = []
 }) => {
+  // Operation type: 'init' for new asset, 'purchase' for lump sum purchase
+  const [operationType, setOperationType] = useState<'init' | 'purchase'>('init');
+  
   const [formData, setFormData] = useState<CreateAssetRequest>({
     ticker_symbol: '',
     asset_type: 'Stock',
@@ -62,14 +74,26 @@ export const AssetInitForm: React.FC<AssetInitFormProps> = ({
     average_cost_basis: 0,
     currency: 'USD',
   });
+
+  // Transaction data for lump sum purchases
+  const [transactionData, setTransactionData] = useState<CreateTransactionRequest>({
+    asset_id: 0,
+    transaction_type: 'LumpSum',
+    shares: 0,
+    price_per_share: 0,
+    currency: 'USD',
+    transaction_date: new Date().toISOString().split('T')[0],
+  });
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const isEditMode = !!editAsset;
 
-  // Initialize form data when editing
+  // Initialize form data when editing or opening
   useEffect(() => {
     if (editAsset) {
+      setOperationType('init'); // Edit mode is always asset initialization
       setFormData({
         ticker_symbol: editAsset.ticker_symbol,
         asset_type: editAsset.asset_type,
@@ -78,13 +102,22 @@ export const AssetInitForm: React.FC<AssetInitFormProps> = ({
         currency: editAsset.currency,
       });
     } else {
-      // Reset form for new asset
+      // Reset form for new operations
+      setOperationType('init');
       setFormData({
         ticker_symbol: '',
         asset_type: 'Stock',
         total_shares: 0,
         average_cost_basis: 0,
         currency: 'USD',
+      });
+      setTransactionData({
+        asset_id: 0,
+        transaction_type: 'LumpSum',
+        shares: 0,
+        price_per_share: 0,
+        currency: 'USD',
+        transaction_date: new Date().toISOString().split('T')[0],
       });
     }
     setError(null);
@@ -102,18 +135,47 @@ export const AssetInitForm: React.FC<AssetInitFormProps> = ({
     }));
   };
 
+  const handleTransactionChange = (field: keyof CreateTransactionRequest) => (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const value = event.target.value;
+    setTransactionData(prev => ({
+      ...prev,
+      [field]: field === 'shares' || field === 'price_per_share' || field === 'asset_id'
+        ? parseFloat(value) || 0 
+        : value
+    }));
+  };
+
   const validateForm = (): boolean => {
-    if (!formData.ticker_symbol.trim()) {
-      setError('Ticker symbol is required');
-      return false;
-    }
-    if (formData.total_shares <= 0) {
-      setError('Total shares must be greater than 0');
-      return false;
-    }
-    if (formData.average_cost_basis <= 0) {
-      setError('Average cost basis must be greater than 0');
-      return false;
+    if (operationType === 'init') {
+      // Validate asset initialization
+      if (!formData.ticker_symbol.trim()) {
+        setError('Ticker symbol is required');
+        return false;
+      }
+      if (formData.total_shares <= 0) {
+        setError('Total shares must be greater than 0');
+        return false;
+      }
+      if (formData.average_cost_basis <= 0) {
+        setError('Average cost basis must be greater than 0');
+        return false;
+      }
+    } else if (operationType === 'purchase') {
+      // Validate lump sum purchase
+      if (!transactionData.asset_id) {
+        setError('Please select an asset');
+        return false;
+      }
+      if (transactionData.shares <= 0) {
+        setError('Shares must be greater than 0');
+        return false;
+      }
+      if (transactionData.price_per_share <= 0) {
+        setError('Price per share must be greater than 0');
+        return false;
+      }
     }
     return true;
   };
@@ -133,15 +195,20 @@ export const AssetInitForm: React.FC<AssetInitFormProps> = ({
           average_cost_basis: formData.average_cost_basis,
           currency: formData.currency,
         });
-      } else {
+      } else if (operationType === 'init') {
         // Create new asset
         await assetAPI.createAsset(formData);
+      } else if (operationType === 'purchase') {
+        // Create lump sum transaction
+        await assetAPI.createTransaction(transactionData);
       }
       
       onSuccess();
     } catch (error: any) {
-      console.error('Failed to save asset:', error);
-      setError(error.response?.data?.message || `Failed to ${isEditMode ? 'update' : 'create'} asset`);
+      console.error('Failed to save:', error);
+      const operation = isEditMode ? 'update asset' : 
+                       operationType === 'init' ? 'create asset' : 'record purchase';
+      setError(error.response?.data?.message || `Failed to ${operation}`);
     } finally {
       setLoading(false);
     }
@@ -190,16 +257,19 @@ export const AssetInitForm: React.FC<AssetInitFormProps> = ({
               color: 'white'
             }}
           >
-            {getAssetIcon(formData.asset_type)}
+            {operationType === 'purchase' ? <Receipt /> : getAssetIcon(formData.asset_type)}
           </Box>
           <Box>
             <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-              {isEditMode ? 'Edit Asset' : 'Initialize Asset Position'}
+              {isEditMode ? 'Edit Asset' : 
+               operationType === 'init' ? 'Initialize Asset Position' : 'Record Lump Sum Purchase'}
             </Typography>
             <Typography variant="body2" color="text.secondary">
               {isEditMode 
                 ? 'Update your existing asset information'
-                : 'Add an existing investment to your portfolio'
+                : operationType === 'init'
+                ? 'Add an existing investment to your portfolio'
+                : 'Buy more shares of an existing asset'
               }
             </Typography>
           </Box>
@@ -213,22 +283,55 @@ export const AssetInitForm: React.FC<AssetInitFormProps> = ({
           </Alert>
         )}
 
+        {/* Operation Type Selection (only for new operations) */}
+        {!isEditMode && (
+          <Box sx={{ mb: 3 }}>
+            <Tabs 
+              value={operationType} 
+              onChange={(_, newValue) => setOperationType(newValue)}
+              sx={{ mb: 2 }}
+            >
+              <Tab 
+                value="init" 
+                label="Initialize Asset" 
+                icon={<Add />}
+                iconPosition="start"
+              />
+              <Tab 
+                value="purchase" 
+                label="Lump Sum Purchase" 
+                icon={<Receipt />}
+                iconPosition="start"
+                disabled={existingAssets.length === 0}
+              />
+            </Tabs>
+            {operationType === 'purchase' && existingAssets.length === 0 && (
+              <Alert severity="info" sx={{ mb: 2 }}>
+                You need to initialize at least one asset before recording purchases.
+              </Alert>
+            )}
+          </Box>
+        )}
+
         <Grid container spacing={3}>
-          <Grid item xs={12} sm={6}>
-            <TextField
-              fullWidth
-              label="Ticker Symbol"
-              value={formData.ticker_symbol}
-              onChange={handleInputChange('ticker_symbol')}
-              placeholder="e.g., AAPL, TSLA, VTI"
-              disabled={loading || isEditMode} // Disable editing ticker in edit mode
-              helperText={isEditMode ? "Ticker symbol cannot be changed" : "Enter the stock/ETF ticker symbol"}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <TrendingUp color="action" />
-                  </InputAdornment>
-                ),
+          {/* Asset Initialization Form */}
+          {operationType === 'init' && (
+            <>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  label="Ticker Symbol"
+                  value={formData.ticker_symbol}
+                  onChange={handleInputChange('ticker_symbol')}
+                  placeholder="e.g., AAPL, TSLA, VTI"
+                  disabled={loading || isEditMode} // Disable editing ticker in edit mode
+                  helperText={isEditMode ? "Ticker symbol cannot be changed" : "Enter the stock/ETF ticker symbol"}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <TrendingUp color="action" />
+                      </InputAdornment>
+                    ),
               }}
             />
           </Grid>
@@ -340,6 +443,133 @@ export const AssetInitForm: React.FC<AssetInitFormProps> = ({
               </Typography>
             </Box>
           </Grid>
+          </>
+          )}
+
+          {/* Lump Sum Purchase Form */}
+          {operationType === 'purchase' && (
+            <>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  select
+                  label="Select Asset"
+                  value={transactionData.asset_id}
+                  onChange={handleTransactionChange('asset_id')}
+                  disabled={loading}
+                  helperText="Choose which asset to purchase more shares of"
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <TrendingUp color="action" />
+                      </InputAdornment>
+                    ),
+                  }}
+                >
+                  {existingAssets.map((asset) => (
+                    <MenuItem key={asset.asset_id} value={asset.asset_id}>
+                      {asset.ticker_symbol} - {asset.asset_type}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
+
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  type="number"
+                  label="Shares to Purchase"
+                  value={transactionData.shares}
+                  onChange={handleTransactionChange('shares')}
+                  disabled={loading}
+                  helperText="Number of shares you're buying"
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <ShowChart color="action" />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </Grid>
+
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  type="number"
+                  label="Price per Share"
+                  value={transactionData.price_per_share}
+                  onChange={handleTransactionChange('price_per_share')}
+                  disabled={loading}
+                  helperText="Purchase price per share"
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <AttachMoney color="action" />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </Grid>
+
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  type="date"
+                  label="Transaction Date"
+                  value={transactionData.transaction_date}
+                  onChange={handleTransactionChange('transaction_date')}
+                  disabled={loading}
+                  helperText="Date of purchase"
+                  InputLabelProps={{
+                    shrink: true,
+                  }}
+                />
+              </Grid>
+
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  select
+                  label="Currency"
+                  value={transactionData.currency}
+                  onChange={handleTransactionChange('currency')}
+                  disabled={loading}
+                  helperText="Currency of the transaction"
+                >
+                  {currencies.map((option) => (
+                    <MenuItem key={option.value} value={option.value}>
+                      {option.label}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Grid>
+
+              <Grid item xs={12} sm={6}>
+                <Box
+                  sx={{
+                    p: 2,
+                    borderRadius: 2,
+                    bgcolor: 'grey.50',
+                    border: '1px solid',
+                    borderColor: 'grey.200'
+                  }}
+                >
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                    Total Purchase Amount
+                  </Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                    {(transactionData.shares * transactionData.price_per_share).toLocaleString(undefined, {
+                      style: 'currency',
+                      currency: transactionData.currency,
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </Typography>
+                </Box>
+              </Grid>
+            </>
+          )}
         </Grid>
       </DialogContent>
 

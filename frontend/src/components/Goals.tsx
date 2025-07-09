@@ -85,36 +85,260 @@ export const Goals: React.FC = () => {
     const annualExpenses = profile.annual_expenses;
     const safeWithdrawalRate = profile.safe_withdrawal_rate;
     const expectedReturn = profile.expected_annual_return || formData.expected_return_pre_retirement;
-    const baristaIncome = profile.barista_annual_income;
+    const baristaMonthlyIncome = profile.barista_annual_income / 12;
+    const baristaAnnualIncome = profile.barista_annual_income;
+    const monthlyContribution = formData.annual_savings / 12;
+    const monthlyRate = expectedReturn / 12;
     
-    // FIRE Target Calculations (simplified for compatibility)
+    // Calculate FIRE targets (matching Python logic)
     const traditionalFireTarget = annualExpenses / safeWithdrawalRate;
-    const baristaFireTarget = Math.max((annualExpenses - baristaIncome) / safeWithdrawalRate, 0);
-    const coastFireTarget = yearsToRetirement > 0 
-      ? traditionalFireTarget / Math.pow(1 + expectedReturn, yearsToRetirement)
-      : traditionalFireTarget;
+    const netSpendForBaristaFire = Math.max(annualExpenses - baristaAnnualIncome, 0);
+    const baristaFireTarget = netSpendForBaristaFire / safeWithdrawalRate;
     
-    // Progress percentages
-    const traditionalProgress = traditionalFireTarget > 0 ? (currentPortfolioValue / traditionalFireTarget * 100) : 0;
-    const baristaProgress = baristaFireTarget > 0 ? (currentPortfolioValue / baristaFireTarget * 100) : 0;
-    const coastProgress = coastFireTarget > 0 ? (currentPortfolioValue / coastFireTarget * 100) : 0;
-    
-    // Simplified calculation functions
-    const calculateYearsToFI = (target: number, currentValue: number, monthlyInvestment: number = 0): number => {
-      if (target <= currentValue) return 0;
-      if (monthlyInvestment <= 0) return 999;
+    // FIRE Timeline Calculator (based on precise mathematical formulas)
+    const calculateFIRETimeline = () => {
+      // Results storage
+      const results = {
+        traditional: {
+          target: traditionalFireTarget,
+          achieved: false,
+          yearsToAchieve: -1,
+          ageAtAchievement: currentAge,
+          dateAtAchievement: null as Date | null,
+          monthsToAchieve: -1
+        },
+        barista: {
+          target: baristaFireTarget,
+          coastAmount: 0,
+          achieved: false,
+          yearsToCoast: -1,
+          ageAtCoast: currentAge,
+          dateAtCoast: null as Date | null,
+          monthsToCoast: -1,
+          message: ""
+        },
+        coast: {
+          target: traditionalFireTarget,
+          coastAmount: 0,
+          achieved: false,
+          yearsToCoast: -1,
+          ageAtCoast: currentAge,
+          dateAtCoast: null as Date | null,
+          monthsToCoast: -1,
+          message: ""
+        }
+      };
       
-      const monthlyRate = expectedReturn / 12;
-      if (monthlyRate === 0) return (target - currentValue) / (monthlyInvestment * 12);
-      
-      try {
-        const years = Math.log((target * monthlyRate / monthlyInvestment) + 1) / (12 * Math.log(1 + monthlyRate));
-        return Math.max(years, 0);
-      } catch {
-        return 999;
+      // Check if already achieved Traditional FIRE
+      if (currentPortfolioValue >= traditionalFireTarget) {
+        results.traditional.achieved = true;
+        results.traditional.yearsToAchieve = 0;
+        results.traditional.ageAtAchievement = currentAge;
+        results.traditional.dateAtAchievement = new Date();
+        results.traditional.monthsToAchieve = 0;
       }
+      
+      // Special case: Barista FIRE target is zero (income covers all expenses)
+      if (baristaFireTarget <= 0) {
+        results.barista.achieved = true;
+        results.barista.yearsToCoast = 0;
+        results.barista.ageAtCoast = currentAge;
+        results.barista.dateAtCoast = new Date();
+        results.barista.monthsToCoast = 0;
+        results.barista.coastAmount = 0;
+        results.barista.message = "Barista FIRE already achieved - your part-time income covers all expenses!";
+      }
+      
+      // Calculate Coast FIRE using precise mathematical approach
+      const calculateCoastFIRE = () => {
+        const monthlyRate = expectedReturn / 12;
+        const maxMonths = (profile.target_retirement_age - currentAge) * 12;
+        
+        // Iterate month by month to find Coast FIRE point
+        for (let months = 0; months <= maxMonths; months++) {
+          const currentSimAge = currentAge + (months / 12);
+          const yearsLeftToRetirement = profile.target_retirement_age - currentSimAge;
+          
+          // Calculate required coast amount at this point in time
+          // This is the present value of Traditional FIRE number discounted back
+          const requiredCoastAmount = yearsLeftToRetirement > 0 && expectedReturn > 0
+            ? traditionalFireTarget / Math.pow(1 + expectedReturn, yearsLeftToRetirement)
+            : traditionalFireTarget;
+          
+          // Calculate future value of current portfolio + contributions up to this point
+          // FV = P * (1 + r)^n + PMT * [((1 + r)^n - 1) / r]
+          let portfolioFutureValue;
+          if (monthlyRate === 0) {
+            // No growth case
+            portfolioFutureValue = currentPortfolioValue + (monthlyContribution * months);
+          } else {
+            // With growth
+            const principalGrowth = currentPortfolioValue * Math.pow(1 + monthlyRate, months);
+            const contributionsGrowth = months > 0 
+              ? monthlyContribution * ((Math.pow(1 + monthlyRate, months) - 1) / monthlyRate)
+              : 0;
+            portfolioFutureValue = principalGrowth + contributionsGrowth;
+          }
+          
+          // Check if we've reached Coast FIRE
+          if (portfolioFutureValue >= requiredCoastAmount) {
+            const yearsToCoast = months / 12;
+            const coastDate = new Date(currentYear, new Date().getMonth(), new Date().getDate() + (months * 30.44));
+            
+            results.coast.achieved = true;
+            results.coast.yearsToCoast = yearsToCoast;
+            results.coast.ageAtCoast = currentSimAge;
+            results.coast.dateAtCoast = coastDate;
+            results.coast.monthsToCoast = months;
+            results.coast.coastAmount = requiredCoastAmount;
+            
+            if (months === 0) {
+              results.coast.message = `🎉 You can Coast FIRE now! You have ${formatCurrency(currentPortfolioValue, baseCurrency)} and need ${formatCurrency(requiredCoastAmount, baseCurrency)}. You can stop investing and still reach Traditional FIRE at age ${profile.target_retirement_age}.`;
+            } else {
+              results.coast.message = `In ${yearsToCoast.toFixed(2)} years you can Coast FIRE once you save up ${formatCurrency(requiredCoastAmount, baseCurrency)} on ${coastDate.toLocaleDateString()} at age ${currentSimAge.toFixed(2)} (i.e. after ${coastDate.toLocaleDateString()} you can halt all retirement contributions and still retire at age ${profile.target_retirement_age})`;
+            }
+            break;
+          }
+        }
+        
+        // If not found within retirement timeframe, it's not achievable
+        if (!results.coast.achieved) {
+          results.coast.message = `Coast FIRE may not be reachable before your target retirement age ${profile.target_retirement_age} with current savings rate. Consider increasing monthly contributions or extending retirement age.`;
+        }
+      };
+      
+      // Calculate Barista FIRE using the same approach
+      const calculateBaristaFIRE = () => {
+        if (baristaFireTarget <= 0) return; // Already handled above
+        
+        const monthlyRate = expectedReturn / 12;
+        const maxMonths = (profile.target_retirement_age - currentAge) * 12;
+        
+        for (let months = 0; months <= maxMonths; months++) {
+          const currentSimAge = currentAge + (months / 12);
+          const yearsLeftToRetirement = profile.target_retirement_age - currentSimAge;
+          
+          // Calculate required barista coast amount
+          const requiredBaristaCoastAmount = yearsLeftToRetirement > 0 && expectedReturn > 0
+            ? baristaFireTarget / Math.pow(1 + expectedReturn, yearsLeftToRetirement)
+            : baristaFireTarget;
+          
+          // Calculate portfolio future value
+          let portfolioFutureValue;
+          if (monthlyRate === 0) {
+            portfolioFutureValue = currentPortfolioValue + (monthlyContribution * months);
+          } else {
+            const principalGrowth = currentPortfolioValue * Math.pow(1 + monthlyRate, months);
+            const contributionsGrowth = months > 0 
+              ? monthlyContribution * ((Math.pow(1 + monthlyRate, months) - 1) / monthlyRate)
+              : 0;
+            portfolioFutureValue = principalGrowth + contributionsGrowth;
+          }
+          
+          if (portfolioFutureValue >= requiredBaristaCoastAmount) {
+            const yearsToCoast = months / 12;
+            const coastDate = new Date(currentYear, new Date().getMonth(), new Date().getDate() + (months * 30.44));
+            
+            results.barista.achieved = true;
+            results.barista.yearsToCoast = yearsToCoast;
+            results.barista.ageAtCoast = currentSimAge;
+            results.barista.dateAtCoast = coastDate;
+            results.barista.monthsToCoast = months;
+            results.barista.coastAmount = requiredBaristaCoastAmount;
+            
+            if (months === 0) {
+              results.barista.message = `🎉 You can Barista FIRE now! You can work part-time (${formatCurrency(baristaMonthlyIncome, baseCurrency)}/month) and still reach retirement at age ${profile.target_retirement_age}.`;
+            } else {
+              results.barista.message = `In ${yearsToCoast.toFixed(2)} years you can Barista FIRE once you save up ${formatCurrency(requiredBaristaCoastAmount, baseCurrency)} on ${coastDate.toLocaleDateString()} at age ${currentSimAge.toFixed(2)} (i.e. after ${coastDate.toLocaleDateString()} you can work part-time at ${formatCurrency(baristaMonthlyIncome, baseCurrency)}/month and still retire at age ${profile.target_retirement_age})`;
+            }
+            break;
+          }
+        }
+        
+        if (!results.barista.achieved) {
+          results.barista.message = `Barista FIRE may not be reachable before your target retirement age with current savings rate. Consider increasing monthly contributions or extending retirement age.`;
+        }
+      };
+      
+      // Calculate Traditional FIRE using direct formula
+      const calculateTraditionalFIRE = () => {
+        if (results.traditional.achieved) return; // Already achieved
+        
+        const monthlyRate = expectedReturn / 12;
+        
+        if (monthlyRate === 0 && monthlyContribution === 0) {
+          // No growth and no contributions - impossible
+          results.traditional.yearsToAchieve = -1;
+          return;
+        }
+        
+        // Solve for n in: FV = P * (1 + r)^n + PMT * [((1 + r)^n - 1) / r]
+        // This is complex to solve analytically, so we'll use iteration
+        const targetAmount = traditionalFireTarget;
+        const maxMonths = 50 * 12; // 50 years max
+        
+        for (let months = 1; months <= maxMonths; months++) {
+          let portfolioFutureValue;
+          if (monthlyRate === 0) {
+            portfolioFutureValue = currentPortfolioValue + (monthlyContribution * months);
+          } else {
+            const principalGrowth = currentPortfolioValue * Math.pow(1 + monthlyRate, months);
+            const contributionsGrowth = monthlyContribution * ((Math.pow(1 + monthlyRate, months) - 1) / monthlyRate);
+            portfolioFutureValue = principalGrowth + contributionsGrowth;
+          }
+          
+          if (portfolioFutureValue >= targetAmount) {
+            const yearsToAchieve = months / 12;
+            results.traditional.yearsToAchieve = yearsToAchieve;
+            results.traditional.ageAtAchievement = currentAge + yearsToAchieve;
+            results.traditional.dateAtAchievement = new Date(currentYear + Math.floor(yearsToAchieve), new Date().getMonth(), new Date().getDate());
+            results.traditional.monthsToAchieve = months;
+            break;
+          }
+        }
+        
+        // If not found within 50 years, it's effectively unreachable
+        if (results.traditional.yearsToAchieve === -1) {
+          results.traditional.yearsToAchieve = -1; // Unreachable
+        }
+      };
+      
+      // Execute calculations
+      calculateCoastFIRE();
+      calculateBaristaFIRE();
+      calculateTraditionalFIRE();
+      
+      return results;
     };
     
+    // Run the FIRE timeline calculation
+    const fireResults = calculateFIRETimeline();
+    
+    // Extract results for easier access (use the targets calculated in the timeline function)
+    const coastFireTarget = fireResults.coast.target;
+    
+    const traditionalFireAchieved = fireResults.traditional.achieved;
+    const baristaFireAchieved = fireResults.barista.achieved;
+    const coastFireAchieved = fireResults.coast.achieved;
+    
+    const yearsToTraditionalFire = fireResults.traditional.yearsToAchieve;
+    const yearsToBaristaFire = fireResults.barista.yearsToCoast;
+    const yearsToCoastFire = fireResults.coast.yearsToCoast;
+    
+    const traditionalFireDate = fireResults.traditional.dateAtAchievement;
+    const baristaFireDate = fireResults.barista.dateAtCoast;
+    const coastFireDate = fireResults.coast.dateAtCoast;
+    
+    const traditionalFireAge = fireResults.traditional.ageAtAchievement;
+    const baristaFireAge = fireResults.barista.ageAtCoast;
+    const coastFireAge = fireResults.coast.ageAtCoast;
+    
+    // Calculate progress percentages
+    const traditionalProgress = (currentPortfolioValue / traditionalFireTarget) * 100;
+    const baristaProgress = baristaFireTarget > 0 ? (currentPortfolioValue / baristaFireTarget) * 100 : 100;
+    const coastProgress = (currentPortfolioValue / (fireResults.coast.coastAmount || traditionalFireTarget)) * 100;
+    
+    // Calculate monthly investment needed using simulation results
     const calculateMonthlyNeeded = (target: number, currentValue: number, years: number = 30): number => {
       if (years <= 0 || target <= currentValue) return 0;
       
@@ -132,14 +356,13 @@ export const Goals: React.FC = () => {
       return Math.max(monthlyPayment, 0);
     };
     
-    // Calculate metrics for each FIRE type
-    const traditionalYears = calculateYearsToFI(traditionalFireTarget, currentPortfolioValue, formData.annual_savings / 12);
-    const baristaYears = calculateYearsToFI(baristaFireTarget, currentPortfolioValue, formData.annual_savings / 12);
-    const coastYears = calculateYearsToFI(coastFireTarget, currentPortfolioValue, 0); // Coast FIRE doesn't need additional contributions
-    
-    const traditionalMonthly = calculateMonthlyNeeded(traditionalFireTarget, currentPortfolioValue, Math.min(traditionalYears, 30));
-    const baristaMonthly = calculateMonthlyNeeded(baristaFireTarget, currentPortfolioValue, Math.min(baristaYears, 30));
-    const coastMonthly = 0; // Coast FIRE doesn't require additional monthly contributions
+    // Calculate monthly needed for each FIRE type using simulation results
+    const traditionalMonthly = traditionalFireAchieved ? 0 : 
+      (yearsToTraditionalFire > 0 && yearsToTraditionalFire < 100) ? calculateMonthlyNeeded(traditionalFireTarget, currentPortfolioValue, Math.min(yearsToTraditionalFire, 30)) : 0;
+    const baristaMonthly = baristaFireAchieved ? 0 : 
+      (yearsToBaristaFire > 0 && yearsToBaristaFire < 100) ? calculateMonthlyNeeded(baristaFireTarget, currentPortfolioValue, Math.min(yearsToBaristaFire, 30)) : 0;
+    const coastMonthlyNeeded = coastFireAchieved ? 0 : 
+      (yearsToCoastFire > 0 && yearsToCoastFire < 100) ? calculateMonthlyNeeded(fireResults.coast.coastAmount || traditionalFireTarget, currentPortfolioValue, Math.min(yearsToCoastFire, 30)) : 0;
     
     const progress: FIREProgress = {
       current_total_assets: currentPortfolioValue,
@@ -147,28 +370,28 @@ export const Goals: React.FC = () => {
       years_to_retirement: yearsToRetirement,
       
       traditional_fire_target: traditionalFireTarget,
-      traditional_fire_target_real: traditionalFireTarget, // Simplified for now
+      traditional_fire_target_real: traditionalFireTarget,
       barista_fire_target: baristaFireTarget,
-      barista_fire_target_real: baristaFireTarget, // Simplified for now
-      coast_fire_target: coastFireTarget,
-      coast_fire_target_real: coastFireTarget, // Simplified for now
+      barista_fire_target_real: baristaFireTarget,
+      coast_fire_target: fireResults.coast.coastAmount || traditionalFireTarget,
+      coast_fire_target_real: fireResults.coast.coastAmount || traditionalFireTarget,
       
       traditional_fire_progress: Math.min(traditionalProgress, 100),
       barista_fire_progress: Math.min(baristaProgress, 100),
       coast_fire_progress: Math.min(coastProgress, 100),
       
-      years_to_traditional_fire: traditionalYears,
-      years_to_barista_fire: baristaYears,
-      years_to_coast_fire: coastYears,
+      years_to_traditional_fire: yearsToTraditionalFire,
+      years_to_barista_fire: yearsToBaristaFire,
+      years_to_coast_fire: yearsToCoastFire,
       
       monthly_investment_needed_traditional: traditionalMonthly,
       monthly_investment_needed_barista: baristaMonthly,
       annual_savings_rate: formData.annual_income > 0 ? (formData.annual_savings / formData.annual_income) : 0,
-      required_savings_rate_traditional: 0, // Simplified for now
+      required_savings_rate_traditional: 0,
       
-      is_coast_fire_achieved: coastProgress >= 100,
-      financial_independence_date: undefined, // Simplified for now
-      purchasing_power_at_retirement: traditionalFireTarget // Simplified for now
+      is_coast_fire_achieved: coastFireAchieved,
+      financial_independence_date: traditionalFireDate?.toISOString().split('T')[0],
+      purchasing_power_at_retirement: traditionalFireTarget
     };
     
     const calculations: FIRECalculation[] = [
@@ -178,11 +401,11 @@ export const Goals: React.FC = () => {
         target_amount_real: traditionalFireTarget,
         current_progress: currentPortfolioValue,
         progress_percentage: Math.min(traditionalProgress, 100),
-        years_remaining: traditionalYears,
+        years_remaining: yearsToTraditionalFire > 0 ? yearsToTraditionalFire : null, // null for unreachable
         monthly_investment_needed: traditionalMonthly,
         annual_savings_rate_required: 0,
-        achieved: traditionalProgress >= 100,
-        projected_fi_date: undefined,
+        achieved: traditionalFireAchieved,
+        projected_fi_date: traditionalFireDate?.toISOString().split('T')[0],
         real_purchasing_power: traditionalFireTarget,
         tax_adjusted_withdrawal: traditionalFireTarget * safeWithdrawalRate
       },
@@ -192,27 +415,34 @@ export const Goals: React.FC = () => {
         target_amount_real: baristaFireTarget,
         current_progress: currentPortfolioValue,
         progress_percentage: Math.min(baristaProgress, 100),
-        years_remaining: baristaYears,
+        years_remaining: yearsToBaristaFire > 0 ? yearsToBaristaFire : null, // null for unreachable
         monthly_investment_needed: baristaMonthly,
         annual_savings_rate_required: 0,
-        achieved: baristaProgress >= 100,
-        projected_fi_date: undefined,
+        achieved: baristaFireAchieved,
+        projected_fi_date: baristaFireDate?.toISOString().split('T')[0],
         real_purchasing_power: baristaFireTarget,
-        tax_adjusted_withdrawal: baristaFireTarget * safeWithdrawalRate
+        tax_adjusted_withdrawal: baristaFireTarget * safeWithdrawalRate,
+        // Barista FIRE specific message
+        barista_fire_message: fireResults.barista.message
       },
       {
         fire_type: 'Coast',
-        target_amount: coastFireTarget,
-        target_amount_real: coastFireTarget,
+        target_amount: fireResults.coast.coastAmount || traditionalFireTarget,
+        target_amount_real: fireResults.coast.coastAmount || traditionalFireTarget,
         current_progress: currentPortfolioValue,
         progress_percentage: Math.min(coastProgress, 100),
-        years_remaining: coastYears,
-        monthly_investment_needed: coastMonthly,
+        years_remaining: yearsToCoastFire > 0 ? yearsToCoastFire : null, // null for unreachable
+        monthly_investment_needed: coastMonthlyNeeded,
         annual_savings_rate_required: 0,
-        achieved: coastProgress >= 100,
-        projected_fi_date: undefined,
-        real_purchasing_power: coastFireTarget,
-        tax_adjusted_withdrawal: coastFireTarget * safeWithdrawalRate
+        achieved: coastFireAchieved,
+        projected_fi_date: coastFireDate?.toISOString().split('T')[0],
+        real_purchasing_power: traditionalFireTarget, // Will grow to this
+        tax_adjusted_withdrawal: traditionalFireTarget * safeWithdrawalRate, // Will grow to this
+        // Coast FIRE specific fields
+        coast_fire_age: coastFireAge,
+        coast_fire_date: coastFireDate,
+        retirement_age: profile.target_retirement_age,
+        can_stop_contributing_message: fireResults.coast.message
       }
     ];
     
@@ -257,20 +487,20 @@ export const Goals: React.FC = () => {
         setFireProgress(progress);
         setCalculations(calculations);
         
-        // Update form with existing data, mapping to new comprehensive structure
+        // Update form with existing data, mapping all comprehensive fields
         const existingProfile = profileResponse.fire_profile;
         setFormData({
-          // Map existing fields to new structure
-          annual_income: 1000000, // Default, will be user-configurable
-          annual_savings: 200000, // Default, will be user-configurable
+          // Use saved values or fallback to reasonable defaults
+          annual_income: existingProfile.annual_income || 1000000,
+          annual_savings: existingProfile.annual_savings || 200000,
           annual_expenses: existingProfile.annual_expenses,
           target_retirement_age: existingProfile.target_retirement_age,
           safe_withdrawal_rate: existingProfile.safe_withdrawal_rate,
-          expected_return_pre_retirement: existingProfile.expected_annual_return,
-          expected_return_post_retirement: existingProfile.expected_annual_return * 0.8, // Conservative estimate
-          expected_inflation_rate: 0.025, // Default 2.5%
-          other_passive_income: 0, // Default
-          effective_tax_rate: 0.15, // Default 15%
+          expected_return_pre_retirement: existingProfile.expected_return_pre_retirement || existingProfile.expected_annual_return,
+          expected_return_post_retirement: existingProfile.expected_return_post_retirement || (existingProfile.expected_annual_return * 0.8),
+          expected_inflation_rate: existingProfile.expected_inflation_rate || 0.025,
+          other_passive_income: existingProfile.other_passive_income || 0,
+          effective_tax_rate: existingProfile.effective_tax_rate || 0.15,
           expected_annual_return: existingProfile.expected_annual_return,
           barista_annual_income: existingProfile.barista_annual_income,
         });
@@ -340,9 +570,9 @@ export const Goals: React.FC = () => {
 
   const getFIREIcon = (fireType: string) => {
     switch (fireType) {
-      case 'Traditional': return <BeachAccess />;
+      case 'Traditional': return <GpsFixed />;
       case 'Barista': return <Coffee />;
-      case 'Coast': return <GpsFixed />;
+      case 'Coast': return <BeachAccess />;
       default: return <TrendingUp />;
     }
   };
@@ -354,7 +584,7 @@ export const Goals: React.FC = () => {
       case 'Barista':
         return 'Partial financial independence - supplement with part-time income';
       case 'Coast':
-        return 'Let current investments grow to traditional FIRE by retirement age';
+        return 'Stop investing now and still reach Traditional FIRE by retirement';
       default:
         return '';
     }
@@ -367,7 +597,7 @@ export const Goals: React.FC = () => {
       case 'Barista':
         return 'Barista FIRE: Working part-time to supplement passive income while enjoying early retirement. You need less savings because you\'ll earn some income from flexible work.';
       case 'Coast':
-        return 'Coast FIRE: Saving enough early so that investments grow without additional contributions. You can "coast" to traditional FIRE by letting compound interest do the work.';
+        return `Coast FIRE: Having enough saved NOW that you can stop investing completely and still reach Traditional FIRE by age ${fireProfile?.target_retirement_age || 'your target retirement age'}. Your current investments will grow through compound interest alone.`;
       default:
         return '';
     }
@@ -596,7 +826,9 @@ export const Goals: React.FC = () => {
                                   Years Remaining:
                                 </Typography>
                                 <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                                  {calc.years_remaining.toFixed(1)}
+                                  {calc.years_remaining !== null && calc.years_remaining > 0 
+                                    ? calc.years_remaining.toFixed(1) 
+                                    : 'Not achievable with current plan'}
                                 </Typography>
                               </Stack>
 
@@ -627,172 +859,6 @@ export const Goals: React.FC = () => {
             </Grid>
           )}
 
-          {/* Current Settings */}
-          <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200' }}>
-            <CardContent>
-              <Typography variant="h6" sx={{ mb: 3, fontWeight: 'bold' }}>
-                Current FIRE Settings
-              </Typography>
-              
-              {/* Current Financial Snapshot */}
-              <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 'bold', color: 'primary.main' }}>
-                💰 Current Financial Snapshot
-              </Typography>
-              <Grid container spacing={2} sx={{ mb: 3 }}>
-                <Grid item xs={12} sm={6} md={4}>
-                  <Paper sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      Annual Income
-                    </Typography>
-                    <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                      {formatBaseCurrency(formData.annual_income)}
-                    </Typography>
-                  </Paper>
-                </Grid>
-                <Grid item xs={12} sm={6} md={4}>
-                  <Paper sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      Annual Savings
-                    </Typography>
-                    <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                      {formatBaseCurrency(formData.annual_savings)}
-                    </Typography>
-                  </Paper>
-                </Grid>
-                <Grid item xs={12} sm={6} md={4}>
-                  <Paper sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      Savings Rate
-                    </Typography>
-                    <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                      {formData.annual_income > 0 ? ((formData.annual_savings / formData.annual_income) * 100).toFixed(1) : 0}%
-                    </Typography>
-                  </Paper>
-                </Grid>
-              </Grid>
-
-              {/* Retirement Goals */}
-              <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 'bold', color: 'success.main' }}>
-                🎯 Retirement Goals
-              </Typography>
-              <Grid container spacing={2} sx={{ mb: 3 }}>
-                <Grid item xs={12} sm={6} md={4}>
-                  <Paper sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      Annual Expenses in Retirement
-                    </Typography>
-                    <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                      {formatBaseCurrency(fireProfile.annual_expenses)}
-                    </Typography>
-                  </Paper>
-                </Grid>
-                <Grid item xs={12} sm={6} md={4}>
-                  <Paper sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      Target Retirement Age
-                    </Typography>
-                    <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                      {fireProfile.target_retirement_age}
-                    </Typography>
-                  </Paper>
-                </Grid>
-                <Grid item xs={12} sm={6} md={4}>
-                  <Paper sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      Current Age
-                    </Typography>
-                    <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                      {userAge}
-                    </Typography>
-                  </Paper>
-                </Grid>
-              </Grid>
-
-              {/* Core Assumptions */}
-              <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 'bold', color: 'warning.main' }}>
-                ⚙️ Core Assumptions
-              </Typography>
-              <Grid container spacing={2} sx={{ mb: 3 }}>
-                <Grid item xs={12} sm={6} md={4}>
-                  <Paper sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      Safe Withdrawal Rate
-                    </Typography>
-                    <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                      {(formData.safe_withdrawal_rate * 100).toFixed(1)}%
-                    </Typography>
-                  </Paper>
-                </Grid>
-                <Grid item xs={12} sm={6} md={4}>
-                  <Paper sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      Expected Inflation Rate
-                    </Typography>
-                    <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                      {(formData.expected_inflation_rate * 100).toFixed(1)}%
-                    </Typography>
-                  </Paper>
-                </Grid>
-                <Grid item xs={12} sm={6} md={4}>
-                  <Paper sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      Pre-Retirement Return
-                    </Typography>
-                    <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                      {(formData.expected_return_pre_retirement * 100).toFixed(1)}%
-                    </Typography>
-                  </Paper>
-                </Grid>
-                <Grid item xs={12} sm={6} md={4}>
-                  <Paper sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      Post-Retirement Return
-                    </Typography>
-                    <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                      {(formData.expected_return_post_retirement * 100).toFixed(1)}%
-                    </Typography>
-                  </Paper>
-                </Grid>
-                <Grid item xs={12} sm={6} md={4}>
-                  <Paper sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      Other Passive Income
-                    </Typography>
-                    <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                      {formatBaseCurrency(formData.other_passive_income)}
-                    </Typography>
-                  </Paper>
-                </Grid>
-                <Grid item xs={12} sm={6} md={4}>
-                  <Paper sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      Effective Tax Rate
-                    </Typography>
-                    <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                      {(formData.effective_tax_rate * 100).toFixed(1)}%
-                    </Typography>
-                  </Paper>
-                </Grid>
-              </Grid>
-
-              {/* Barista FIRE Options */}
-              <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 'bold', color: 'info.main' }}>
-                ☕ Barista FIRE Options
-              </Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6} md={4}>
-                  <Paper sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                      Barista Annual Income
-                    </Typography>
-                    <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                      {formatBaseCurrency(fireProfile.barista_annual_income)}
-                    </Typography>
-                  </Paper>
-                </Grid>
-              </Grid>
-            </CardContent>
-          </Card>
         </>
       )}
 

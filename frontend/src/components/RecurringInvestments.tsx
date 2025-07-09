@@ -53,12 +53,13 @@ export const RecurringInvestments: React.FC = () => {
   const [editingInvestment, setEditingInvestment] = useState<RecurringInvestment | null>(null);
 
   // Form state
-  const [formData, setFormData] = useState<CreateRecurringInvestmentRequest>({
+  const [formData, setFormData] = useState<CreateRecurringInvestmentRequest & { next_run_date?: string }>({
     ticker_symbol: '',
     amount: 0,
     currency: 'USD',
     frequency: 'monthly',
     start_date: new Date().toISOString().split('T')[0],
+    next_run_date: new Date().toISOString().split('T')[0],
   });
 
   useEffect(() => {
@@ -97,6 +98,8 @@ export const RecurringInvestments: React.FC = () => {
         amount: formData.amount,
         frequency: formData.frequency,
         is_active: editingInvestment.is_active,
+        start_date: formData.start_date,
+        next_run_date: formData.next_run_date,
       });
       setOpenDialog(false);
       setEditingInvestment(null);
@@ -139,6 +142,7 @@ export const RecurringInvestments: React.FC = () => {
       currency: 'USD',
       frequency: 'monthly',
       start_date: new Date().toISOString().split('T')[0],
+      next_run_date: new Date().toISOString().split('T')[0],
     });
   };
 
@@ -155,6 +159,7 @@ export const RecurringInvestments: React.FC = () => {
       currency: investment.currency,
       frequency: investment.frequency,
       start_date: investment.start_date,
+      next_run_date: investment.next_run_date,
     });
     setEditingInvestment(investment);
     setOpenDialog(true);
@@ -486,6 +491,29 @@ export const RecurringInvestments: React.FC = () => {
                 InputLabelProps={{ shrink: true }}
                 fullWidth
               />
+            )}
+
+            {editingInvestment && (
+              <>
+                <TextField
+                  label="Start Date"
+                  type="date"
+                  value={formData.start_date}
+                  onChange={(e) => setFormData({ ...formData, start_date: e.target.value })}
+                  InputLabelProps={{ shrink: true }}
+                  fullWidth
+                  helperText="Original start date of the recurring investment"
+                />
+                <TextField
+                  label="Next Run Date"
+                  type="date"
+                  value={formData.next_run_date}
+                  onChange={(e) => setFormData({ ...formData, next_run_date: e.target.value })}
+                  InputLabelProps={{ shrink: true }}
+                  fullWidth
+                  helperText="Next scheduled execution date"
+                />
+              </>
             )}
           </Stack>
         </DialogContent>
