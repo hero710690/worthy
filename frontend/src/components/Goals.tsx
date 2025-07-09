@@ -38,7 +38,9 @@ import { assetAPI } from '../services/assetApi';
 import { assetValuationService, type PortfolioValuation } from '../services/assetValuationService';
 import { FIREProfile, CreateFIREProfileRequest, FIREProgress, FIRECalculation } from '../types/fire';
 import { fireApi } from '../services/fireApi';
-import type { Asset } from '../types/assets';
+import { recurringInvestmentApi } from '../services/recurringInvestmentApi';
+import { exchangeRateService } from '../services/exchangeRateService';
+import type { Asset, RecurringInvestment } from '../types/assets';
 
 export const Goals: React.FC = () => {
   const { user } = useAuthStore();
@@ -48,6 +50,8 @@ export const Goals: React.FC = () => {
   const [fireProgress, setFireProgress] = useState<FIREProgress | null>(null);
   const [calculations, setCalculations] = useState<FIRECalculation[]>([]);
   const [loading, setLoading] = useState(true);
+  const [recurringInvestments, setRecurringInvestments] = useState<RecurringInvestment[]>([]);
+  const [exchangeRates, setExchangeRates] = useState<{ [key: string]: number }>({});
   const [error, setError] = useState<string | null>(null);
   const [openDialog, setOpenDialog] = useState(false);
   const [userAge, setUserAge] = useState<number>(30);
@@ -76,6 +80,38 @@ export const Goals: React.FC = () => {
     barista_annual_income: 300000, // NT$300,000 part-time income
   });
 
+  // Calculate total monthly recurring investments in base currency
+  const calculateMonthlyRecurringTotal = (): number => {
+    const baseCurrency = user?.base_currency || 'USD';
+    
+    return recurringInvestments
+      .filter(inv => inv.is_active)
+      .reduce((sum, inv) => {
+        // Convert to base currency using exchange rate service
+        const convertedAmount = exchangeRateService.convertCurrency(
+          inv.amount, 
+          inv.currency, 
+          baseCurrency
+        );
+        return sum + convertedAmount;
+      }, 0);
+  };
+
+  // Load recurring investments and exchange rates
+  const loadRecurringInvestments = async () => {
+    try {
+      const response = await recurringInvestmentApi.getRecurringInvestments();
+      setRecurringInvestments(response.recurring_investments);
+      
+      // Load exchange rates for currency conversion
+      const baseCurrency = user?.base_currency || 'USD';
+      const rates = await exchangeRateService.getRatesWithRefresh(baseCurrency);
+      setExchangeRates(rates);
+    } catch (err) {
+      console.error('Failed to load recurring investments:', err);
+    }
+  };
+
   const calculateFIREProgress = (profile: FIREProfile, currentPortfolioValue: number): { progress: FIREProgress; calculations: FIRECalculation[] } => {
     const currentYear = new Date().getFullYear();
     const currentAge = user?.birth_year ? currentYear - user.birth_year : 30;
@@ -87,8 +123,18 @@ export const Goals: React.FC = () => {
     const expectedReturn = profile.expected_annual_return || formData.expected_return_pre_retirement;
     const baristaMonthlyIncome = profile.barista_annual_income / 12;
     const baristaAnnualIncome = profile.barista_annual_income;
-    const monthlyContribution = formData.annual_savings / 12;
+    
+    // 🆕 ENHANCED: Use actual recurring investment amounts instead of form data
+    const actualMonthlyContribution = calculateMonthlyRecurringTotal();
+    const monthlyContribution = actualMonthlyContribution > 0 ? actualMonthlyContribution : (formData.annual_savings / 12);
     const monthlyRate = expectedReturn / 12;
+    
+    console.log('FIRE Calculation Enhanced:', {
+      actualRecurringInvestments: actualMonthlyContribution,
+      fallbackFromForm: formData.annual_savings / 12,
+      usingAmount: monthlyContribution,
+      activeRecurringPlans: recurringInvestments.filter(inv => inv.is_active).length
+    });
     
     // Calculate FIRE targets (matching Python logic)
     const traditionalFireTarget = annualExpenses / safeWithdrawalRate;
@@ -451,6 +497,7 @@ export const Goals: React.FC = () => {
 
   useEffect(() => {
     loadFIREData();
+    loadRecurringInvestments();
   }, []);
 
   const loadFIREData = async () => {
@@ -854,8 +901,8 @@ export const Goals: React.FC = () => {
                 <Typography variant="h5" sx={{ fontWeight: 'bold', mb: 3 }}>
                   Current Portfolio Status
                 </Typography>
-                <Grid container spacing={4}>
-                  <Grid item xs={12} sm={6} md={3}>
+                <Grid container spacing={3}>
+                  <Grid item xs={12} sm={6} md={2.4}>
                     <Box sx={{ textAlign: 'center' }}>
                       <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'primary.main', mb: 1 }}>
                         {formatCurrency(fireProgress.current_total_assets)}
@@ -865,17 +912,17 @@ export const Goals: React.FC = () => {
                       </Typography>
                     </Box>
                   </Grid>
-                  <Grid item xs={12} sm={6} md={3}>
+                  <Grid item xs={12} sm={6} md={2.4}>
                     <Box sx={{ textAlign: 'center' }}>
                       <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'success.main', mb: 1 }}>
-                        {calculations.length}
+                        {formatCurrency(calculateMonthlyRecurringTotal())}
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
-                        FIRE Strategies Tracked
+                        Monthly Recurring Investments
                       </Typography>
                     </Box>
                   </Grid>
-                  <Grid item xs={12} sm={6} md={3}>
+                  <Grid item xs={12} sm={6} md={2.4}>
                     <Box sx={{ textAlign: 'center' }}>
                       <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'warning.main', mb: 1 }}>
                         {calculations.filter(c => (portfolioValuation?.totalValueInBaseCurrency || 0) >= c.target_amount).length}
@@ -885,9 +932,19 @@ export const Goals: React.FC = () => {
                       </Typography>
                     </Box>
                   </Grid>
-                  <Grid item xs={12} sm={6} md={3}>
+                  <Grid item xs={12} sm={6} md={2.4}>
                     <Box sx={{ textAlign: 'center' }}>
                       <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'info.main', mb: 1 }}>
+                        {recurringInvestments.filter(inv => inv.is_active).length}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Active Investment Plans
+                      </Typography>
+                    </Box>
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={2.4}>
+                    <Box sx={{ textAlign: 'center' }}>
+                      <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'secondary.main', mb: 1 }}>
                         {fireProfile?.expected_annual_return || 7}%
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
