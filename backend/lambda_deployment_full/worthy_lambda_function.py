@@ -1012,8 +1012,20 @@ def create_dividends_table():
 # ============================================================================
 
 def handle_get_dividends(user_id):
-    """Get all dividends for a user"""
+    """Get all dividends for a user with proper currency conversion"""
     try:
+        # Get user's base currency
+        user = execute_query(
+            DATABASE_URL,
+            "SELECT base_currency FROM users WHERE user_id = %s",
+            (user_id,)
+        )
+        
+        if not user:
+            return create_error_response(404, "User not found")
+        
+        base_currency = user[0]['base_currency']
+        
         dividends = execute_query(
             DATABASE_URL,
             """
@@ -1026,16 +1038,74 @@ def handle_get_dividends(user_id):
             (user_id,)
         )
         
-        # Calculate totals
+        # Get exchange rates for currency conversion
+        exchange_rates = {}
+        unique_currencies = set([d['currency'] for d in dividends if d['currency'] != base_currency])
+        
+        if unique_currencies:
+            try:
+                # Fetch exchange rates for all unique currencies
+                cached_rates = get_cached_exchange_rate(base_currency, 'ALL')
+                if cached_rates and 'rates' in cached_rates:
+                    exchange_rates = cached_rates['rates']
+                else:
+                    # Fetch fresh rates if not cached
+                    url = f"{EXCHANGE_RATE_BASE_URL}/{base_currency}"
+                    response = requests.get(url, timeout=10)
+                    if response.status_code == 200:
+                        data = response.json()
+                        exchange_rates = data.get('rates', {})
+                        # Cache the rates
+                        result = {
+                            "success": True,
+                            "base": base_currency,
+                            "rates": exchange_rates,
+                            "last_updated": data.get('date', datetime.utcnow().isoformat()),
+                            "source": "ExchangeRate-API",
+                            "cached": False
+                        }
+                        set_cached_exchange_rate(base_currency, 'ALL', result)
+            except Exception as e:
+                logger.warning(f"Failed to fetch exchange rates: {str(e)}")
+                # Continue without conversion if rates unavailable
+        
+        def convert_to_base_currency(amount, from_currency):
+            """Convert amount from dividend currency to user's base currency"""
+            if from_currency == base_currency:
+                return float(amount)
+            
+            if from_currency in exchange_rates:
+                # Convert from dividend currency to base currency
+                # If base is USD and dividend is EUR, and EUR rate is 0.85, then 1 EUR = 1/0.85 USD
+                rate = exchange_rates[from_currency]
+                if rate > 0:
+                    converted = float(amount) / rate
+                    logger.info(f"💱 Converted {amount} {from_currency} to {converted:.2f} {base_currency} (rate: {rate})")
+                    return converted
+            
+            # If conversion fails, return original amount
+            logger.warning(f"⚠️ Could not convert {amount} {from_currency} to {base_currency}")
+            return float(amount)
+        
+        # Calculate totals with currency conversion
         pending_dividends = [d for d in dividends if not d.get('is_reinvested', False)]
         processed_dividends = [d for d in dividends if d.get('is_reinvested', False)]
         
-        total_pending = sum(float(d['total_dividend_amount']) for d in pending_dividends)
-        total_processed = sum(float(d['total_dividend_amount']) for d in processed_dividends)
+        total_pending_base = sum(
+            convert_to_base_currency(d['total_dividend_amount'], d['currency']) 
+            for d in pending_dividends
+        )
+        total_processed_base = sum(
+            convert_to_base_currency(d['total_dividend_amount'], d['currency']) 
+            for d in processed_dividends
+        )
         
         # Format dividends for frontend
         formatted_dividends = []
         for d in dividends:
+            original_amount = float(d['total_dividend_amount'])
+            converted_amount = convert_to_base_currency(d['total_dividend_amount'], d['currency'])
+            
             formatted_dividends.append({
                 'dividend_id': d['dividend_id'],
                 'asset_id': d['asset_id'],
@@ -1043,9 +1113,12 @@ def handle_get_dividends(user_id):
                 'dividend_per_share': float(d['dividend_per_share']),
                 'ex_dividend_date': d['ex_dividend_date'].isoformat() if d['ex_dividend_date'] else None,
                 'payment_date': d['payment_date'].isoformat() if d['payment_date'] else None,
-                'total_dividend': float(d['total_dividend_amount']),
+                'total_dividend': original_amount,
+                'total_dividend_base_currency': converted_amount,
                 'shares_owned': float(d['shares_owned']),
                 'currency': d['currency'],
+                'base_currency': base_currency,
+                'exchange_rate_used': exchange_rates.get(d['currency']) if d['currency'] != base_currency else 1.0,
                 'status': 'processed' if d.get('is_reinvested', False) else 'pending',
                 'created_at': d['created_at'].isoformat() if d['created_at'] else None,
                 'updated_at': d['updated_at'].isoformat() if d['updated_at'] else None
@@ -1053,8 +1126,16 @@ def handle_get_dividends(user_id):
         
         return create_response(200, {
             "dividends": formatted_dividends,
-            "total_pending": float(total_pending),
-            "total_processed": float(total_processed)
+            "total_pending": float(total_pending_base),
+            "total_processed": float(total_processed_base),
+            "base_currency": base_currency,
+            "exchange_rates_available": len(exchange_rates) > 0,
+            "summary": {
+                "pending_count": len(pending_dividends),
+                "processed_count": len(processed_dividends),
+                "total_count": len(dividends),
+                "currencies_involved": list(set([d['currency'] for d in dividends]))
+            }
         })
         
     except Exception as e:

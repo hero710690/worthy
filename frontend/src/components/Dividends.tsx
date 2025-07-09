@@ -48,6 +48,23 @@ export const Dividends: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [autoDetecting, setAutoDetecting] = useState(false);
 
+  // Additional state for dividend response data
+  const [dividendSummary, setDividendSummary] = useState<{
+    total_pending: number;
+    total_processed: number;
+    base_currency?: string;
+    exchange_rates_available?: boolean;
+    summary?: {
+      pending_count: number;
+      processed_count: number;
+      total_count: number;
+      currencies_involved: string[];
+    };
+  }>({
+    total_pending: 0,
+    total_processed: 0
+  });
+
   // Dialog states
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showProcessDialog, setShowProcessDialog] = useState(false);
@@ -84,6 +101,16 @@ export const Dividends: React.FC = () => {
       
       setDividends(dividendsData.dividends);
       setAssets(assetsData.assets);
+      
+      // Store the summary data including currency conversion info
+      setDividendSummary({
+        total_pending: dividendsData.total_pending || 0,
+        total_processed: dividendsData.total_processed || 0,
+        base_currency: dividendsData.base_currency,
+        exchange_rates_available: dividendsData.exchange_rates_available,
+        summary: dividendsData.summary
+      });
+      
     } catch (err: any) {
       setError(err.response?.data?.message || 'Failed to load dividend data');
     } finally {
@@ -163,7 +190,17 @@ export const Dividends: React.FC = () => {
 
   const pendingDividends = dividends.filter(d => d.status === 'pending');
   const processedDividends = dividends.filter(d => d.status === 'processed');
-  const totalPendingValue = pendingDividends.reduce((sum, d) => sum + d.total_dividend, 0);
+  
+  // Helper function to format currency
+  const formatCurrency = (amount: number, currency?: string) => {
+    const currencyCode = currency || dividendSummary.base_currency || 'USD';
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currencyCode,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(amount);
+  };
 
   if (loading) {
     return (
@@ -244,7 +281,7 @@ export const Dividends: React.FC = () => {
           <Card>
             <CardContent>
               <Typography variant="h6" color="success.main" sx={{ fontWeight: 'bold' }}>
-                ${totalPendingValue.toFixed(2)}
+                {formatCurrency(dividendSummary.total_pending)}
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 Pending Dividends
@@ -342,9 +379,19 @@ export const Dividends: React.FC = () => {
                         {dividend.shares_owned.toFixed(4)}
                       </TableCell>
                       <TableCell>
-                        <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'success.main' }}>
-                          ${dividend.total_dividend.toFixed(2)}
-                        </Typography>
+                        <Stack spacing={0.5}>
+                          <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'success.main' }}>
+                            {formatCurrency(dividend.total_dividend_base_currency || dividend.total_dividend, dividendSummary.base_currency)}
+                          </Typography>
+                          {dividend.currency !== dividendSummary.base_currency && dividend.total_dividend_base_currency && (
+                            <Typography variant="caption" color="text.secondary">
+                              {formatCurrency(dividend.total_dividend, dividend.currency)} {dividend.currency}
+                              {dividend.exchange_rate_used && (
+                                <span> @ {dividend.exchange_rate_used.toFixed(4)}</span>
+                              )}
+                            </Typography>
+                          )}
+                        </Stack>
                       </TableCell>
                       <TableCell>
                         {new Date(dividend.ex_dividend_date).toLocaleDateString()}
@@ -459,7 +506,12 @@ export const Dividends: React.FC = () => {
           {selectedDividend && (
             <Stack spacing={3} sx={{ mt: 1 }}>
               <Alert severity="info">
-                Processing ${selectedDividend.total_dividend.toFixed(2)} dividend from {selectedDividend.ticker_symbol}
+                Processing {formatCurrency(selectedDividend.total_dividend_base_currency || selectedDividend.total_dividend, dividendSummary.base_currency)} dividend from {selectedDividend.ticker_symbol}
+                {selectedDividend.currency !== dividendSummary.base_currency && (
+                  <Typography variant="caption" display="block" sx={{ mt: 0.5 }}>
+                    Original amount: {formatCurrency(selectedDividend.total_dividend, selectedDividend.currency)} {selectedDividend.currency}
+                  </Typography>
+                )}
               </Alert>
               
               <TextField
