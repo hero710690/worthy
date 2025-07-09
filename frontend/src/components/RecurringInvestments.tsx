@@ -52,6 +52,7 @@ export const RecurringInvestments: React.FC = () => {
   const [recurringInvestments, setRecurringInvestments] = useState<RecurringInvestment[]>([]);
   const [loading, setLoading] = useState(true);
   const [exchangeRates, setExchangeRates] = useState<{ [key: string]: number }>({});
+  const [exchangeRatesLoading, setExchangeRatesLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [openDialog, setOpenDialog] = useState(false);
   const [editingInvestment, setEditingInvestment] = useState<RecurringInvestment | null>(null);
@@ -86,12 +87,18 @@ export const RecurringInvestments: React.FC = () => {
 
   const loadExchangeRates = async () => {
     try {
+      setExchangeRatesLoading(true);
       const baseCurrency = user?.base_currency || 'USD';
+      console.log('Loading exchange rates for base currency:', baseCurrency);
       const rates = await exchangeRateService.getExchangeRates(baseCurrency);
+      console.log('Exchange rates loaded:', rates);
       setExchangeRates(rates);
     } catch (err) {
       console.error('Failed to load exchange rates:', err);
-      // Continue without exchange rates - will show original currencies
+      // Set empty object to indicate we tried but failed
+      setExchangeRates({});
+    } finally {
+      setExchangeRatesLoading(false);
     }
   };
 
@@ -123,20 +130,34 @@ export const RecurringInvestments: React.FC = () => {
     const baseCurrency = user?.base_currency || 'USD';
     const activeInvestments = recurringInvestments.filter(inv => inv.is_active);
     
+    if (activeInvestments.length === 0) {
+      return exchangeRateService.formatCurrency(0, baseCurrency);
+    }
+    
     // Check if we have investments in different currencies
     const currencies = new Set(activeInvestments.map(inv => inv.currency));
     const hasMultipleCurrencies = currencies.size > 1;
     
-    // If we have multiple currencies but no exchange rates yet, show loading
-    if (hasMultipleCurrencies && Object.keys(exchangeRates).length === 0) {
-      return 'Loading...';
+    // If all investments are in the base currency, no conversion needed
+    if (!hasMultipleCurrencies && currencies.has(baseCurrency)) {
+      const total = activeInvestments.reduce((sum, inv) => sum + inv.amount, 0);
+      return exchangeRateService.formatCurrency(total, baseCurrency);
     }
     
-    // If all investments are in base currency, simple sum
-    if (!hasMultipleCurrencies || currencies.has(baseCurrency)) {
-      return exchangeRateService.formatCurrency(calculateMonthlyTotal(), baseCurrency);
+    // If we have multiple currencies or non-base currency, we need exchange rates
+    if (hasMultipleCurrencies || !currencies.has(baseCurrency)) {
+      // If exchange rates are still loading, show loading
+      if (exchangeRatesLoading) {
+        return 'Loading...';
+      }
+      
+      // If exchange rates failed to load, show error or fallback
+      if (Object.keys(exchangeRates).length === 0) {
+        return 'Exchange rates unavailable';
+      }
     }
     
+    // Calculate with currency conversion
     return exchangeRateService.formatCurrency(calculateMonthlyTotal(), baseCurrency);
   };
 
