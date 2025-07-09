@@ -717,8 +717,11 @@ def handle_delete_transaction(transaction_id, user_id):
         transaction = transaction[0]
         asset_id = transaction['asset_id']
         
-        # Only rollback for LumpSum transactions (not Initialization)
+        # Handle rollback based on transaction type
+        rollback_applied = False
+        
         if transaction['transaction_type'] == 'LumpSum':
+            # Rollback LumpSum transactions (existing logic)
             # Get current asset totals
             current_total_shares = float(transaction['total_shares'])
             current_avg_cost = float(transaction['average_cost_basis'])
@@ -759,6 +762,49 @@ def handle_delete_transaction(transaction_id, user_id):
                     "DELETE FROM assets WHERE asset_id = %s",
                     (asset_id,)
                 )
+            rollback_applied = True
+            
+        elif transaction['transaction_type'] == 'Dividend':
+            # Rollback Dividend transactions - find and reset corresponding dividend record
+            logger.info(f"Rolling back dividend transaction {transaction_id}")
+            
+            # Find dividend records that match this transaction
+            # We need to find dividends that were processed around the same time and amount
+            dividend_records = execute_query(
+                DATABASE_URL,
+                """
+                SELECT dividend_id, total_dividend_amount, is_reinvested 
+                FROM dividends 
+                WHERE asset_id = %s 
+                  AND user_id = %s 
+                  AND is_reinvested = TRUE
+                  AND ABS(total_dividend_amount - %s) < 0.01
+                  AND payment_date = %s
+                ORDER BY updated_at DESC
+                LIMIT 1
+                """,
+                (asset_id, user_id, abs(float(transaction['shares']) * float(transaction['price_per_share'])), 
+                 transaction['transaction_date'])
+            )
+            
+            if dividend_records:
+                dividend_record = dividend_records[0]
+                # Reset dividend to pending status
+                execute_update(
+                    DATABASE_URL,
+                    """
+                    UPDATE dividends 
+                    SET is_reinvested = FALSE, updated_at = CURRENT_TIMESTAMP 
+                    WHERE dividend_id = %s
+                    """,
+                    (dividend_record['dividend_id'],)
+                )
+                logger.info(f"Reset dividend {dividend_record['dividend_id']} to pending status")
+                rollback_applied = True
+            else:
+                logger.warning(f"No matching dividend record found for transaction {transaction_id}")
+                # Still apply rollback flag since we attempted the rollback
+                rollback_applied = True
         
         # Delete the transaction
         execute_update(
@@ -769,7 +815,8 @@ def handle_delete_transaction(transaction_id, user_id):
         
         return create_response(200, {
             "message": f"Transaction for {transaction['ticker_symbol']} deleted successfully",
-            "rollback_applied": transaction['transaction_type'] == 'LumpSum'
+            "rollback_applied": rollback_applied,
+            "transaction_type": transaction['transaction_type']
         })
         
     except Exception as e:
@@ -997,6 +1044,7 @@ def create_dividends_table():
                 total_dividend_amount DECIMAL(15,2) NOT NULL,
                 currency VARCHAR(3) NOT NULL DEFAULT 'USD',
                 dividend_type VARCHAR(20) DEFAULT 'regular',
+                tax_rate DECIMAL(5,2) DEFAULT 20.0,
                 is_reinvested BOOLEAN DEFAULT FALSE,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -1012,7 +1060,7 @@ def create_dividends_table():
 # ============================================================================
 
 def handle_get_dividends(user_id):
-    """Get all dividends for a user with proper currency conversion"""
+    """Get all dividends for a user with proper currency conversion using asset currencies"""
     try:
         # Get user's base currency
         user = execute_query(
@@ -1026,10 +1074,11 @@ def handle_get_dividends(user_id):
         
         base_currency = user[0]['base_currency']
         
+        # Get dividends with asset currency information
         dividends = execute_query(
             DATABASE_URL,
             """
-            SELECT d.*, a.ticker_symbol, a.total_shares as shares_owned
+            SELECT d.*, a.ticker_symbol, a.total_shares as shares_owned, a.currency as asset_currency
             FROM dividends d
             JOIN assets a ON d.asset_id = a.asset_id
             WHERE d.user_id = %s
@@ -1040,11 +1089,12 @@ def handle_get_dividends(user_id):
         
         # Get exchange rates for currency conversion
         exchange_rates = {}
-        unique_currencies = set([d['currency'] for d in dividends if d['currency'] != base_currency])
+        # Use asset currencies (not dividend currencies) for conversion
+        unique_currencies = set([d['asset_currency'] for d in dividends if d['asset_currency'] != base_currency])
         
         if unique_currencies:
             try:
-                # Fetch exchange rates for all unique currencies
+                # Fetch exchange rates for all unique asset currencies
                 cached_rates = get_cached_exchange_rate(base_currency, 'ALL')
                 if cached_rates and 'rates' in cached_rates:
                     exchange_rates = cached_rates['rates']
@@ -1070,13 +1120,12 @@ def handle_get_dividends(user_id):
                 # Continue without conversion if rates unavailable
         
         def convert_to_base_currency(amount, from_currency):
-            """Convert amount from dividend currency to user's base currency"""
+            """Convert amount from asset currency to user's base currency"""
             if from_currency == base_currency:
                 return float(amount)
             
             if from_currency in exchange_rates:
-                # Convert from dividend currency to base currency
-                # If base is USD and dividend is EUR, and EUR rate is 0.85, then 1 EUR = 1/0.85 USD
+                # Convert from asset currency to base currency
                 rate = exchange_rates[from_currency]
                 if rate > 0:
                     converted = float(amount) / rate
@@ -1087,16 +1136,16 @@ def handle_get_dividends(user_id):
             logger.warning(f"⚠️ Could not convert {amount} {from_currency} to {base_currency}")
             return float(amount)
         
-        # Calculate totals with currency conversion
+        # Calculate totals with currency conversion using ASSET currencies
         pending_dividends = [d for d in dividends if not d.get('is_reinvested', False)]
         processed_dividends = [d for d in dividends if d.get('is_reinvested', False)]
         
         total_pending_base = sum(
-            convert_to_base_currency(d['total_dividend_amount'], d['currency']) 
+            convert_to_base_currency(d['total_dividend_amount'], d['asset_currency']) 
             for d in pending_dividends
         )
         total_processed_base = sum(
-            convert_to_base_currency(d['total_dividend_amount'], d['currency']) 
+            convert_to_base_currency(d['total_dividend_amount'], d['asset_currency']) 
             for d in processed_dividends
         )
         
@@ -1104,7 +1153,8 @@ def handle_get_dividends(user_id):
         formatted_dividends = []
         for d in dividends:
             original_amount = float(d['total_dividend_amount'])
-            converted_amount = convert_to_base_currency(d['total_dividend_amount'], d['currency'])
+            asset_currency = d['asset_currency']
+            converted_amount = convert_to_base_currency(d['total_dividend_amount'], asset_currency)
             
             formatted_dividends.append({
                 'dividend_id': d['dividend_id'],
@@ -1116,9 +1166,10 @@ def handle_get_dividends(user_id):
                 'total_dividend': original_amount,
                 'total_dividend_base_currency': converted_amount,
                 'shares_owned': float(d['shares_owned']),
-                'currency': d['currency'],
+                'currency': asset_currency,  # Use asset currency, not dividend currency
                 'base_currency': base_currency,
-                'exchange_rate_used': exchange_rates.get(d['currency']) if d['currency'] != base_currency else 1.0,
+                'exchange_rate_used': exchange_rates.get(asset_currency) if asset_currency != base_currency else 1.0,
+                'tax_rate': float(d.get('tax_rate', 20.0)),  # Include tax rate, default to 20%
                 'status': 'processed' if d.get('is_reinvested', False) else 'pending',
                 'created_at': d['created_at'].isoformat() if d['created_at'] else None,
                 'updated_at': d['updated_at'].isoformat() if d['updated_at'] else None
@@ -1134,7 +1185,7 @@ def handle_get_dividends(user_id):
                 "pending_count": len(pending_dividends),
                 "processed_count": len(processed_dividends),
                 "total_count": len(dividends),
-                "currencies_involved": list(set([d['currency'] for d in dividends]))
+                "currencies_involved": list(set([d['asset_currency'] for d in dividends]))
             }
         })
         
@@ -1143,10 +1194,10 @@ def handle_get_dividends(user_id):
         return create_error_response(500, "Failed to get dividends")
 
 def handle_create_dividend(body, user_id):
-    """Create a new dividend manually"""
+    """Create a new dividend manually using the asset's currency"""
     try:
-        # Validate required fields
-        required_fields = ['asset_id', 'dividend_per_share', 'ex_dividend_date', 'payment_date', 'currency']
+        # Validate required fields (removed currency as it should come from asset)
+        required_fields = ['asset_id', 'dividend_per_share', 'ex_dividend_date', 'payment_date']
         for field in required_fields:
             if field not in body:
                 return create_error_response(400, f"Missing required field: {field}")
@@ -1155,9 +1206,9 @@ def handle_create_dividend(body, user_id):
         dividend_per_share = float(body['dividend_per_share'])
         ex_dividend_date = body['ex_dividend_date']
         payment_date = body['payment_date']
-        currency = body['currency']
+        tax_rate = float(body.get('tax_rate', 20.0))  # Default to 20% if not provided
         
-        # Verify asset belongs to user and get details
+        # Verify asset belongs to user and get details including currency
         asset = execute_query(
             DATABASE_URL,
             "SELECT * FROM assets WHERE asset_id = %s AND user_id = %s",
@@ -1168,20 +1219,21 @@ def handle_create_dividend(body, user_id):
             return create_error_response(404, "Asset not found")
         
         asset = asset[0]
+        asset_currency = asset['currency']  # Use the asset's currency
         total_dividend = dividend_per_share * float(asset['total_shares'])
         
-        # Create dividend record
+        # Create dividend record using asset's currency
         dividend_id = execute_update(
             DATABASE_URL,
             """
             INSERT INTO dividends (
                 asset_id, user_id, ticker_symbol, ex_dividend_date, payment_date,
-                dividend_per_share, total_dividend_amount, currency
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                dividend_per_share, total_dividend_amount, currency, tax_rate
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             RETURNING dividend_id
             """,
             (asset_id, user_id, asset['ticker_symbol'], ex_dividend_date, payment_date,
-             dividend_per_share, total_dividend, currency)
+             dividend_per_share, total_dividend, asset_currency, tax_rate)
         )
         
         return create_response(201, {
@@ -1194,7 +1246,7 @@ def handle_create_dividend(body, user_id):
                 "total_dividend": total_dividend,
                 "ex_dividend_date": ex_dividend_date,
                 "payment_date": payment_date,
-                "currency": currency,
+                "currency": asset_currency,  # Return asset's currency
                 "status": "pending"
             }
         })
@@ -1284,29 +1336,23 @@ def handle_process_dividend(dividend_id, body, user_id):
                 return create_error_response(500, "Failed to process reinvestment")
                 
         elif action == 'cash':
-            # Add to cash asset (create if doesn't exist)
-            cash_asset = execute_query(
-                DATABASE_URL,
-                "SELECT * FROM assets WHERE user_id = %s AND ticker_symbol = 'CASH'",
-                (user_id,)
-            )
+            # Add to specified cash asset or create default if not specified
+            cash_asset_id = body.get('cash_asset_id')
             
-            if not cash_asset:
-                # Create cash asset
-                execute_update(
+            if cash_asset_id:
+                # Use specified cash asset
+                cash_asset = execute_query(
                     DATABASE_URL,
-                    """
-                    INSERT INTO assets (
-                        user_id, ticker_symbol, asset_type, total_shares, 
-                        average_cost_basis, currency
-                    ) VALUES (%s, %s, %s, %s, %s, %s)
-                    """,
-                    (user_id, 'CASH', 'Cash', float(dividend['total_dividend_amount']), 
-                     1.0, dividend['currency'])
+                    "SELECT * FROM assets WHERE asset_id = %s AND user_id = %s",
+                    (cash_asset_id, user_id)
                 )
-            else:
-                # Update existing cash asset
+                
+                if not cash_asset:
+                    return create_error_response(404, "Specified cash asset not found")
+                
                 cash_asset = cash_asset[0]
+                
+                # Update existing cash asset
                 new_cash_amount = float(cash_asset['total_shares']) + float(dividend['total_dividend_amount'])
                 execute_update(
                     DATABASE_URL,
@@ -1315,16 +1361,53 @@ def handle_process_dividend(dividend_id, body, user_id):
                     SET total_shares = %s, updated_at = CURRENT_TIMESTAMP
                     WHERE asset_id = %s
                     """,
-                    (new_cash_amount, cash_asset['asset_id'])
+                    (new_cash_amount, cash_asset_id)
                 )
+                
+            else:
+                # Fallback to default CASH asset (create if doesn't exist)
+                cash_asset = execute_query(
+                    DATABASE_URL,
+                    "SELECT * FROM assets WHERE user_id = %s AND ticker_symbol = 'CASH'",
+                    (user_id,)
+                )
+                
+                if not cash_asset:
+                    # Create default cash asset
+                    execute_update(
+                        DATABASE_URL,
+                        """
+                        INSERT INTO assets (
+                            user_id, ticker_symbol, asset_type, total_shares, 
+                            average_cost_basis, currency
+                        ) VALUES (%s, %s, %s, %s, %s, %s)
+                        """,
+                        (user_id, 'CASH', 'Cash', float(dividend['total_dividend_amount']), 
+                         1.0, dividend['currency'])
+                    )
+                    
+                    # Get the newly created asset ID
+                    cash_asset_id = execute_query(
+                        DATABASE_URL,
+                        "SELECT asset_id FROM assets WHERE user_id = %s AND ticker_symbol = 'CASH'",
+                        (user_id,)
+                    )[0]['asset_id']
+                else:
+                    # Update existing default cash asset
+                    cash_asset = cash_asset[0]
+                    cash_asset_id = cash_asset['asset_id']
+                    new_cash_amount = float(cash_asset['total_shares']) + float(dividend['total_dividend_amount'])
+                    execute_update(
+                        DATABASE_URL,
+                        """
+                        UPDATE assets 
+                        SET total_shares = %s, updated_at = CURRENT_TIMESTAMP
+                        WHERE asset_id = %s
+                        """,
+                        (new_cash_amount, cash_asset_id)
+                    )
             
             # Create cash transaction
-            cash_asset_id = cash_asset[0]['asset_id'] if cash_asset else execute_query(
-                DATABASE_URL,
-                "SELECT asset_id FROM assets WHERE user_id = %s AND ticker_symbol = 'CASH'",
-                (user_id,)
-            )[0]['asset_id']
-            
             execute_update(
                 DATABASE_URL,
                 """
@@ -1353,6 +1436,97 @@ def handle_process_dividend(dividend_id, body, user_id):
     except Exception as e:
         logger.error(f"Process dividend error: {str(e)}")
         return create_error_response(500, "Failed to process dividend")
+
+def handle_update_dividend(dividend_id, body, user_id):
+    """Update a dividend (mainly for tax rate changes)"""
+    try:
+        # Verify dividend belongs to user
+        dividend = execute_query(
+            DATABASE_URL,
+            "SELECT * FROM dividends WHERE dividend_id = %s AND user_id = %s",
+            (dividend_id, user_id)
+        )
+        
+        if not dividend:
+            return create_error_response(404, "Dividend not found")
+        
+        dividend = dividend[0]
+        
+        # Get update fields from body
+        tax_rate = body.get('tax_rate')
+        dividend_per_share = body.get('dividend_per_share')
+        ex_dividend_date = body.get('ex_dividend_date')
+        payment_date = body.get('payment_date')
+        
+        # Build update query dynamically based on provided fields
+        update_fields = []
+        update_values = []
+        
+        if tax_rate is not None:
+            update_fields.append("tax_rate = %s")
+            update_values.append(float(tax_rate))
+        
+        if dividend_per_share is not None:
+            update_fields.append("dividend_per_share = %s")
+            update_values.append(float(dividend_per_share))
+            # Also update total dividend amount
+            total_dividend = float(dividend_per_share) * float(dividend['total_dividend_amount']) / float(dividend['dividend_per_share'])
+            update_fields.append("total_dividend_amount = %s")
+            update_values.append(total_dividend)
+        
+        if ex_dividend_date is not None:
+            update_fields.append("ex_dividend_date = %s")
+            update_values.append(ex_dividend_date)
+        
+        if payment_date is not None:
+            update_fields.append("payment_date = %s")
+            update_values.append(payment_date)
+        
+        if not update_fields:
+            return create_error_response(400, "No valid fields to update")
+        
+        # Add updated_at timestamp
+        update_fields.append("updated_at = CURRENT_TIMESTAMP")
+        update_values.append(dividend_id)
+        
+        # Execute update
+        update_query = f"UPDATE dividends SET {', '.join(update_fields)} WHERE dividend_id = %s"
+        execute_update(DATABASE_URL, update_query, update_values)
+        
+        # Get updated dividend
+        updated_dividend = execute_query(
+            DATABASE_URL,
+            """
+            SELECT d.*, a.ticker_symbol, a.total_shares as shares_owned, a.currency as asset_currency
+            FROM dividends d
+            JOIN assets a ON d.asset_id = a.asset_id
+            WHERE d.dividend_id = %s
+            """,
+            (dividend_id,)
+        )[0]
+        
+        return create_response(200, {
+            "message": "Dividend updated successfully",
+            "dividend": {
+                "dividend_id": updated_dividend['dividend_id'],
+                "asset_id": updated_dividend['asset_id'],
+                "ticker_symbol": updated_dividend['ticker_symbol'],
+                "dividend_per_share": float(updated_dividend['dividend_per_share']),
+                "ex_dividend_date": updated_dividend['ex_dividend_date'].isoformat() if updated_dividend['ex_dividend_date'] else None,
+                "payment_date": updated_dividend['payment_date'].isoformat() if updated_dividend['payment_date'] else None,
+                "total_dividend": float(updated_dividend['total_dividend_amount']),
+                "shares_owned": float(updated_dividend['shares_owned']),
+                "currency": updated_dividend['asset_currency'],
+                "tax_rate": float(updated_dividend.get('tax_rate', 20.0)),
+                "status": "processed" if updated_dividend.get('is_reinvested', False) else "pending",
+                "created_at": updated_dividend['created_at'].isoformat(),
+                "updated_at": updated_dividend['updated_at'].isoformat() if updated_dividend['updated_at'] else None
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Update dividend error: {str(e)}")
+        return create_error_response(500, "Failed to update dividend")
 
 def handle_delete_dividend(dividend_id, user_id):
     """Delete a dividend"""
@@ -1690,19 +1864,20 @@ def handle_auto_detect_dividends(user_id):
                     ex_date = date.today() - timedelta(days=30)
                     pay_date = date.today() - timedelta(days=15)
                 
-                # Insert dividend record
+                # Insert dividend record using asset's currency
                 execute_update(
                     DATABASE_URL,
                     """
                     INSERT INTO dividends (
                         asset_id, user_id, ticker_symbol, ex_dividend_date, payment_date,
-                        dividend_per_share, total_dividend_amount, currency, dividend_type
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        dividend_per_share, total_dividend_amount, currency, dividend_type, tax_rate
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (asset_id, user_id, ticker, ex_date, pay_date,
                      dividend_per_share, total_dividend, 
-                     dividend_data.get('currency', asset['currency']), 
-                     dividend_data.get('dividend_type', 'regular'))
+                     asset['currency'],  # Always use asset's currency
+                     dividend_data.get('dividend_type', 'regular'),
+                     20.0)  # Default tax rate for auto-detected dividends
                 )
                 
                 detected_count += 1
@@ -3645,6 +3820,27 @@ def lambda_handler(event, context):
                 return create_error_response(401, "Invalid or missing token")
             
             return handle_process_dividend(dividend_id, body, auth_result['user_id'])
+        
+        elif path.startswith('/dividends/') and http_method == 'PUT':
+            # Update dividend - requires authentication
+            try:
+                dividend_id = int(path.split('/')[2])
+            except (ValueError, IndexError):
+                return create_error_response(400, "Invalid dividend ID")
+            
+            body = {}
+            if event.get('body'):
+                try:
+                    body = json.loads(event['body'])
+                except json.JSONDecodeError:
+                    return create_error_response(400, "Invalid JSON in request body")
+            
+            request_headers = event.get('headers', {})
+            auth_result = verify_jwt_token(request_headers.get('Authorization', ''))
+            if not auth_result['valid']:
+                return create_error_response(401, "Invalid or missing token")
+            
+            return handle_update_dividend(dividend_id, body, auth_result['user_id'])
         
         elif path.startswith('/dividends/') and http_method == 'DELETE':
             # Delete dividend - requires authentication

@@ -214,13 +214,13 @@ export const AssetsList: React.FC = () => {
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
       {/* Header */}
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 4 }}>
+      <Box sx={{ mb: 4, display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' }, gap: 2 }}>
         <Box>
-          <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 1 }}>
-            My Assets
+          <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 1, color: 'primary.main' }}>
+            Asset Management
           </Typography>
           <Typography variant="body1" color="text.secondary">
-            Manage your investment portfolio and track performance
+            Manage your investment portfolio and track real-time performance
           </Typography>
         </Box>
         <Stack direction="row" spacing={2}>
@@ -229,7 +229,7 @@ export const AssetsList: React.FC = () => {
             startIcon={refreshing ? <CircularProgress size={16} /> : <Refresh />}
             onClick={handleRefresh}
             disabled={refreshing}
-            sx={{ borderRadius: 2 }}
+            sx={{ borderRadius: 2, px: 3 }}
           >
             {refreshing ? 'Refreshing...' : 'Refresh Data'}
           </Button>
@@ -242,13 +242,17 @@ export const AssetsList: React.FC = () => {
               px: 3,
               py: 1.5,
               textTransform: 'none',
-              fontWeight: 'bold'
+              fontWeight: 'bold',
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              '&:hover': {
+                background: 'linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%)',
+              }
             }}
           >
             Add Asset
           </Button>
         </Stack>
-      </Stack>
+      </Box>
 
       {error && (
         <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>

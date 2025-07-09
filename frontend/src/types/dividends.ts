@@ -12,6 +12,7 @@ export interface Dividend {
   base_currency?: string; // User's base currency
   exchange_rate_used?: number; // Exchange rate used for conversion
   status: 'pending' | 'processed';
+  tax_rate?: number; // Tax rate percentage (default 20%)
   created_at: string;
   updated_at?: string;
 }
@@ -21,13 +22,15 @@ export interface CreateDividendRequest {
   dividend_per_share: number;
   ex_dividend_date: string;
   payment_date: string;
-  currency: string;
+  tax_rate?: number; // Optional tax rate (default 20%)
+  // Removed currency - will use asset's currency automatically
 }
 
 export interface ProcessDividendRequest {
   dividend_id: number;
   action: 'reinvest' | 'cash';
   reinvest_asset_id?: number; // For reinvestment
+  cash_asset_id?: number; // For adding to cash
 }
 
 export interface DividendResponse {

@@ -156,13 +156,14 @@ export const Dashboard: React.FC = () => {
   ];
 
   return (
-    <Box sx={{ minHeight: '100vh' }}>
+    <Box sx={{ minHeight: '100vh', maxWidth: 1400, mx: 'auto' }}>
       {/* Header */}
       <Box sx={{ p: { xs: 3, md: 4 }, pb: 0 }}>
         <Stack 
-          direction="row" 
+          direction={{ xs: 'column', sm: 'row' }}
           justifyContent="space-between" 
-          alignItems="center"
+          alignItems={{ xs: 'flex-start', sm: 'center' }}
+          spacing={2}
           sx={{ mb: 1 }}
         >
           <Box>
@@ -171,7 +172,8 @@ export const Dashboard: React.FC = () => {
               sx={{ 
                 fontWeight: 'bold',
                 fontSize: { xs: '1.75rem', md: '2.125rem' },
-                mb: 0.5
+                mb: 0.5,
+                color: 'primary.main'
               }}
             >
               Welcome back, {user?.name?.split(' ')[0] || 'User'}!
@@ -181,11 +183,22 @@ export const Dashboard: React.FC = () => {
               color="text.secondary"
               sx={{ fontSize: { xs: '0.95rem', md: '1rem' } }}
             >
-              {loading ? 'Loading your portfolio...' : 'It is the best time to manage your finances'}
+              {loading ? 'Loading your portfolio...' : 'Track your investments and achieve your financial goals'}
             </Typography>
           </Box>
           
           <Stack direction="row" spacing={2} alignItems="center">
+            <Tooltip title="Refresh portfolio data">
+              <Button
+                variant="outlined"
+                onClick={handleRefresh}
+                disabled={refreshing}
+                startIcon={refreshing ? <CircularProgress size={20} /> : <Refresh />}
+                sx={{ borderRadius: 2, px: 3 }}
+              >
+                {refreshing ? 'Refreshing...' : 'Refresh'}
+              </Button>
+            </Tooltip>
             <Button
               variant="contained"
               startIcon={<Add />}
@@ -202,18 +215,8 @@ export const Dashboard: React.FC = () => {
                 }
               }}
             >
-              Add new asset
+              Add Asset
             </Button>
-            <Avatar 
-              sx={{ 
-                width: 40, 
-                height: 40,
-                bgcolor: 'grey.200',
-                color: 'text.primary'
-              }}
-            >
-              <AccountCircle />
-            </Avatar>
           </Stack>
         </Stack>
       </Box>
@@ -290,6 +293,17 @@ export const Dashboard: React.FC = () => {
                   borderRadius: 3,
                   border: '1px solid',
                   borderColor: 'grey.200',
+                  height: '100%',
+                  background: index === 0 
+                    ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                    : index === 1
+                    ? 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)'
+                    : index === 2
+                    ? stat.changeType === 'positive'
+                      ? 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)'
+                      : 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)'
+                    : 'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)',
+                  color: index < 3 ? 'white' : 'text.primary',
                   transition: 'all 0.3s ease',
                   '&:hover': {
                     transform: 'translateY(-4px)',
@@ -301,21 +315,23 @@ export const Dashboard: React.FC = () => {
                   <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
                     <Typography 
                       variant="body2" 
-                      color="text.secondary"
-                      sx={{ fontWeight: 'medium' }}
+                      sx={{ 
+                        fontWeight: 'medium',
+                        color: index < 3 ? 'rgba(255,255,255,0.9)' : 'text.secondary'
+                      }}
                     >
                       {stat.title}
                     </Typography>
                     <Box
                       sx={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: '8px',
-                        bgcolor: `${stat.color}15`,
+                        width: 40,
+                        height: 40,
+                        borderRadius: 2,
+                        bgcolor: index < 3 ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.1)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        color: stat.color
+                        color: index < 3 ? 'white' : 'text.primary'
                       }}
                     >
                       {stat.icon}
@@ -331,7 +347,7 @@ export const Dashboard: React.FC = () => {
                     }}
                   >
                     {loading ? (
-                      <CircularProgress size={24} sx={{ color: stat.color }} />
+                      <CircularProgress size={24} sx={{ color: index < 3 ? 'white' : stat.color }} />
                     ) : (
                       stat.value
                     )}
@@ -341,15 +357,22 @@ export const Dashboard: React.FC = () => {
                     <Typography 
                       variant="body2" 
                       sx={{ 
-                        color: stat.changeType === 'positive' ? 'success.main' : 
-                               stat.changeType === 'negative' ? 'error.main' : 'text.secondary',
+                        color: index < 3 
+                          ? 'rgba(255,255,255,0.8)'
+                          : stat.changeType === 'positive' ? 'success.main' : 
+                            stat.changeType === 'negative' ? 'error.main' : 'text.secondary',
                         fontWeight: 'medium'
                       }}
                     >
                       {stat.change}
                     </Typography>
                     {stat.subtext && (
-                      <Typography variant="body2" color="text.secondary">
+                      <Typography 
+                        variant="body2" 
+                        sx={{ 
+                          color: index < 3 ? 'rgba(255,255,255,0.7)' : 'text.secondary'
+                        }}
+                      >
                         {stat.subtext}
                       </Typography>
                     )}
