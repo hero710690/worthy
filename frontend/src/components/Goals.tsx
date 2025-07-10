@@ -599,12 +599,62 @@ export const Goals: React.FC = () => {
       return estimatedReturn;
     };
 
-    // 2. PROJECT DIVIDEND INCOME FROM PORTFOLIO COMPOSITION
-    const calculateDividendProjections = () => {
-      // TODO: Analyze actual dividend history from dividends table
-      // For now, estimate based on typical dividend yields
-      const estimatedDividendYield = 0.025; // 2.5% average
-      return currentPortfolioValue * estimatedDividendYield;
+    // 2. PROJECT DIVIDEND INCOME FROM ACTUAL DIVIDEND HISTORY
+    const calculateDividendProjections = async () => {
+      try {
+        // Get actual dividend data from the backend
+        const response = await fetch(`${API_BASE_URL}/dividends`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        
+        if (response.ok) {
+          const dividendData = await response.json();
+          const dividends = dividendData.dividends || [];
+          
+          // Calculate annual dividend projection from recent dividend history
+          if (dividends.length > 0) {
+            // Get dividends from the last 12 months
+            const oneYearAgo = new Date();
+            oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+            
+            const recentDividends = dividends.filter((div: any) => {
+              const paymentDate = new Date(div.payment_date || div.ex_dividend_date);
+              return paymentDate >= oneYearAgo;
+            });
+            
+            if (recentDividends.length > 0) {
+              // Sum up actual dividends received in the last year
+              const totalRecentDividends = recentDividends.reduce((sum: number, div: any) => {
+                return sum + (div.total_dividend_amount || 0);
+              }, 0);
+              
+              console.log('📊 Actual dividend projection from database:', {
+                recentDividends: recentDividends.length,
+                totalAmount: formatCurrency(totalRecentDividends),
+                annualProjection: formatCurrency(totalRecentDividends)
+              });
+              
+              return totalRecentDividends;
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('Could not fetch dividend data for projections:', error);
+      }
+      
+      // Fallback: Estimate based on typical dividend yields for current portfolio
+      const estimatedDividendYield = 0.02; // 2% conservative estimate
+      const estimatedDividends = currentPortfolioValue * estimatedDividendYield;
+      
+      console.log('📊 Estimated dividend projection (fallback):', {
+        portfolioValue: formatCurrency(currentPortfolioValue),
+        estimatedYield: `${(estimatedDividendYield * 100).toFixed(1)}%`,
+        estimatedAnnualDividends: formatCurrency(estimatedDividends)
+      });
+      
+      return estimatedDividends;
     };
 
     // 3. ANALYZE PORTFOLIO RISK FROM ASSET ALLOCATION
@@ -622,7 +672,7 @@ export const Goals: React.FC = () => {
 
     // 4. CALCULATE COMPREHENSIVE PROJECTIONS
     const historicalReturn = calculateHistoricalReturns();
-    const projectedDividends = calculateDividendProjections();
+    const projectedDividends = await calculateDividendProjections(); // Now async
     const riskAnalysis = analyzePortfolioRisk();
     const monthlyContributions = calculateMonthlyRecurringTotal();
 
@@ -747,7 +797,7 @@ export const Goals: React.FC = () => {
           target_amount: traditionalFireTarget,
           target_amount_real: traditionalFireTarget,
           current_progress: currentPortfolioValue,
-          progress_percentage: (currentPortfolioValue / traditionalFireTarget) * 100,
+          progress_percentage: Math.min((currentPortfolioValue / traditionalFireTarget) * 100, 100), // Cap at 100%
           years_remaining: traditionalYears > 0 ? traditionalYears : null,
           years_to_fire: traditionalYears,
           monthly_investment_needed: monthlyContributions,
@@ -769,12 +819,12 @@ export const Goals: React.FC = () => {
           target_amount: baristaFireTarget,
           target_amount_real: baristaFireTarget,
           current_progress: currentPortfolioValue,
-          progress_percentage: baristaFireTarget > 0 ? (currentPortfolioValue / baristaFireTarget) * 100 : 100,
+          progress_percentage: baristaFireTarget > 0 ? Math.min((currentPortfolioValue / baristaFireTarget) * 100, 100) : 0, // Cap at 100%, handle zero target
           years_remaining: baristaYears > 0 ? baristaYears : null,
           years_to_fire: baristaYears,
           monthly_investment_needed: monthlyContributions,
           annual_savings_rate_required: 0,
-          achieved: currentPortfolioValue >= baristaFireTarget,
+          achieved: baristaFireTarget > 0 ? currentPortfolioValue >= baristaFireTarget : false, // Handle zero target
           projected_fi_date: baristaYears > 0 ? new Date(Date.now() + baristaYears * 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] : null,
           real_purchasing_power: baristaFireTarget,
           tax_adjusted_withdrawal: baristaFireTarget * withdrawalRate,
@@ -793,7 +843,7 @@ export const Goals: React.FC = () => {
           target_amount: coastFireTarget,
           target_amount_real: coastFireTarget,
           current_progress: currentPortfolioValue,
-          progress_percentage: (currentPortfolioValue / coastFireTarget) * 100,
+          progress_percentage: Math.min((currentPortfolioValue / coastFireTarget) * 100, 100), // Cap at 100%
           years_remaining: coastYears > 0 ? coastYears : null,
           years_to_fire: coastYears,
           monthly_investment_needed: monthlyContributions,
@@ -1261,7 +1311,7 @@ export const Goals: React.FC = () => {
                       {formatCurrency(comprehensiveAnalysis.metadata.projectedAnnualDividends)}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      Projected Dividends
+                      Projected Annual Dividends
                     </Typography>
                   </Paper>
                 </Grid>
@@ -1278,10 +1328,10 @@ export const Goals: React.FC = () => {
                 <Grid item xs={12} sm={6} md={3}>
                   <Paper elevation={1} sx={{ p: 2, textAlign: 'center' }}>
                     <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'info.main' }}>
-                      {formatCurrency(comprehensiveAnalysis.metadata.monthlyContributions)}
+                      {formatCurrency(comprehensiveAnalysis.metadata.monthlyContributions * 12)}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                      Monthly Contributions
+                      Annual Contributions
                     </Typography>
                   </Paper>
                 </Grid>
