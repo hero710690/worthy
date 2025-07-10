@@ -607,13 +607,13 @@ def handle_get_transactions(user_id):
         return create_error_response(500, "Failed to retrieve transactions")
 
 def handle_update_transaction(transaction_id, body, user_id):
-    """Update a transaction"""
+    """Update a transaction and recalculate asset aggregations"""
     try:
-        # Verify transaction belongs to user
+        # Verify transaction belongs to user and get current details
         transaction = execute_query(
             DATABASE_URL,
             """
-            SELECT t.*, a.user_id 
+            SELECT t.*, a.user_id, a.asset_id, a.ticker_symbol
             FROM transactions t
             JOIN assets a ON t.asset_id = a.asset_id
             WHERE t.transaction_id = %s AND a.user_id = %s
@@ -623,6 +623,11 @@ def handle_update_transaction(transaction_id, body, user_id):
         
         if not transaction:
             return create_error_response(404, "Transaction not found")
+        
+        transaction = transaction[0]
+        asset_id = transaction['asset_id']
+        old_shares = float(transaction['shares'])
+        old_price = float(transaction['price_per_share'])
         
         # Get update data
         shares = body.get('shares', 0)
@@ -648,7 +653,11 @@ def handle_update_transaction(transaction_id, body, user_id):
             except ValueError:
                 return create_error_response(400, "Invalid date format. Use YYYY-MM-DD")
         else:
-            transaction_date = transaction[0]['transaction_date']
+            transaction_date = transaction['transaction_date']
+        
+        # Check if shares or price changed (affects asset aggregation)
+        shares_changed = abs(float(shares) - old_shares) > 0.000001
+        price_changed = abs(float(price_per_share) - old_price) > 0.01
         
         # Update transaction
         execute_update(
@@ -661,6 +670,65 @@ def handle_update_transaction(transaction_id, body, user_id):
             """,
             (shares, price_per_share, transaction_date, currency, transaction_id)
         )
+        
+        # Recalculate asset aggregations if shares or price changed
+        if shares_changed or price_changed:
+            logger.info(f"Recalculating asset aggregations for asset {asset_id} due to transaction update")
+            
+            # Get all transactions for this asset (excluding dividend transactions)
+            asset_transactions = execute_query(
+                DATABASE_URL,
+                """
+                SELECT shares, price_per_share, transaction_type
+                FROM transactions 
+                WHERE asset_id = %s AND transaction_type != 'Dividend'
+                ORDER BY transaction_date ASC, created_at ASC
+                """,
+                (asset_id,)
+            )
+            
+            if asset_transactions:
+                # Recalculate totals from all transactions
+                total_shares = 0
+                total_cost = 0
+                
+                for txn in asset_transactions:
+                    txn_shares = float(txn['shares'])
+                    txn_price = float(txn['price_per_share'])
+                    total_shares += txn_shares
+                    total_cost += txn_shares * txn_price
+                
+                if total_shares > 0:
+                    new_avg_cost = total_cost / total_shares
+                    
+                    # Update asset with recalculated values
+                    execute_update(
+                        DATABASE_URL,
+                        """
+                        UPDATE assets 
+                        SET total_shares = %s, average_cost_basis = %s, updated_at = CURRENT_TIMESTAMP
+                        WHERE asset_id = %s
+                        """,
+                        (total_shares, new_avg_cost, asset_id)
+                    )
+                    
+                    logger.info(f"Updated asset {asset_id}: {total_shares} shares @ ${new_avg_cost:.2f}")
+                else:
+                    # No shares left, delete the asset
+                    execute_update(
+                        DATABASE_URL,
+                        "DELETE FROM assets WHERE asset_id = %s",
+                        (asset_id,)
+                    )
+                    logger.info(f"Deleted asset {asset_id} - no shares remaining")
+            else:
+                # No transactions left, delete the asset
+                execute_update(
+                    DATABASE_URL,
+                    "DELETE FROM assets WHERE asset_id = %s",
+                    (asset_id,)
+                )
+                logger.info(f"Deleted asset {asset_id} - no transactions remaining")
         
         # Get updated transaction
         updated_transaction = execute_query(
@@ -694,7 +762,9 @@ def handle_update_transaction(transaction_id, body, user_id):
         
     except Exception as e:
         logger.error(f"Update transaction error: {str(e)}")
-        return create_error_response(500, "Failed to update transaction")
+        import traceback
+        logger.error(f"Update transaction traceback: {traceback.format_exc()}")
+        return create_error_response(500, f"Failed to update transaction: {str(e)}")
 
 def handle_delete_transaction(transaction_id, user_id):
     """Delete a transaction and rollback asset aggregation"""
