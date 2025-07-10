@@ -664,8 +664,7 @@ def handle_update_transaction(transaction_id, body, user_id):
             DATABASE_URL,
             """
             UPDATE transactions 
-            SET shares = %s, price_per_share = %s, transaction_date = %s, 
-                currency = %s, updated_at = CURRENT_TIMESTAMP
+            SET shares = %s, price_per_share = %s, transaction_date = %s, currency = %s
             WHERE transaction_id = %s
             """,
             (shares, price_per_share, transaction_date, currency, transaction_id)
@@ -755,8 +754,7 @@ def handle_update_transaction(transaction_id, body, user_id):
                 "price_per_share": float(updated_transaction['price_per_share']),
                 "total_amount": float(updated_transaction['shares']) * float(updated_transaction['price_per_share']),
                 "currency": updated_transaction['currency'],
-                "created_at": updated_transaction['created_at'].isoformat(),
-                "updated_at": updated_transaction['updated_at'].isoformat() if updated_transaction['updated_at'] else None
+                "created_at": updated_transaction['created_at'].isoformat() if updated_transaction['created_at'] else None
             }
         })
         
