@@ -764,7 +764,136 @@ def handle_delete_transaction(transaction_id, user_id):
                 )
             rollback_applied = True
             
-        elif transaction['transaction_type'] == 'Dividend':
+        elif transaction['transaction_type'] == 'Recurring':
+            # Rollback Recurring transactions - same logic as LumpSum
+            logger.info(f"Rolling back recurring transaction {transaction_id}")
+            
+            # Get current asset totals
+            current_total_shares = float(transaction['total_shares'])
+            current_avg_cost = float(transaction['average_cost_basis'])
+            
+            # Get transaction details to rollback
+            transaction_shares = float(transaction['shares'])
+            transaction_price = float(transaction['price_per_share'])
+            
+            # Calculate new totals after removing this transaction
+            new_total_shares = current_total_shares - transaction_shares
+            
+            if new_total_shares > 0:
+                # Recalculate weighted average cost basis
+                current_total_value = current_total_shares * current_avg_cost
+                transaction_value = transaction_shares * transaction_price
+                new_total_value = current_total_value - transaction_value
+                new_avg_cost = new_total_value / new_total_shares
+                
+                # Update asset with rollback values
+                execute_update(
+                    DATABASE_URL,
+                    """
+                    UPDATE assets 
+                    SET total_shares = %s, average_cost_basis = %s, updated_at = CURRENT_TIMESTAMP
+                    WHERE asset_id = %s
+                    """,
+                    (new_total_shares, new_avg_cost, asset_id)
+                )
+                
+                logger.info(f"Rolled back recurring transaction: {current_total_shares} -> {new_total_shares} shares")
+                logger.info(f"Updated average cost basis: ${current_avg_cost:.2f} -> ${new_avg_cost:.2f}")
+            else:
+                # If no shares left, delete the asset entirely
+                execute_update(
+                    DATABASE_URL,
+                    "DELETE FROM assets WHERE asset_id = %s",
+                    (asset_id,)
+                )
+                logger.info(f"Deleted asset {asset_id} - no shares remaining after rollback")
+            
+            rollback_applied = True
+            
+        elif transaction['transaction_type'] == 'Initialization':
+            # Rollback Initialization transactions - similar to LumpSum but more careful
+            logger.info(f"Rolling back initialization transaction {transaction_id}")
+            
+            # For initialization transactions, we need to be extra careful
+            # Check if there are other transactions for this asset
+            other_transactions = execute_query(
+                DATABASE_URL,
+                """
+                SELECT COUNT(*) as count FROM transactions 
+                WHERE asset_id = %s AND transaction_id != %s
+                """,
+                (asset_id, transaction_id)
+            )
+            
+            if other_transactions[0]['count'] > 0:
+                # There are other transactions, so we need to recalculate from scratch
+                logger.info("Other transactions exist - recalculating asset totals from remaining transactions")
+                
+                # Get all remaining transactions for this asset
+                remaining_transactions = execute_query(
+                    DATABASE_URL,
+                    """
+                    SELECT shares, price_per_share, transaction_type 
+                    FROM transactions 
+                    WHERE asset_id = %s AND transaction_id != %s
+                    ORDER BY transaction_date ASC, created_at ASC
+                    """,
+                    (asset_id, transaction_id)
+                )
+                
+                if remaining_transactions:
+                    # Recalculate totals from remaining transactions
+                    total_shares = 0
+                    total_cost = 0
+                    
+                    for txn in remaining_transactions:
+                        if txn['transaction_type'] != 'Dividend':  # Skip dividend transactions
+                            shares = float(txn['shares'])
+                            price = float(txn['price_per_share'])
+                            total_shares += shares
+                            total_cost += shares * price
+                    
+                    if total_shares > 0:
+                        new_avg_cost = total_cost / total_shares
+                        
+                        # Update asset with recalculated values
+                        execute_update(
+                            DATABASE_URL,
+                            """
+                            UPDATE assets 
+                            SET total_shares = %s, average_cost_basis = %s, updated_at = CURRENT_TIMESTAMP
+                            WHERE asset_id = %s
+                            """,
+                            (total_shares, new_avg_cost, asset_id)
+                        )
+                        
+                        logger.info(f"Recalculated asset totals: {total_shares} shares @ ${new_avg_cost:.2f}")
+                    else:
+                        # No valid shares left, delete asset
+                        execute_update(
+                            DATABASE_URL,
+                            "DELETE FROM assets WHERE asset_id = %s",
+                            (asset_id,)
+                        )
+                        logger.info(f"Deleted asset {asset_id} - no valid shares remaining")
+                else:
+                    # No remaining transactions, delete asset
+                    execute_update(
+                        DATABASE_URL,
+                        "DELETE FROM assets WHERE asset_id = %s",
+                        (asset_id,)
+                    )
+                    logger.info(f"Deleted asset {asset_id} - no remaining transactions")
+            else:
+                # This is the only transaction, delete the entire asset
+                execute_update(
+                    DATABASE_URL,
+                    "DELETE FROM assets WHERE asset_id = %s",
+                    (asset_id,)
+                )
+                logger.info(f"Deleted asset {asset_id} - was the only transaction (initialization)")
+            
+            rollback_applied = True
             # Rollback Dividend transactions - find and reset corresponding dividend record
             logger.info(f"Rolling back dividend transaction {transaction_id}")
             
