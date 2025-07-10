@@ -71,6 +71,10 @@ export const Goals: React.FC = () => {
   // Tab navigation state
   const [activeTab, setActiveTab] = useState(0);
   
+  // Debug mode for showing comprehensive analysis
+  const [debugMode, setDebugMode] = useState(false);
+  const [comprehensiveAnalysis, setComprehensiveAnalysis] = useState<any>(null);
+  
   // What-If Simulator State
   const [whatIfValues, setWhatIfValues] = useState({
     monthlyContribution: 5000,
@@ -135,7 +139,48 @@ export const Goals: React.FC = () => {
     }
   };
 
-  const calculateFIREProgress = (profile: FIREProfile, currentPortfolioValue: number): { progress: FIREProgress; calculations: FIRECalculation[] } => {
+  const calculateFIREProgress = async (profile: FIREProfile, currentPortfolioValue: number): Promise<{ progress: FIREProgress; calculations: FIRECalculation[] }> => {
+    console.log('🔥 Switching to Comprehensive Database-Driven FIRE Calculation...');
+    
+    // Use the comprehensive calculation instead of the old complex one
+    const comprehensiveResult = await calculateComprehensiveFIRE(
+      profile.target_retirement_age,
+      profile.annual_expenses,
+      profile.barista_annual_income / 12, // Convert annual to monthly
+      profile.safe_withdrawal_rate,
+      currentPortfolioValue
+    );
+
+    // Convert comprehensive result to expected format
+    const progress: FIREProgress = {
+      current_total_assets: currentPortfolioValue,
+      traditional_fire_target: comprehensiveResult.calculations.find(c => c.fire_type === 'Traditional')?.target_amount || 0,
+      barista_fire_target: comprehensiveResult.calculations.find(c => c.fire_type === 'Barista')?.target_amount || 0,
+      coast_fire_target: comprehensiveResult.calculations.find(c => c.fire_type === 'Coast')?.target_amount || 0,
+      traditional_fire_progress: comprehensiveResult.calculations.find(c => c.fire_type === 'Traditional')?.progress_percentage || 0,
+      barista_fire_progress: comprehensiveResult.calculations.find(c => c.fire_type === 'Barista')?.progress_percentage || 0,
+      coast_fire_progress: comprehensiveResult.calculations.find(c => c.fire_type === 'Coast')?.progress_percentage || 0,
+      estimated_annual_return: comprehensiveResult.metadata.historicalReturn,
+      years_to_traditional_fire: comprehensiveResult.calculations.find(c => c.fire_type === 'Traditional')?.years_to_fire || 0,
+      years_to_barista_fire: comprehensiveResult.calculations.find(c => c.fire_type === 'Barista')?.years_to_fire || 0,
+      years_to_coast_fire: comprehensiveResult.calculations.find(c => c.fire_type === 'Coast')?.years_to_fire || 0
+    };
+
+    console.log('✅ Comprehensive FIRE Analysis Complete!', {
+      metadata: comprehensiveResult.metadata,
+      traditionalFIRE: comprehensiveResult.calculations.find(c => c.fire_type === 'Traditional'),
+      baristaFIRE: comprehensiveResult.calculations.find(c => c.fire_type === 'Barista'),
+      coastFIRE: comprehensiveResult.calculations.find(c => c.fire_type === 'Coast')
+    });
+
+    // Store comprehensive analysis for debug display
+    setComprehensiveAnalysis(comprehensiveResult);
+
+    return { progress, calculations: comprehensiveResult.calculations };
+  };
+
+  // Keep the old calculation as backup (renamed)
+  const calculateFIREProgressLegacy = (profile: FIREProfile, currentPortfolioValue: number): { progress: FIREProgress; calculations: FIRECalculation[] } => {
     const currentYear = new Date().getFullYear();
     const currentAge = user?.birth_year ? currentYear - user.birth_year : 30;
     const yearsToRetirement = Math.max(profile.target_retirement_age - currentAge, 0);
@@ -802,8 +847,8 @@ export const Goals: React.FC = () => {
       setFireProfile(profileResponse.fire_profile);
       
       if (profileResponse.fire_profile) {
-        // Calculate FIRE progress using real-time portfolio value
-        const { progress, calculations } = calculateFIREProgress(
+        // Calculate FIRE progress using real-time portfolio value with comprehensive analysis
+        const { progress, calculations } = await calculateFIREProgress(
           profileResponse.fire_profile, 
           valuation.totalValueInBaseCurrency
         );
@@ -844,9 +889,9 @@ export const Goals: React.FC = () => {
       await fireApi.createOrUpdateFIREProfile(formData);
       setOpenDialog(false);
       
-      // Recalculate FIRE progress with current portfolio value
+      // Recalculate FIRE progress with current portfolio value using comprehensive analysis
       if (portfolioValuation) {
-        const { progress, calculations } = calculateFIREProgress(
+        const { progress, calculations } = await calculateFIREProgress(
           { ...formData } as FIREProfile, 
           portfolioValuation.totalValueInBaseCurrency
         );
@@ -958,6 +1003,18 @@ export const Goals: React.FC = () => {
           </Typography>
         </Box>
         <Stack direction="row" spacing={2}>
+          <Button
+            variant={debugMode ? "contained" : "outlined"}
+            size="small"
+            onClick={() => setDebugMode(!debugMode)}
+            sx={{ 
+              borderRadius: 2,
+              color: debugMode ? 'white' : 'text.secondary',
+              backgroundColor: debugMode ? 'secondary.main' : 'transparent'
+            }}
+          >
+            🔍 Debug
+          </Button>
           <Button
             variant="outlined"
             startIcon={<Calculate />}
@@ -1172,6 +1229,159 @@ export const Goals: React.FC = () => {
             />
           )}
         </Box>
+      )}
+
+      {/* 🔍 Debug Mode: Comprehensive Analysis Display */}
+      {debugMode && comprehensiveAnalysis && (
+        <Card elevation={0} sx={{ borderRadius: 3, border: '2px solid', borderColor: 'secondary.main', mt: 4 }}>
+          <CardContent sx={{ p: 4 }}>
+            <Typography variant="h5" sx={{ fontWeight: 'bold', mb: 3, color: 'secondary.main' }}>
+              🔍 Comprehensive Database-Driven Analysis
+            </Typography>
+            
+            {/* Metadata Display */}
+            <Box sx={{ mb: 4 }}>
+              <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>
+                📊 Analysis Metadata
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6} md={3}>
+                  <Paper elevation={1} sx={{ p: 2, textAlign: 'center' }}>
+                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
+                      {(comprehensiveAnalysis.metadata.historicalReturn * 100).toFixed(1)}%
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Historical Return
+                    </Typography>
+                  </Paper>
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                  <Paper elevation={1} sx={{ p: 2, textAlign: 'center' }}>
+                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'success.main' }}>
+                      {formatCurrency(comprehensiveAnalysis.metadata.projectedAnnualDividends)}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Projected Dividends
+                    </Typography>
+                  </Paper>
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                  <Paper elevation={1} sx={{ p: 2, textAlign: 'center' }}>
+                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'warning.main' }}>
+                      {(comprehensiveAnalysis.metadata.riskAnalysis.volatility * 100).toFixed(1)}%
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Portfolio Volatility
+                    </Typography>
+                  </Paper>
+                </Grid>
+                <Grid item xs={12} sm={6} md={3}>
+                  <Paper elevation={1} sx={{ p: 2, textAlign: 'center' }}>
+                    <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'info.main' }}>
+                      {formatCurrency(comprehensiveAnalysis.metadata.monthlyContributions)}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Monthly Contributions
+                    </Typography>
+                  </Paper>
+                </Grid>
+              </Grid>
+            </Box>
+
+            {/* Data Sources */}
+            <Box sx={{ mb: 4 }}>
+              <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>
+                🗄️ Database Sources Used
+              </Typography>
+              <Grid container spacing={1}>
+                {comprehensiveAnalysis.metadata.dataSourcesUsed.map((source: string, index: number) => (
+                  <Grid item xs={12} sm={6} key={index}>
+                    <Chip 
+                      label={source} 
+                      variant="outlined" 
+                      size="small"
+                      sx={{ width: '100%', justifyContent: 'flex-start' }}
+                    />
+                  </Grid>
+                ))}
+              </Grid>
+            </Box>
+
+            {/* Enhanced FIRE Calculations */}
+            <Box sx={{ mb: 4 }}>
+              <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>
+                🔥 Enhanced FIRE Calculations
+              </Typography>
+              <Grid container spacing={3}>
+                {comprehensiveAnalysis.calculations.map((calc: any) => (
+                  <Grid item xs={12} md={4} key={calc.fire_type}>
+                    <Paper elevation={1} sx={{ p: 3 }}>
+                      <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, color: 'primary.main' }}>
+                        {calc.fire_type} FIRE
+                      </Typography>
+                      <Stack spacing={1}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <Typography variant="body2">Target:</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                            {formatCurrency(calc.target_amount)}
+                          </Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <Typography variant="body2">Progress:</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                            {calc.progress_percentage.toFixed(1)}%
+                          </Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <Typography variant="body2">Years to FIRE:</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                            {calc.years_to_fire > 0 ? calc.years_to_fire.toFixed(1) : 'Achieved!'}
+                          </Typography>
+                        </Box>
+                        {calc.monte_carlo_success_rate && (
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <Typography variant="body2">Success Rate:</Typography>
+                            <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'success.main' }}>
+                              {calc.monte_carlo_success_rate.toFixed(1)}%
+                            </Typography>
+                          </Box>
+                        )}
+                        {calc.dividend_income_annual && (
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                            <Typography variant="body2">Annual Dividends:</Typography>
+                            <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'success.main' }}>
+                              {formatCurrency(calc.dividend_income_annual)}
+                            </Typography>
+                          </Box>
+                        )}
+                      </Stack>
+                    </Paper>
+                  </Grid>
+                ))}
+              </Grid>
+            </Box>
+
+            {/* Calculation Enhancements */}
+            <Box>
+              <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2 }}>
+                ⚡ Calculation Enhancements
+              </Typography>
+              <Grid container spacing={1}>
+                {comprehensiveAnalysis.metadata.calculationEnhancements.map((enhancement: string, index: number) => (
+                  <Grid item xs={12} sm={6} key={index}>
+                    <Chip 
+                      label={enhancement} 
+                      color="secondary"
+                      variant="outlined" 
+                      size="small"
+                      sx={{ width: '100%', justifyContent: 'flex-start' }}
+                    />
+                  </Grid>
+                ))}
+              </Grid>
+            </Box>
+          </CardContent>
+        </Card>
       )}
 
       {/* FIRE Profile Dialog */}
