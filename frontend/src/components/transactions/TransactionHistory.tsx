@@ -148,13 +148,16 @@ export const TransactionHistory: React.FC = () => {
   }, [transactions, searchTerm, filterType, filterAssetType]);
 
   const handleEditTransaction = (transaction: Transaction) => {
+    console.log('🔧 Edit transaction clicked:', transaction);
     setEditingTransaction(transaction);
-    setFormData({
+    const formDataToSet = {
       shares: transaction.shares,
       price_per_share: transaction.price_per_share,
       transaction_date: transaction.transaction_date,
       currency: transaction.currency,
-    });
+    };
+    console.log('📝 Setting form data:', formDataToSet);
+    setFormData(formDataToSet);
   };
 
   const handleDeleteTransaction = (transaction: Transaction) => {
@@ -181,14 +184,40 @@ export const TransactionHistory: React.FC = () => {
   const handleSaveEdit = async () => {
     if (!editingTransaction) return;
 
+    console.log('💾 Save edit clicked for transaction:', editingTransaction.transaction_id);
+    console.log('📝 Form data to save:', formData);
+
+    // Validate form data
+    if (formData.shares <= 0) {
+      setError('Shares must be greater than 0');
+      return;
+    }
+    
+    if (formData.price_per_share <= 0) {
+      setError('Price per share must be greater than 0');
+      return;
+    }
+    
+    if (!formData.currency) {
+      setError('Currency is required');
+      return;
+    }
+    
+    if (!formData.transaction_date) {
+      setError('Transaction date is required');
+      return;
+    }
+
     setEditLoading(true);
     try {
-      await assetAPI.updateTransaction(editingTransaction.transaction_id, formData);
+      const response = await assetAPI.updateTransaction(editingTransaction.transaction_id, formData);
+      console.log('✅ Update response:', response);
       await fetchTransactions();
       setEditingTransaction(null);
       setError(null);
     } catch (error: any) {
-      console.error('Failed to update transaction:', error);
+      console.error('❌ Failed to update transaction:', error);
+      console.error('❌ Error response:', error.response?.data);
       setError(error.response?.data?.message || 'Failed to update transaction');
     } finally {
       setEditLoading(false);
@@ -199,11 +228,15 @@ export const TransactionHistory: React.FC = () => {
     event: React.ChangeEvent<HTMLInputElement>
   ) => {
     const value = event.target.value;
+    const processedValue = field === 'shares' || field === 'price_per_share' 
+      ? parseFloat(value) || 0 
+      : value;
+    
+    console.log(`📝 Form field ${field} changed:`, value, '→', processedValue);
+    
     setFormData(prev => ({
       ...prev,
-      [field]: field === 'shares' || field === 'price_per_share' 
-        ? parseFloat(value) || 0 
-        : value
+      [field]: processedValue
     }));
   };
 
