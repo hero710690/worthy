@@ -1205,7 +1205,9 @@ def create_fire_profile_table():
             ("expected_return_post_retirement", "DECIMAL(5,4) DEFAULT 0.05"),
             ("expected_inflation_rate", "DECIMAL(5,4) DEFAULT 0.025"),
             ("other_passive_income", "DECIMAL(15,2) DEFAULT 0"),
-            ("effective_tax_rate", "DECIMAL(5,4) DEFAULT 0.15")
+            ("effective_tax_rate", "DECIMAL(5,4) DEFAULT 0.15"),
+            ("barista_annual_contribution", "DECIMAL(15,2) DEFAULT 0"),  # New: contribution capacity during part-time
+            ("inflation_rate", "DECIMAL(5,4) DEFAULT 0.025")  # New: user-specific inflation assumption
         ]
         
         for field_name, field_definition in comprehensive_fields:
@@ -2707,9 +2709,13 @@ def handle_create_or_update_fire_profile(body, user_id):
         other_passive_income = body.get('other_passive_income', 0)
         effective_tax_rate = body.get('effective_tax_rate', 0.15)
         
+        # Enhanced: New fields for sophisticated calculation
+        barista_annual_contribution = body.get('barista_annual_contribution', 0)  # Investment capacity during part-time
+        inflation_rate = body.get('inflation_rate', 0.025)  # User-specific inflation assumption
+        
         # Legacy fields for backward compatibility
         expected_annual_return = body.get('expected_annual_return', expected_return_pre_retirement)
-        barista_annual_income = body.get('barista_annual_income', 0)
+        barista_annual_income = body.get('barista_annual_income', 0)  # Keep for backward compatibility
         
         # Check if profile already exists
         existing_profile = execute_query(
@@ -2719,7 +2725,7 @@ def handle_create_or_update_fire_profile(body, user_id):
         )
         
         if existing_profile:
-            # Update existing profile with all comprehensive fields
+            # Update existing profile with all comprehensive fields including new ones
             execute_update(
                 DATABASE_URL,
                 """
@@ -2728,6 +2734,7 @@ def handle_create_or_update_fire_profile(body, user_id):
                     target_retirement_age = %s, safe_withdrawal_rate = %s,
                     expected_return_pre_retirement = %s, expected_return_post_retirement = %s,
                     expected_inflation_rate = %s, other_passive_income = %s, effective_tax_rate = %s,
+                    barista_annual_contribution = %s, inflation_rate = %s,
                     expected_annual_return = %s, barista_annual_income = %s, 
                     updated_at = CURRENT_TIMESTAMP
                 WHERE user_id = %s
@@ -2735,11 +2742,12 @@ def handle_create_or_update_fire_profile(body, user_id):
                 (annual_income, annual_savings, annual_expenses, target_retirement_age, 
                  safe_withdrawal_rate, expected_return_pre_retirement, expected_return_post_retirement,
                  expected_inflation_rate, other_passive_income, effective_tax_rate,
+                 barista_annual_contribution, inflation_rate,
                  expected_annual_return, barista_annual_income, user_id)
             )
             message = "FIRE profile updated successfully"
         else:
-            # Create new profile with all comprehensive fields
+            # Create new profile with all comprehensive fields including new ones
             execute_update(
                 DATABASE_URL,
                 """
@@ -2747,12 +2755,14 @@ def handle_create_or_update_fire_profile(body, user_id):
                 (user_id, annual_income, annual_savings, annual_expenses, target_retirement_age,
                  safe_withdrawal_rate, expected_return_pre_retirement, expected_return_post_retirement,
                  expected_inflation_rate, other_passive_income, effective_tax_rate,
+                 barista_annual_contribution, inflation_rate,
                  expected_annual_return, barista_annual_income)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (user_id, annual_income, annual_savings, annual_expenses, target_retirement_age,
                  safe_withdrawal_rate, expected_return_pre_retirement, expected_return_post_retirement,
                  expected_inflation_rate, other_passive_income, effective_tax_rate,
+                 barista_annual_contribution, inflation_rate,
                  expected_annual_return, barista_annual_income)
             )
             message = "FIRE profile created successfully"
@@ -2837,6 +2847,133 @@ def handle_get_fire_profile(user_id):
         logger.error(f"Get FIRE profile error: {str(e)}")
         return create_error_response(500, "Failed to retrieve FIRE profile")
 
+def calculate_portfolio_performance(user_id, period_months=12):
+    """
+    Calculate real annual return for user's portfolio using time-weighted return method
+    """
+    try:
+        logger.info(f"Calculating portfolio performance for user {user_id} over {period_months} months")
+        
+        # Get all user transactions with dates
+        transactions = execute_query(
+            DATABASE_URL,
+            """
+            SELECT t.*, a.ticker_symbol, a.currency
+            FROM transactions t
+            JOIN assets a ON t.asset_id = a.asset_id
+            WHERE a.user_id = %s AND t.transaction_type != 'Dividend'
+            ORDER BY t.transaction_date ASC, t.created_at ASC
+            """,
+            (user_id,)
+        )
+        
+        if not transactions:
+            logger.info("No transactions found for performance calculation")
+            return {
+                'real_annual_return': 0,
+                'total_return': 0,
+                'total_invested': 0,
+                'current_value': 0,
+                'calculation_method': 'insufficient_data'
+            }
+        
+        # Calculate date range
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=period_months * 30)
+        
+        # Get transactions within the period
+        period_transactions = [t for t in transactions if t['transaction_date'] >= start_date.date()]
+        
+        # Get all transactions before the period (for initial value)
+        initial_transactions = [t for t in transactions if t['transaction_date'] < start_date.date()]
+        
+        # Calculate initial investment value (cost basis of holdings at start of period)
+        initial_invested = sum(float(t['shares']) * float(t['price_per_share']) for t in initial_transactions)
+        
+        # Calculate additional investments during the period
+        period_invested = sum(float(t['shares']) * float(t['price_per_share']) for t in period_transactions)
+        
+        # Get current portfolio value (using real-time prices if available)
+        current_assets = execute_query(
+            DATABASE_URL,
+            """
+            SELECT ticker_symbol, total_shares, average_cost_basis, currency
+            FROM assets
+            WHERE user_id = %s AND total_shares > 0
+            """,
+            (user_id,)
+        )
+        
+        # Calculate current market value (simplified - using cost basis for now)
+        # In production, this would use real-time stock prices
+        current_value = sum(float(asset['total_shares']) * float(asset['average_cost_basis']) for asset in current_assets)
+        
+        total_invested = initial_invested + period_invested
+        
+        if total_invested <= 0:
+            return {
+                'real_annual_return': 0,
+                'total_return': 0,
+                'total_invested': 0,
+                'current_value': current_value,
+                'calculation_method': 'no_investments'
+            }
+        
+        # Calculate total return
+        total_return = (current_value - total_invested) / total_invested
+        
+        # Annualize the return based on the period
+        if period_months > 0:
+            years = period_months / 12
+            if years > 0 and total_return > -1:  # Avoid negative base for fractional exponent
+                annual_return = ((1 + total_return) ** (1/years)) - 1
+            else:
+                annual_return = total_return / years  # Linear approximation for edge cases
+        else:
+            annual_return = 0
+        
+        logger.info(f"Performance calculation: Total invested: ${total_invested:,.2f}, Current value: ${current_value:,.2f}, Annual return: {annual_return:.2%}")
+        
+        return {
+            'real_annual_return': annual_return,
+            'total_return': total_return,
+            'total_invested': total_invested,
+            'current_value': current_value,
+            'period_months': period_months,
+            'calculation_method': 'time_weighted_return'
+        }
+        
+    except Exception as e:
+        logger.error(f"Portfolio performance calculation error: {str(e)}")
+        return {
+            'real_annual_return': 0,
+            'total_return': 0,
+            'total_invested': 0,
+            'current_value': 0,
+            'error': str(e),
+            'calculation_method': 'error'
+        }
+
+def handle_get_portfolio_performance(user_id, period_months=12):
+    """Get portfolio performance metrics for a user"""
+    try:
+        performance = calculate_portfolio_performance(user_id, period_months)
+        
+        # Add additional metrics
+        performance_data = {
+            **performance,
+            'timestamp': datetime.utcnow().isoformat(),
+            'user_id': user_id
+        }
+        
+        return create_response(200, {
+            "portfolio_performance": performance_data
+        })
+        
+    except Exception as e:
+        logger.error(f"Get portfolio performance error: {str(e)}")
+        return create_error_response(500, "Failed to calculate portfolio performance")
+
 def calculate_fire_progress(user_id):
     """Calculate FIRE progress for a user"""
     try:
@@ -2882,6 +3019,9 @@ def calculate_fire_progress(user_id):
             # For simplicity, assume all values are in base currency
             # In production, this should use real-time prices and currency conversion
             current_portfolio_value += asset_value
+        
+        # Get portfolio performance for additional context
+        performance = calculate_portfolio_performance(user_id, 12)
         
         # FIRE profile values
         annual_expenses = float(profile['annual_expenses']) if profile['annual_expenses'] else 0
@@ -2959,27 +3099,30 @@ def calculate_fire_progress(user_id):
                 "target_amount": traditional_fire_target,
                 "current_progress": current_portfolio_value,
                 "progress_percentage": min(traditional_progress, 100),
+                "raw_progress_percentage": traditional_progress,
                 "years_remaining": traditional_years,
                 "monthly_investment_needed": traditional_monthly,
-                "achieved": traditional_progress >= 100
+                "achieved": current_portfolio_value >= traditional_fire_target and traditional_fire_target > 0
             },
             {
                 "fire_type": "Barista", 
                 "target_amount": barista_fire_target,
                 "current_progress": current_portfolio_value,
                 "progress_percentage": min(barista_progress, 100),
+                "raw_progress_percentage": barista_progress,
                 "years_remaining": barista_years,
                 "monthly_investment_needed": barista_monthly,
-                "achieved": barista_progress >= 100
+                "achieved": current_portfolio_value >= barista_fire_target and barista_fire_target > 0
             },
             {
                 "fire_type": "Coast",
                 "target_amount": coast_fire_target,
                 "current_progress": current_portfolio_value,
                 "progress_percentage": min(coast_progress, 100),
+                "raw_progress_percentage": coast_progress,
                 "years_remaining": coast_years,
                 "monthly_investment_needed": coast_monthly,
-                "achieved": coast_progress >= 100
+                "achieved": current_portfolio_value >= coast_fire_target and coast_fire_target > 0
             }
         ]
         
@@ -3001,7 +3144,8 @@ def calculate_fire_progress(user_id):
             },
             "calculations": calculations,
             "user_age": current_age,
-            "base_currency": base_currency
+            "base_currency": base_currency,
+            "portfolio_performance": performance  # Include performance metrics
         })
         
     except Exception as e:
@@ -3967,6 +4111,19 @@ def lambda_handler(event, context):
                 return create_error_response(401, "Invalid or missing token")
             
             return calculate_fire_progress(auth_result['user_id'])
+        
+        elif path == '/portfolio/performance' and http_method == 'GET':
+            # Get portfolio performance - requires authentication
+            request_headers = event.get('headers', {})
+            auth_result = verify_jwt_token(request_headers.get('Authorization', ''))
+            if not auth_result['valid']:
+                return create_error_response(401, "Invalid or missing token")
+            
+            # Get period parameter (default to 12 months)
+            query_params = event.get('queryStringParameters') or {}
+            period_months = int(query_params.get('period', 12))
+            
+            return handle_get_portfolio_performance(auth_result['user_id'], period_months)
         
         # ============================================================================
         # DIVIDEND MANAGEMENT ENDPOINTS
