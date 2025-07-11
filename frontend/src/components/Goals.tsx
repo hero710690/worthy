@@ -2252,7 +2252,55 @@ const WhatIfSimulatorTab: React.FC<{
     
     // Calculate FIRE targets
     const traditionalFireTarget = annualExpenses / safeWithdrawalRate;
-    const baristaFireTarget = Math.max(0, (annualExpenses - whatIfValues.partTimeIncome) / safeWithdrawalRate);
+    
+    // CORRECTED BARISTA FIRE LOGIC:
+    // Barista FIRE has the SAME target as Traditional FIRE
+    // The difference is the path: invest normally, then switch to part-time work
+    const baristaFireTarget = traditionalFireTarget; // Same target!
+    
+    // Calculate the "Barista Transition Point" - when you can switch to part-time
+    const calculateBaristaTransitionPoint = () => {
+      const partTimeIncome = whatIfValues.partTimeIncome;
+      const yearsToRetirement = Math.max(targetRetirementAge - currentAge, 0);
+      
+      if (yearsToRetirement <= 0) {
+        return {
+          transitionAmount: traditionalFireTarget,
+          transitionAge: currentAge,
+          canTransition: false,
+          message: "Target retirement age must be in the future for Barista FIRE"
+        };
+      }
+      
+      if (partTimeIncome < annualExpenses) {
+        // Need portfolio to cover the gap between part-time income and expenses
+        const annualGap = annualExpenses - partTimeIncome;
+        const gapCoverageNeeded = annualGap / safeWithdrawalRate;
+        
+        // The transition point: have enough to cover the gap, let compound growth reach full target
+        const baristaTransitionAmount = Math.max(
+          gapCoverageNeeded,
+          traditionalFireTarget / Math.pow(1 + expectedReturn, yearsToRetirement)
+        );
+        
+        return {
+          transitionAmount: baristaTransitionAmount,
+          transitionAge: currentAge,
+          canTransition: true,
+          message: `Reach ${formatCurrency(baristaTransitionAmount)}, switch to part-time (${formatCurrency(partTimeIncome)}/year), and coast to full FIRE by age ${targetRetirementAge}`
+        };
+      } else {
+        // Part-time income covers all expenses - can transition immediately
+        return {
+          transitionAmount: 0,
+          transitionAge: currentAge,
+          canTransition: true,
+          message: `Part-time income (${formatCurrency(partTimeIncome)}) covers all expenses. You can transition to Barista FIRE immediately!`
+        };
+      }
+    };
+    
+    const baristaTransition = calculateBaristaTransitionPoint();
     
     // Calculate years to achieve each target
     const calculateYearsToTarget = (targetAmount: number) => {
@@ -2272,7 +2320,10 @@ const WhatIfSimulatorTab: React.FC<{
     };
 
     const yearsToTraditional = calculateYearsToTarget(traditionalFireTarget);
-    const yearsToBarista = calculateYearsToTarget(baristaFireTarget);
+    
+    // Barista FIRE: Calculate years to reach transition point (not the full target)
+    const yearsToBarista = baristaTransition.canTransition ? 
+      calculateYearsToTarget(baristaTransition.transitionAmount) : -1;
     
     // Calculate Coast FIRE target - FIXED LOGIC
     const yearsToRetirement = Math.max(targetRetirementAge - currentAge, 0);
@@ -2313,14 +2364,14 @@ const WhatIfSimulatorTab: React.FC<{
         achievable: yearsToTraditional > 0 && (currentAge + yearsToTraditional) <= targetRetirementAge
       },
       baristaFire: {
-        target: baristaFireTarget,
+        target: baristaFireTarget, // Same as Traditional FIRE
+        transitionAmount: baristaTransition.transitionAmount,
         years: yearsToBarista,
         achievementAge: yearsToBarista > 0 ? currentAge + yearsToBarista : currentAge,
         achievable: yearsToBarista > 0 && (currentAge + yearsToBarista) <= targetRetirementAge,
         partTimeIncome: whatIfValues.partTimeIncome,
-        message: baristaFireTarget === 0 ? 
-          `🎉 Barista FIRE already achieved! Your part-time income (${formatCurrency(whatIfValues.partTimeIncome)}) covers all expenses (${formatCurrency(annualExpenses)}).` :
-          ''
+        canTransition: baristaTransition.canTransition,
+        message: baristaTransition.message
       },
       coastFire: {
         target: coastFireTarget,
@@ -2517,63 +2568,81 @@ const WhatIfSimulatorTab: React.FC<{
                     Barista FIRE
                   </Typography>
                   
-                  {whatIfResults.baristaFire.target === 0 ? (
-                    // Special case: Part-time income covers all expenses
+                  {!whatIfResults.baristaFire.canTransition ? (
+                    // Cannot transition case
                     <Box sx={{ textAlign: 'center', py: 2 }}>
-                      <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'success.main', mb: 2 }}>
-                        🎉 Already Achieved!
+                      <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'error.main', mb: 2 }}>
+                        ⚠️ Not Feasible
                       </Typography>
                       <Typography variant="body1" sx={{ mb: 2 }}>
-                        Your part-time income ({formatCurrency(whatIfResults.baristaFire.partTimeIncome)}) 
-                        covers all annual expenses ({formatCurrency(whatIfValues.annualExpenses)}).
+                        {whatIfResults.baristaFire.message}
                       </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        No additional portfolio needed for Barista FIRE!
+                    </Box>
+                  ) : whatIfResults.baristaFire.transitionAmount === 0 ? (
+                    // Can transition immediately
+                    <Box sx={{ textAlign: 'center', py: 2 }}>
+                      <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'success.main', mb: 2 }}>
+                        🎉 Ready Now!
+                      </Typography>
+                      <Typography variant="body1" sx={{ mb: 2 }}>
+                        {whatIfResults.baristaFire.message}
                       </Typography>
                     </Box>
                   ) : (
-                    // Normal case: Portfolio needed
+                    // Normal transition case
                     <Grid container spacing={2}>
+                      <Grid item xs={12}>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2, fontStyle: 'italic' }}>
+                          💡 Barista FIRE Strategy: Reach transition point → Switch to part-time → Coast to full FIRE
+                        </Typography>
+                      </Grid>
                       <Grid item xs={6}>
-                        <Typography variant="body2" color="text.secondary">Target Amount:</Typography>
+                        <Typography variant="body2" color="text.secondary">Final Target (Same as Traditional):</Typography>
                         <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
                           {formatCurrency(whatIfResults.baristaFire.target)}
                         </Typography>
                       </Grid>
                       <Grid item xs={6}>
-                        <Typography variant="body2" color="text.secondary">Time to Achieve:</Typography>
+                        <Typography variant="body2" color="text.secondary">Transition Point:</Typography>
+                        <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'warning.main' }}>
+                          {formatCurrency(whatIfResults.baristaFire.transitionAmount)}
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Typography variant="body2" color="text.secondary">Time to Transition:</Typography>
                         <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
                           {whatIfResults.baristaFire.years > 0 
                             ? `${whatIfResults.baristaFire.years.toFixed(1)} years`
                             : whatIfResults.baristaFire.years === 0 
-                              ? 'Already achieved!'
+                              ? 'Ready now!'
                               : 'Not achievable'
                           }
                         </Typography>
                       </Grid>
-                      <Grid item xs={12}>
-                        <Typography variant="body2" color="text.secondary">Achievement Age:</Typography>
-                        <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+                      <Grid item xs={6}>
+                        <Typography variant="body2" color="text.secondary">Transition Age:</Typography>
+                        <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
                           Age {whatIfResults.baristaFire.achievementAge.toFixed(0)}
                           {whatIfResults.baristaFire.achievable ? (
-                            <Chip label="Within target!" color="success" size="small" sx={{ ml: 1 }} />
+                            <Chip label="Feasible!" color="success" size="small" sx={{ ml: 1 }} />
                           ) : (
-                            <Chip label="After target age" color="warning" size="small" sx={{ ml: 1 }} />
+                            <Chip label="Too late" color="warning" size="small" sx={{ ml: 1 }} />
                           )}
                         </Typography>
                       </Grid>
                       <Grid item xs={12}>
-                        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                          Part-time income: {formatCurrency(whatIfResults.baristaFire.partTimeIncome)} annually
+                        <Typography variant="body2" color="text.secondary">Part-time Income:</Typography>
+                        <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+                          {formatCurrency(whatIfResults.baristaFire.partTimeIncome)} annually
                         </Typography>
                       </Grid>
                     </Grid>
                   )}
                   
                   {whatIfResults.baristaFire.message && (
-                    <Box sx={{ mt: 2, p: 2, bgcolor: 'success.50', borderRadius: 1 }}>
+                    <Box sx={{ mt: 2, p: 2, bgcolor: 'warning.50', borderRadius: 1 }}>
                       <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
-                        {whatIfResults.baristaFire.message}
+                        💡 {whatIfResults.baristaFire.message}
                       </Typography>
                     </Box>
                   )}
