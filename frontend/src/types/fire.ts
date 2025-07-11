@@ -36,7 +36,6 @@ export interface CreateFIREProfileRequest {
   // 財務現況 (Current Financial Snapshot)
   current_age?: number;
   annual_income: number;
-  annual_savings: number;
   
   // 退休目標 (Retirement Goals)
   annual_expenses: number;
@@ -63,16 +62,15 @@ export interface CreateFIREProfileRequest {
 export interface FIREProgress {
   // Current Status
   current_total_assets: number;
-  current_age: number;
-  years_to_retirement: number;
+  current_age?: number;
+  years_to_retirement?: number;
+  current_monthly_contribution?: number; // 🆕 Monthly contribution from recurring investments
   
-  // FIRE Targets (nominal and real values)
+  // FIRE Targets (nominal and inflation-adjusted values)
   traditional_fire_target: number;
-  traditional_fire_target_real: number; // Inflation-adjusted
+  traditional_fire_target_inflation_adjusted?: number; // 🆕 Inflation-adjusted target
   barista_fire_target: number;
-  barista_fire_target_real: number;
   coast_fire_target: number;
-  coast_fire_target_real: number;
   
   // Progress Percentages
   traditional_fire_progress: number;
@@ -85,33 +83,39 @@ export interface FIREProgress {
   years_to_coast_fire: number;
   
   // Required Savings
-  monthly_investment_needed_traditional: number;
-  monthly_investment_needed_barista: number;
-  annual_savings_rate: number; // Current savings rate as percentage of income
-  required_savings_rate_traditional: number; // Required savings rate to reach Traditional FIRE
+  monthly_investment_needed_traditional?: number;
+  monthly_investment_needed_barista?: number;
+  annual_savings_rate?: number; // Current savings rate as percentage of income
+  required_savings_rate_traditional?: number; // Required savings rate to reach Traditional FIRE
   
   // Additional Metrics
   is_coast_fire_achieved: boolean;
   financial_independence_date?: string; // Projected FI date
-  purchasing_power_at_retirement: number; // Real value considering inflation
+  purchasing_power_at_retirement?: number; // Real value considering inflation
+  estimated_annual_return?: number; // For backward compatibility
 }
 
 export interface FIRECalculation {
   fire_type: 'Traditional' | 'Barista' | 'Coast';
   target_amount: number;
-  target_amount_real: number; // Inflation-adjusted
+  target_inflation_adjusted?: number; // 🆕 Inflation-adjusted target
+  inflation_impact?: number; // 🆕 Additional amount needed due to inflation
+  transition_target?: number; // 🆕 For Barista FIRE transition point
+  real_return_used?: number; // 🆕 Real return rate used in calculations
+  coast_fire_age?: number; // 🆕 Age for Barista FIRE transition
   current_progress: number;
   progress_percentage: number; // Capped at 100% for display
   raw_progress_percentage?: number; // Actual progress, can exceed 100%
-  years_remaining: number;
-  monthly_investment_needed: number;
-  annual_savings_rate_required: number; // As percentage of income
+  years_remaining?: number;
+  monthly_investment_needed?: number;
+  annual_savings_rate_required?: number; // As percentage of income
   achieved: boolean;
+  message?: string; // 🆕 Descriptive message from backend
   
-  // Enhanced metrics
+  // Enhanced metrics (optional for backward compatibility)
   projected_fi_date?: string;
-  real_purchasing_power: number; // What the money will be worth in today's dollars
-  tax_adjusted_withdrawal: number; // After-tax withdrawal amount
+  real_purchasing_power?: number; // What the money will be worth in today's dollars
+  tax_adjusted_withdrawal?: number; // After-tax withdrawal amount
 }
 
 export interface FIREProfileResponse {

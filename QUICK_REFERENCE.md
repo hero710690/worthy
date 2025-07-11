@@ -88,7 +88,7 @@ backend/
 3. **Dependencies go in `lambda_deployment_full/`** - Not in root
 4. **Test after every deployment** - Use health check
 5. **Keep it clean** - Remove unused files immediately
-
+6. since we're have asset in different currency make sure to consider exchange rate before summing them up.
 ---
 
 ## 📊 Current Status
