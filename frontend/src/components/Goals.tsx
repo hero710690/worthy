@@ -2235,6 +2235,19 @@ const WhatIfSimulatorTab: React.FC<{
     const targetRetirementAge = whatIfValues.targetRetirementAge;
     const safeWithdrawalRate = fireProfile.safe_withdrawal_rate || 0.04;
     
+    // Calculate current age properly
+    const currentYear = new Date().getFullYear();
+    const currentAge = user?.birth_year ? currentYear - user.birth_year : 30;
+    
+    console.log('🔥 What-If FIRE Calculation Debug:', {
+      currentAge,
+      targetRetirementAge,
+      expectedReturn: `${(expectedReturn * 100).toFixed(1)}%`,
+      monthlyContribution: formatCurrency(monthlyContribution),
+      annualExpenses: formatCurrency(annualExpenses),
+      partTimeIncome: formatCurrency(whatIfValues.partTimeIncome)
+    });
+    
     // Calculate FIRE targets
     const traditionalFireTarget = annualExpenses / safeWithdrawalRate;
     const baristaFireTarget = Math.max(0, (annualExpenses - whatIfValues.partTimeIncome) / safeWithdrawalRate);
@@ -2246,29 +2259,49 @@ const WhatIfSimulatorTab: React.FC<{
       const monthlyRate = Math.pow(1 + expectedReturn, 1/12) - 1;
       let portfolioValue = currentValue;
       let months = 0;
-      const maxMonths = 50 * 12; // 50 years max
+      const maxMonths = Math.min(50 * 12, (targetRetirementAge - currentAge) * 12); // Cap at target retirement age
       
       while (portfolioValue < targetAmount && months < maxMonths) {
         portfolioValue = portfolioValue * (1 + monthlyRate) + monthlyContribution;
         months++;
       }
       
-      return months < maxMonths ? months / 12 : -1; // -1 means not achievable
+      return months < maxMonths ? months / 12 : -1; // -1 means not achievable within target retirement age
     };
 
     const yearsToTraditional = calculateYearsToTarget(traditionalFireTarget);
     const yearsToBarista = calculateYearsToTarget(baristaFireTarget);
     
-    // Calculate Coast FIRE target
+    // Calculate Coast FIRE target - FIXED LOGIC
     const yearsToRetirement = Math.max(targetRetirementAge - currentAge, 0);
-    const coastFireTarget = yearsToRetirement > 0 ? 
-      traditionalFireTarget / Math.pow(1 + expectedReturn, yearsToRetirement) : 
-      traditionalFireTarget;
-    const yearsToCoast = calculateYearsToTarget(coastFireTarget);
+    let coastFireTarget = traditionalFireTarget;
+    let yearsToCoast = -1;
+    let coastFireMessage = '';
     
-    // Calculate current age
-    const currentYear = new Date().getFullYear();
-    const currentAge = 30; // Default, should get from user
+    if (yearsToRetirement <= 0) {
+      // Target retirement age is now or in the past
+      coastFireTarget = traditionalFireTarget;
+      yearsToCoast = yearsToTraditional;
+      coastFireMessage = `Target retirement age (${targetRetirementAge}) is not in the future. Coast FIRE requires time for compound growth.`;
+    } else if (yearsToRetirement < 5) {
+      // Too little time for meaningful Coast FIRE
+      coastFireTarget = traditionalFireTarget * 0.9; // Slight discount for short timeframe
+      yearsToCoast = calculateYearsToTarget(coastFireTarget);
+      coastFireMessage = `Only ${yearsToRetirement} years to retirement. Coast FIRE benefit is minimal with such short timeframe.`;
+    } else {
+      // Normal Coast FIRE calculation
+      coastFireTarget = traditionalFireTarget / Math.pow(1 + expectedReturn, yearsToRetirement);
+      yearsToCoast = calculateYearsToTarget(coastFireTarget);
+      coastFireMessage = `Save ${formatCurrency(coastFireTarget)} now, stop investing, and compound growth will reach ${formatCurrency(traditionalFireTarget)} by age ${targetRetirementAge}.`;
+    }
+    
+    console.log('🏖️ Coast FIRE Debug:', {
+      yearsToRetirement,
+      coastFireTarget: formatCurrency(coastFireTarget),
+      traditionalFireTarget: formatCurrency(traditionalFireTarget),
+      yearsToCoast,
+      message: coastFireMessage
+    });
     
     return {
       traditionalFire: {
@@ -2281,19 +2314,26 @@ const WhatIfSimulatorTab: React.FC<{
         target: baristaFireTarget,
         years: yearsToBarista,
         achievementAge: yearsToBarista > 0 ? currentAge + yearsToBarista : currentAge,
-        achievable: yearsToBarista > 0 && (currentAge + yearsToBarista) <= targetRetirementAge
+        achievable: yearsToBarista > 0 && (currentAge + yearsToBarista) <= targetRetirementAge,
+        partTimeIncome: whatIfValues.partTimeIncome,
+        message: baristaFireTarget === 0 ? 
+          `🎉 Barista FIRE already achieved! Your part-time income (${formatCurrency(whatIfValues.partTimeIncome)}) covers all expenses (${formatCurrency(annualExpenses)}).` :
+          ''
       },
       coastFire: {
         target: coastFireTarget,
         years: yearsToCoast,
         achievementAge: yearsToCoast > 0 ? currentAge + yearsToCoast : currentAge,
-        achievable: yearsToCoast > 0 && (currentAge + yearsToCoast) <= targetRetirementAge
+        achievable: yearsToCoast > 0 && (currentAge + yearsToCoast) <= targetRetirementAge,
+        message: coastFireMessage
       },
       currentScenario: {
         monthlyContribution,
         annualExpenses,
         expectedReturn: expectedReturn * 100,
-        targetRetirementAge
+        targetRetirementAge,
+        currentAge,
+        yearsToRetirement
       }
     };
   };
@@ -2474,36 +2514,67 @@ const WhatIfSimulatorTab: React.FC<{
                   <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, color: 'warning.main' }}>
                     Barista FIRE
                   </Typography>
-                  <Grid container spacing={2}>
-                    <Grid item xs={6}>
-                      <Typography variant="body2" color="text.secondary">Target Amount:</Typography>
-                      <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                        {formatCurrency(whatIfResults.baristaFire.target)}
+                  
+                  {whatIfResults.baristaFire.target === 0 ? (
+                    // Special case: Part-time income covers all expenses
+                    <Box sx={{ textAlign: 'center', py: 2 }}>
+                      <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'success.main', mb: 2 }}>
+                        🎉 Already Achieved!
                       </Typography>
-                    </Grid>
-                    <Grid item xs={6}>
-                      <Typography variant="body2" color="text.secondary">Time to Achieve:</Typography>
-                      <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                        {whatIfResults.baristaFire.years > 0 
-                          ? `${whatIfResults.baristaFire.years.toFixed(1)} years`
-                          : whatIfResults.baristaFire.years === 0 
-                            ? 'Already achieved!'
-                            : 'Not achievable'
-                        }
+                      <Typography variant="body1" sx={{ mb: 2 }}>
+                        Your part-time income ({formatCurrency(whatIfResults.baristaFire.partTimeIncome)}) 
+                        covers all annual expenses ({formatCurrency(whatIfValues.annualExpenses)}).
                       </Typography>
-                    </Grid>
-                    <Grid item xs={12}>
-                      <Typography variant="body2" color="text.secondary">Achievement Age:</Typography>
-                      <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-                        Age {whatIfResults.baristaFire.achievementAge.toFixed(0)}
-                        {whatIfResults.baristaFire.achievable ? (
-                          <Chip label="Within target!" color="success" size="small" sx={{ ml: 1 }} />
-                        ) : (
-                          <Chip label="After target age" color="warning" size="small" sx={{ ml: 1 }} />
-                        )}
+                      <Typography variant="body2" color="text.secondary">
+                        No additional portfolio needed for Barista FIRE!
                       </Typography>
+                    </Box>
+                  ) : (
+                    // Normal case: Portfolio needed
+                    <Grid container spacing={2}>
+                      <Grid item xs={6}>
+                        <Typography variant="body2" color="text.secondary">Target Amount:</Typography>
+                        <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                          {formatCurrency(whatIfResults.baristaFire.target)}
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Typography variant="body2" color="text.secondary">Time to Achieve:</Typography>
+                        <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                          {whatIfResults.baristaFire.years > 0 
+                            ? `${whatIfResults.baristaFire.years.toFixed(1)} years`
+                            : whatIfResults.baristaFire.years === 0 
+                              ? 'Already achieved!'
+                              : 'Not achievable'
+                          }
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={12}>
+                        <Typography variant="body2" color="text.secondary">Achievement Age:</Typography>
+                        <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+                          Age {whatIfResults.baristaFire.achievementAge.toFixed(0)}
+                          {whatIfResults.baristaFire.achievable ? (
+                            <Chip label="Within target!" color="success" size="small" sx={{ ml: 1 }} />
+                          ) : (
+                            <Chip label="After target age" color="warning" size="small" sx={{ ml: 1 }} />
+                          )}
+                        </Typography>
+                      </Grid>
+                      <Grid item xs={12}>
+                        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                          Part-time income: {formatCurrency(whatIfResults.baristaFire.partTimeIncome)} annually
+                        </Typography>
+                      </Grid>
                     </Grid>
-                  </Grid>
+                  )}
+                  
+                  {whatIfResults.baristaFire.message && (
+                    <Box sx={{ mt: 2, p: 2, bgcolor: 'success.50', borderRadius: 1 }}>
+                      <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
+                        {whatIfResults.baristaFire.message}
+                      </Typography>
+                    </Box>
+                  )}
                 </Paper>
 
                 {/* Coast FIRE Results */}
@@ -2539,11 +2610,24 @@ const WhatIfSimulatorTab: React.FC<{
                           <Chip label="After target age" color="warning" size="small" sx={{ ml: 1 }} />
                         )}
                       </Typography>
-                      <Typography variant="body2" color="text.secondary" sx={{ mt: 1, fontStyle: 'italic' }}>
-                        Stop investing at this point and still reach Traditional FIRE by age {whatIfValues.targetRetirementAge}
+                    </Grid>
+                    <Grid item xs={12}>
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                        Years to retirement: {whatIfResults.currentScenario.yearsToRetirement} years
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Expected return: {whatIfResults.currentScenario.expectedReturn.toFixed(1)}%
                       </Typography>
                     </Grid>
                   </Grid>
+                  
+                  {whatIfResults.coastFire.message && (
+                    <Box sx={{ mt: 2, p: 2, bgcolor: 'info.50', borderRadius: 1 }}>
+                      <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
+                        💡 {whatIfResults.coastFire.message}
+                      </Typography>
+                    </Box>
+                  )}
                 </Paper>
 
                 {/* Key Insights */}
@@ -2573,6 +2657,35 @@ const WhatIfSimulatorTab: React.FC<{
                       </Typography>
                     )}
                   </Stack>
+                </Paper>
+
+                {/* Debug Information */}
+                <Paper elevation={1} sx={{ p: 3, bgcolor: 'grey.50' }}>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, color: 'info.main' }}>
+                    🔍 Calculation Details
+                  </Typography>
+                  <Grid container spacing={2}>
+                    <Grid item xs={12} md={6}>
+                      <Typography variant="body2" sx={{ mb: 1 }}>
+                        <strong>Current Scenario:</strong>
+                      </Typography>
+                      <Typography variant="body2">• Current Age: {whatIfResults.currentScenario.currentAge}</Typography>
+                      <Typography variant="body2">• Target Retirement Age: {whatIfResults.currentScenario.targetRetirementAge}</Typography>
+                      <Typography variant="body2">• Years to Retirement: {whatIfResults.currentScenario.yearsToRetirement}</Typography>
+                      <Typography variant="body2">• Expected Return: {whatIfResults.currentScenario.expectedReturn.toFixed(1)}%</Typography>
+                      <Typography variant="body2">• Monthly Contribution: {formatCurrency(whatIfResults.currentScenario.monthlyContribution)}</Typography>
+                    </Grid>
+                    <Grid item xs={12} md={6}>
+                      <Typography variant="body2" sx={{ mb: 1 }}>
+                        <strong>FIRE Targets:</strong>
+                      </Typography>
+                      <Typography variant="body2">• Traditional: {formatCurrency(whatIfResults.traditionalFire.target)}</Typography>
+                      <Typography variant="body2">• Barista: {formatCurrency(whatIfResults.baristaFire.target)}</Typography>
+                      <Typography variant="body2">• Coast: {formatCurrency(whatIfResults.coastFire.target)}</Typography>
+                      <Typography variant="body2">• Annual Expenses: {formatCurrency(whatIfResults.currentScenario.annualExpenses)}</Typography>
+                      <Typography variant="body2">• Part-time Income: {formatCurrency(whatIfResults.baristaFire.partTimeIncome)}</Typography>
+                    </Grid>
+                  </Grid>
                 </Paper>
               </Stack>
             ) : (
