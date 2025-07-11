@@ -1388,6 +1388,7 @@ export const Goals: React.FC = () => {
               portfolioValuation={portfolioValuation}
               recurringInvestments={recurringInvestments}
               calculateMonthlyRecurringTotal={calculateMonthlyRecurringTotal}
+              user={user}
             />
           )}
           
@@ -2204,7 +2205,8 @@ const WhatIfSimulatorTab: React.FC<{
   portfolioValuation: PortfolioValuation | null;
   recurringInvestments: RecurringInvestment[];
   calculateMonthlyRecurringTotal: () => number;
-}> = ({ whatIfValues, setWhatIfValues, fireProfile, portfolioValuation, recurringInvestments, calculateMonthlyRecurringTotal }) => {
+  user: any;
+}> = ({ whatIfValues, setWhatIfValues, fireProfile, portfolioValuation, recurringInvestments, calculateMonthlyRecurringTotal, user }) => {
   
   const handleSliderChange = (key: string) => (event: Event, newValue: number | number[]) => {
     setWhatIfValues(prev => ({
