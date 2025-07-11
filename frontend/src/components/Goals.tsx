@@ -1292,7 +1292,7 @@ export const Goals: React.FC = () => {
                   <Grid item xs={12} sm={6} md={2.4}>
                     <Box sx={{ textAlign: 'center' }}>
                       <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'warning.main', mb: 1 }}>
-                        {calculations.filter(c => (portfolioValuation?.totalValueInBaseCurrency || 0) >= c.target_amount).length}
+                        {calculations.filter(c => c.achieved).length}
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
                         Goals Achieved
@@ -1312,7 +1312,7 @@ export const Goals: React.FC = () => {
                   <Grid item xs={12} sm={6} md={2.4}>
                     <Box sx={{ textAlign: 'center' }}>
                       <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'secondary.main', mb: 1 }}>
-                        {fireProfile?.expected_annual_return || 7}%
+                        {((fireProfile?.expected_annual_return || 0.07) * 100).toFixed(0)}%
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
                         Expected Annual Return
@@ -2259,6 +2259,13 @@ const WhatIfSimulatorTab: React.FC<{
     const yearsToTraditional = calculateYearsToTarget(traditionalFireTarget);
     const yearsToBarista = calculateYearsToTarget(baristaFireTarget);
     
+    // Calculate Coast FIRE target
+    const yearsToRetirement = Math.max(targetRetirementAge - currentAge, 0);
+    const coastFireTarget = yearsToRetirement > 0 ? 
+      traditionalFireTarget / Math.pow(1 + expectedReturn, yearsToRetirement) : 
+      traditionalFireTarget;
+    const yearsToCoast = calculateYearsToTarget(coastFireTarget);
+    
     // Calculate current age
     const currentYear = new Date().getFullYear();
     const currentAge = 30; // Default, should get from user
@@ -2275,6 +2282,12 @@ const WhatIfSimulatorTab: React.FC<{
         years: yearsToBarista,
         achievementAge: yearsToBarista > 0 ? currentAge + yearsToBarista : currentAge,
         achievable: yearsToBarista > 0 && (currentAge + yearsToBarista) <= targetRetirementAge
+      },
+      coastFire: {
+        target: coastFireTarget,
+        years: yearsToCoast,
+        achievementAge: yearsToCoast > 0 ? currentAge + yearsToCoast : currentAge,
+        achievable: yearsToCoast > 0 && (currentAge + yearsToCoast) <= targetRetirementAge
       },
       currentScenario: {
         monthlyContribution,
@@ -2493,6 +2506,46 @@ const WhatIfSimulatorTab: React.FC<{
                   </Grid>
                 </Paper>
 
+                {/* Coast FIRE Results */}
+                <Paper elevation={1} sx={{ p: 3 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, color: 'success.main' }}>
+                    Coast FIRE
+                  </Typography>
+                  <Grid container spacing={2}>
+                    <Grid item xs={6}>
+                      <Typography variant="body2" color="text.secondary">Target Amount:</Typography>
+                      <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                        {formatCurrency(whatIfResults.coastFire.target)}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={6}>
+                      <Typography variant="body2" color="text.secondary">Time to Achieve:</Typography>
+                      <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                        {whatIfResults.coastFire.years > 0 
+                          ? `${whatIfResults.coastFire.years.toFixed(1)} years`
+                          : whatIfResults.coastFire.years === 0 
+                            ? 'Already achieved!'
+                            : 'Not achievable'
+                        }
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={12}>
+                      <Typography variant="body2" color="text.secondary">Achievement Age:</Typography>
+                      <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+                        Age {whatIfResults.coastFire.achievementAge.toFixed(0)}
+                        {whatIfResults.coastFire.achievable ? (
+                          <Chip label="Within target!" color="success" size="small" sx={{ ml: 1 }} />
+                        ) : (
+                          <Chip label="After target age" color="warning" size="small" sx={{ ml: 1 }} />
+                        )}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ mt: 1, fontStyle: 'italic' }}>
+                        Stop investing at this point and still reach Traditional FIRE by age {whatIfValues.targetRetirementAge}
+                      </Typography>
+                    </Grid>
+                  </Grid>
+                </Paper>
+
                 {/* Key Insights */}
                 <Paper elevation={1} sx={{ p: 3, bgcolor: 'info.50' }}>
                   <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, color: 'info.main' }}>
@@ -2512,6 +2565,11 @@ const WhatIfSimulatorTab: React.FC<{
                     {whatIfResults.traditionalFire.years > 0 && whatIfResults.baristaFire.years > 0 && (
                       <Typography variant="body2">
                         ⚡ Barista FIRE is {(whatIfResults.traditionalFire.years - whatIfResults.baristaFire.years).toFixed(1)} years faster than Traditional FIRE
+                      </Typography>
+                    )}
+                    {whatIfResults.coastFire && whatIfResults.coastFire.years > 0 && whatIfResults.traditionalFire.years > 0 && (
+                      <Typography variant="body2">
+                        🏖️ Coast FIRE is {(whatIfResults.traditionalFire.years - whatIfResults.coastFire.years).toFixed(1)} years faster than Traditional FIRE
                       </Typography>
                     )}
                   </Stack>
@@ -2559,8 +2617,9 @@ const IncomeBreakdownTab: React.FC<{
     const safeWithdrawalRate = fireProfile.safe_withdrawal_rate || 0.04;
     const traditionalCalc = calculations.find(c => c.fire_type === 'Traditional');
     const baristaCalc = calculations.find(c => c.fire_type === 'Barista');
+    const coastCalc = calculations.find(c => c.fire_type === 'Coast');
     
-    if (!traditionalCalc || !baristaCalc) return null;
+    if (!traditionalCalc || !baristaCalc || !coastCalc) return null;
 
     // Traditional FIRE Income
     const traditionalInvestmentIncome = traditionalCalc.target_amount * safeWithdrawalRate;
@@ -2569,6 +2628,9 @@ const IncomeBreakdownTab: React.FC<{
     const baristaInvestmentIncome = baristaCalc.target_amount * safeWithdrawalRate;
     const baristaPartTimeIncome = fireProfile.barista_annual_income || 0;
     const baristaTotalIncome = baristaInvestmentIncome + baristaPartTimeIncome;
+
+    // Coast FIRE Income (same as Traditional FIRE at retirement)
+    const coastInvestmentIncome = traditionalCalc.target_amount * safeWithdrawalRate;
 
     return {
       traditional: {
@@ -2593,6 +2655,14 @@ const IncomeBreakdownTab: React.FC<{
             amount: baristaPartTimeIncome, 
             percentage: (baristaPartTimeIncome / baristaTotalIncome) * 100 
           }
+        ]
+      },
+      coast: {
+        investmentIncome: coastInvestmentIncome,
+        totalIncome: coastInvestmentIncome,
+        coastAmount: coastCalc.target_amount,
+        breakdown: [
+          { source: 'Investment Returns', amount: coastInvestmentIncome, percentage: 100 }
         ]
       }
     };
@@ -2620,7 +2690,7 @@ const IncomeBreakdownTab: React.FC<{
     <Box>
       <Grid container spacing={3}>
         {/* Traditional FIRE Income */}
-        <Grid item xs={12} md={6}>
+        <Grid item xs={12} md={4}>
           <Card elevation={0} sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', p: 3 }}>
             <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3, color: 'primary.main' }}>
               Traditional FIRE Income
@@ -2680,7 +2750,7 @@ const IncomeBreakdownTab: React.FC<{
         </Grid>
 
         {/* Barista FIRE Income */}
-        <Grid item xs={12} md={6}>
+        <Grid item xs={12} md={4}>
           <Card elevation={0} sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', p: 3 }}>
             <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3, color: 'warning.main' }}>
               Barista FIRE Income
@@ -2746,6 +2816,69 @@ const IncomeBreakdownTab: React.FC<{
           </Card>
         </Grid>
 
+        {/* Coast FIRE Income */}
+        <Grid item xs={12} md={4}>
+          <Card elevation={0} sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', p: 3 }}>
+            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3, color: 'success.main' }}>
+              Coast FIRE Income
+            </Typography>
+            
+            {/* Total Income Display */}
+            <Box sx={{ textAlign: 'center', mb: 3 }}>
+              <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'success.main' }}>
+                {formatCurrency(incomeData.coast.totalIncome)}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Annual Retirement Income
+              </Typography>
+            </Box>
+
+            {/* Visual Breakdown */}
+            <Box sx={{ mb: 3 }}>
+              <Box
+                sx={{
+                  height: 120,
+                  width: '100%',
+                  bgcolor: 'success.main',
+                  borderRadius: 2,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'white',
+                  fontWeight: 'bold'
+                }}
+              >
+                100% Investment Returns
+              </Box>
+            </Box>
+
+            {/* Detailed Breakdown */}
+            <Stack spacing={2}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="body2">Coast Amount Needed:</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                  {formatCurrency(incomeData.coast.coastAmount)}
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="body2">Safe Withdrawal Rate:</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                  {((fireProfile?.safe_withdrawal_rate || 0.04) * 100).toFixed(1)}%
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="body2">Monthly Income:</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                  {formatCurrency(incomeData.coast.totalIncome / 12)}
+                </Typography>
+              </Box>
+              <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic', textAlign: 'center' }}>
+                Stop investing early, let compound growth reach Traditional FIRE by retirement
+              </Typography>
+            </Stack>
+          </Card>
+        </Grid>
+
         {/* Income Comparison */}
         <Grid item xs={12}>
           <Card elevation={0} sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', p: 3 }}>
@@ -2791,16 +2924,16 @@ const IncomeBreakdownTab: React.FC<{
               <Grid item xs={12} md={4}>
                 <Paper elevation={1} sx={{ p: 3, textAlign: 'center' }}>
                   <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1 }}>
-                    Difference
+                    Coast FIRE
                   </Typography>
-                  <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'info.main', mb: 1 }}>
-                    {formatCurrency(Math.abs(incomeData.traditional.totalIncome - incomeData.barista.totalIncome))}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {incomeData.traditional.totalIncome > incomeData.barista.totalIncome ? 'Traditional higher' : 'Barista higher'}
+                  <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'success.main', mb: 1 }}>
+                    {formatCurrency(incomeData.coast.totalIncome)}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
-                    Monthly: {formatCurrency(Math.abs(incomeData.traditional.totalIncome - incomeData.barista.totalIncome) / 12)}
+                    100% passive income
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Stop investing early
                   </Typography>
                 </Paper>
               </Grid>
@@ -2816,7 +2949,7 @@ const IncomeBreakdownTab: React.FC<{
             </Typography>
             
             <Grid container spacing={2}>
-              <Grid item xs={12} md={6}>
+              <Grid item xs={12} md={4}>
                 <Typography variant="body2" sx={{ mb: 2 }}>
                   <strong>Traditional FIRE Benefits:</strong>
                 </Typography>
@@ -2828,7 +2961,7 @@ const IncomeBreakdownTab: React.FC<{
                 </ul>
               </Grid>
               
-              <Grid item xs={12} md={6}>
+              <Grid item xs={12} md={4}>
                 <Typography variant="body2" sx={{ mb: 2 }}>
                   <strong>Barista FIRE Benefits:</strong>
                 </Typography>
@@ -2837,6 +2970,18 @@ const IncomeBreakdownTab: React.FC<{
                   <li>Lower savings target</li>
                   <li>Maintain social connections</li>
                   <li>Flexible work schedule</li>
+                </ul>
+              </Grid>
+
+              <Grid item xs={12} md={4}>
+                <Typography variant="body2" sx={{ mb: 2 }}>
+                  <strong>Coast FIRE Benefits:</strong>
+                </Typography>
+                <ul style={{ margin: 0, paddingLeft: 20 }}>
+                  <li>Stop investing early</li>
+                  <li>Lowest initial target</li>
+                  <li>Compound growth does the work</li>
+                  <li>Stress-free approach</li>
                 </ul>
               </Grid>
             </Grid>
@@ -2850,6 +2995,9 @@ const IncomeBreakdownTab: React.FC<{
               </Typography>
               <Typography variant="body2">
                 • Barista FIRE: {formatCurrency(calculations.find(c => c.fire_type === 'Barista')?.target_amount || 0)} portfolio + part-time income
+              </Typography>
+              <Typography variant="body2">
+                • Coast FIRE: {formatCurrency(calculations.find(c => c.fire_type === 'Coast')?.target_amount || 0)} portfolio (stop investing early)
               </Typography>
             </Box>
           </Card>
