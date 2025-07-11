@@ -102,9 +102,13 @@ export const Goals: React.FC = () => {
     other_passive_income: 0, // No passive income by default
     effective_tax_rate: 0.15, // 15% effective tax rate
     
+    // Enhanced: New fields for sophisticated calculation
+    barista_annual_contribution: 100000, // NT$100,000 investment capacity during part-time
+    inflation_rate: 0.025, // 2.5% user-specific inflation assumption
+    
     // Legacy fields for backward compatibility
     expected_annual_return: 0.07,
-    barista_annual_income: 300000, // NT$300,000 part-time income
+    barista_annual_income: 300000, // NT$300,000 part-time income (legacy)
   });
 
   // Calculate total monthly recurring investments in base currency
@@ -140,9 +144,9 @@ export const Goals: React.FC = () => {
   };
 
   const calculateFIREProgress = async (profile: FIREProfile, currentPortfolioValue: number): Promise<{ progress: FIREProgress; calculations: FIRECalculation[] }> => {
-    console.log('🔥 Switching to Comprehensive Database-Driven FIRE Calculation...');
+    console.log('🔥 Starting Comprehensive FIRE Calculation System...');
     
-    // Use the comprehensive calculation instead of the old complex one
+    // Use the comprehensive FIRE calculation system
     const comprehensiveResult = await calculateComprehensiveFIRE(
       profile.target_retirement_age,
       profile.annual_expenses,
@@ -160,14 +164,15 @@ export const Goals: React.FC = () => {
       traditional_fire_progress: comprehensiveResult.calculations.find(c => c.fire_type === 'Traditional')?.progress_percentage || 0,
       barista_fire_progress: comprehensiveResult.calculations.find(c => c.fire_type === 'Barista')?.progress_percentage || 0,
       coast_fire_progress: comprehensiveResult.calculations.find(c => c.fire_type === 'Coast')?.progress_percentage || 0,
-      estimated_annual_return: comprehensiveResult.metadata.historicalReturn,
+      estimated_annual_return: comprehensiveResult.metadata.blendedAnnualReturn,
       years_to_traditional_fire: comprehensiveResult.calculations.find(c => c.fire_type === 'Traditional')?.years_to_fire || 0,
       years_to_barista_fire: comprehensiveResult.calculations.find(c => c.fire_type === 'Barista')?.years_to_fire || 0,
       years_to_coast_fire: comprehensiveResult.calculations.find(c => c.fire_type === 'Coast')?.years_to_fire || 0
     };
 
-    console.log('✅ Comprehensive FIRE Analysis Complete!', {
+    console.log('✅ Comprehensive FIRE Calculation Complete!', {
       metadata: comprehensiveResult.metadata,
+      results: comprehensiveResult.results,
       traditionalFIRE: comprehensiveResult.calculations.find(c => c.fire_type === 'Traditional'),
       baristaFIRE: comprehensiveResult.calculations.find(c => c.fire_type === 'Barista'),
       coastFIRE: comprehensiveResult.calculations.find(c => c.fire_type === 'Coast')
@@ -563,8 +568,82 @@ export const Goals: React.FC = () => {
     return { progress, calculations };
   };
 
-  // 🚀 COMPREHENSIVE DATABASE-DRIVEN FIRE CALCULATION
-  // Utilizes ALL available database information for accurate projections
+  // 💸 DIVIDEND PROJECTIONS HELPER FUNCTION
+  const calculateDividendProjections = async () => {
+    try {
+      // Get actual dividend data from the backend
+      const API_BASE_URL = 'https://mreda8g340.execute-api.ap-northeast-1.amazonaws.com/development';
+      const response = await fetch(`${API_BASE_URL}/dividends`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      
+      if (response.ok) {
+        const dividendData = await response.json();
+        const dividends = dividendData.dividends || [];
+        
+        // Calculate annual dividend projection from recent dividend history
+        if (dividends.length > 0) {
+          // Get dividends from the last 12 months
+          const oneYearAgo = new Date();
+          oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+          
+          const recentDividends = dividends.filter((div: any) => {
+            const paymentDate = new Date(div.payment_date || div.ex_dividend_date);
+            return paymentDate >= oneYearAgo;
+          });
+          
+          if (recentDividends.length > 0) {
+            // Sum up actual dividends received in the last year, converted to base currency
+            const baseCurrency = user?.base_currency || 'USD';
+            const totalRecentDividends = recentDividends.reduce((sum: number, div: any) => {
+              // Convert dividend amount to base currency if needed
+              let dividendAmount = div.total_dividend_amount || 0;
+              if (div.currency && div.currency !== baseCurrency) {
+                // Use exchange rate service for conversion
+                dividendAmount = exchangeRateService.convertCurrency(
+                  dividendAmount, 
+                  div.currency, 
+                  baseCurrency
+                );
+              }
+              return sum + dividendAmount;
+            }, 0);
+            
+            console.log('📊 Actual dividend projection from database:', {
+              recentDividends: recentDividends.length,
+              totalAmount: formatCurrency(totalRecentDividends),
+              annualProjection: formatCurrency(totalRecentDividends),
+              baseCurrency
+            });
+            
+            return totalRecentDividends;
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('Could not fetch dividend data for projections:', error);
+    }
+    
+    // 🔧 FIXED: More conservative dividend estimation
+    // Use a much lower dividend yield estimate since dividends are ADDED to portfolio value
+    // They should not be double-counted in FIRE calculations
+    const conservativeDividendYield = 0.005; // 0.5% very conservative estimate
+    const estimatedDividends = (portfolioValuation?.totalValueInBaseCurrency || 0) * conservativeDividendYield;
+    
+    console.log('📊 Conservative dividend projection (fallback):', {
+      portfolioValue: formatCurrency(portfolioValuation?.totalValueInBaseCurrency || 0),
+      estimatedYield: `${(conservativeDividendYield * 100).toFixed(1)}%`,
+      estimatedAnnualDividends: formatCurrency(estimatedDividends),
+      note: 'Conservative estimate - dividends are already included in portfolio value'
+    });
+    
+    return estimatedDividends;
+  };
+
+  // 🔥 COMPREHENSIVE FIRE CALCULATION SYSTEM
+  // Uses existing database data first, minimal user input required
   const calculateComprehensiveFIRE = async (
     targetRetirementAge: number,
     annualExpenses: number,
@@ -574,293 +653,327 @@ export const Goals: React.FC = () => {
   ) => {
     const currentYear = new Date().getFullYear();
     const currentAge = user?.birth_year ? currentYear - user.birth_year : 30;
-    const yearsToRetirement = Math.max(targetRetirementAge - currentAge, 0);
     const baseCurrency = user?.base_currency || 'USD';
 
-    console.log('🔥 Starting Comprehensive FIRE Analysis using database data...');
+    console.log('🔥 Starting Comprehensive FIRE Calculation System...');
 
-    // 1. ANALYZE HISTORICAL INVESTMENT PERFORMANCE FROM DATABASE
-    const calculateHistoricalReturns = () => {
-      let estimatedReturn = 0.07; // Default 7%
+    // === 1. DATA FROM OUR TABLES (PRIORITY) ===
+    const monthlyRecurringInvestment = calculateMonthlyRecurringTotal();
+    const projectedDividends = await calculateDividendProjections();
+
+    // === 2. SMART ASSUMPTIONS BASED ON DATABASE DATA ===
+    const assumptions = {
+      // Asset allocation - analyze from actual assets if possible, otherwise use professional defaults
+      cashAllocation: 0.10,      // 10% cash (conservative)
+      stockAllocation: 0.70,     // 70% stocks (growth-oriented)
+      bondAllocation: 0.20,      // 20% bonds (stability)
       
-      const monthlyInvestments = calculateMonthlyRecurringTotal();
-      const annualInvestments = monthlyInvestments * 12;
+      // Return rates (industry standard)
+      cashAnnualReturn: 0.005,   // 0.5% cash return
+      stockAnnualReturn: 0.07,   // 7% stock return
+      bondAnnualReturn: 0.03,    // 3% bond return
       
-      if (currentPortfolioValue > 0) {
-        const investmentRatio = annualInvestments / currentPortfolioValue;
-        
-        // Database-driven return estimation based on actual investment behavior
-        if (investmentRatio > 0.3) estimatedReturn = 0.085; // 8.5% for very active investors
-        else if (investmentRatio > 0.2) estimatedReturn = 0.08; // 8% for active investors
-        else if (investmentRatio > 0.1) estimatedReturn = 0.075; // 7.5% for moderate investors
-        else estimatedReturn = 0.07; // 7% for conservative investors
-      }
+      // Economic assumptions (conservative)
+      inflationRate: 0.025,      // 2.5% inflation
+      safeWithdrawalRate: withdrawalRate || 0.04, // Use user's setting or 4% default
       
-      return estimatedReturn;
+      // Barista FIRE assumptions (based on part-time income, not current investments)
+      baristaMonthlyContribution: Math.max(baristaMonthlyIncome * 0.2, 10000), // 20% of part-time income or minimum NT$10,000
     };
 
-    // 2. PROJECT DIVIDEND INCOME FROM ACTUAL DIVIDEND HISTORY
-    const calculateDividendProjections = async () => {
-      try {
-        // Get actual dividend data from the backend
-        const response = await fetch(`${API_BASE_URL}/dividends`, {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
-        });
-        
-        if (response.ok) {
-          const dividendData = await response.json();
-          const dividends = dividendData.dividends || [];
-          
-          // Calculate annual dividend projection from recent dividend history
-          if (dividends.length > 0) {
-            // Get dividends from the last 12 months
-            const oneYearAgo = new Date();
-            oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-            
-            const recentDividends = dividends.filter((div: any) => {
-              const paymentDate = new Date(div.payment_date || div.ex_dividend_date);
-              return paymentDate >= oneYearAgo;
-            });
-            
-            if (recentDividends.length > 0) {
-              // Sum up actual dividends received in the last year
-              const totalRecentDividends = recentDividends.reduce((sum: number, div: any) => {
-                return sum + (div.total_dividend_amount || 0);
-              }, 0);
-              
-              console.log('📊 Actual dividend projection from database:', {
-                recentDividends: recentDividends.length,
-                totalAmount: formatCurrency(totalRecentDividends),
-                annualProjection: formatCurrency(totalRecentDividends)
-              });
-              
-              return totalRecentDividends;
-            }
-          }
-        }
-      } catch (error) {
-        console.warn('Could not fetch dividend data for projections:', error);
-      }
-      
-      // Fallback: Estimate based on typical dividend yields for current portfolio
-      const estimatedDividendYield = 0.02; // 2% conservative estimate
-      const estimatedDividends = currentPortfolioValue * estimatedDividendYield;
-      
-      console.log('📊 Estimated dividend projection (fallback):', {
-        portfolioValue: formatCurrency(currentPortfolioValue),
-        estimatedYield: `${(estimatedDividendYield * 100).toFixed(1)}%`,
-        estimatedAnnualDividends: formatCurrency(estimatedDividends)
-      });
-      
-      return estimatedDividends;
-    };
+    // Calculate blended portfolio return
+    const blendedAnnualReturn = (
+      assumptions.cashAllocation * assumptions.cashAnnualReturn +
+      assumptions.stockAllocation * assumptions.stockAnnualReturn +
+      assumptions.bondAllocation * assumptions.bondAnnualReturn
+    );
+    const blendedMonthlyReturn = Math.pow(1 + blendedAnnualReturn, 1/12) - 1;
+    const realAnnualReturn = (1 + blendedAnnualReturn) / (1 + assumptions.inflationRate) - 1;
 
-    // 3. ANALYZE PORTFOLIO RISK FROM ASSET ALLOCATION
-    const analyzePortfolioRisk = () => {
-      // TODO: Analyze actual asset types from assets table
-      // For now, use moderate risk assumption
-      const portfolioVolatility = 0.15; // 15% standard deviation
-      const riskAdjustedReturn = calculateHistoricalReturns() - (portfolioVolatility * 0.5);
-      
+    console.log('📊 Database-Driven Calculation Inputs:', {
+      currentAge,
+      currentPortfolioValue: formatCurrency(currentPortfolioValue),
+      monthlyRecurringInvestment: formatCurrency(monthlyRecurringInvestment),
+      targetRetirementAge,
+      annualExpenses: formatCurrency(annualExpenses),
+      baristaMonthlyIncome: formatCurrency(baristaMonthlyIncome),
+      blendedAnnualReturn: `${(blendedAnnualReturn * 100).toFixed(2)}%`,
+      realAnnualReturn: `${(realAnnualReturn * 100).toFixed(2)}%`,
+      dataSource: 'Primarily from database tables with smart assumptions'
+    });
+
+    // === 3. FIRE TARGET CALCULATIONS ===
+    
+    // Traditional FIRE: Need enough to cover full annual expenses
+    const traditionalFireTarget = annualExpenses / assumptions.safeWithdrawalRate;
+    
+    // 🔧 FIXED: Barista FIRE is about TRANSITION POINT, not reduced target
+    // Barista FIRE target = amount needed to transition to part-time work
+    // The final goal is still Traditional FIRE, but achieved via different path
+    const baristaAnnualIncome = baristaMonthlyIncome * 12;
+    
+    // For Barista FIRE transition, we need enough portfolio + part-time income to cover expenses
+    // This is a more complex calculation that requires simulation
+    let baristaTransitionTarget = traditionalFireTarget * 0.4; // Start with 40% of Traditional FIRE as transition point
+
+    console.log('🔧 FIRE Target Calculations:', {
+      annualExpenses: formatCurrency(annualExpenses),
+      baristaAnnualIncome: formatCurrency(baristaAnnualIncome),
+      traditionalFireTarget: formatCurrency(traditionalFireTarget),
+      baristaTransitionTarget: formatCurrency(baristaTransitionTarget),
+      safeWithdrawalRate: `${(assumptions.safeWithdrawalRate * 100).toFixed(1)}%`
+    });
+
+    // === 4. SIMULATION FUNCTION WITH TARGET RETIREMENT AGE ===
+    const simulateToTarget = (targetAmount: number, monthlyContribution: number, maxYears: number = 50) => {
+      let portfolioValue = currentPortfolioValue;
+      let months = 0;
+      const maxMonths = Math.min(maxYears * 12, (targetRetirementAge - currentAge) * 12); // ✅ Use target retirement age
+
+      while (portfolioValue < targetAmount && months < maxMonths) {
+        // Apply monthly growth
+        portfolioValue *= (1 + blendedMonthlyReturn);
+        // Add monthly contribution
+        portfolioValue += monthlyContribution;
+        months++;
+      }
+
+      const years = months / 12;
+      const achievementAge = currentAge + years;
+      const achievementYear = currentYear + Math.round(years);
+
       return {
-        volatility: portfolioVolatility,
-        riskAdjustedReturn: Math.max(riskAdjustedReturn, 0.04) // Minimum 4%
+        achievable: portfolioValue >= targetAmount && achievementAge <= targetRetirementAge, // ✅ Must achieve before target retirement age
+        years: years,
+        months: months,
+        achievementAge: achievementAge,
+        achievementYear: achievementYear,
+        finalPortfolioValue: portfolioValue,
+        withinRetirementWindow: achievementAge <= targetRetirementAge
       };
     };
 
-    // 4. CALCULATE COMPREHENSIVE PROJECTIONS
-    const historicalReturn = calculateHistoricalReturns();
-    const projectedDividends = await calculateDividendProjections(); // Now async
-    const riskAnalysis = analyzePortfolioRisk();
-    const monthlyContributions = calculateMonthlyRecurringTotal();
+    // === 5. SCENARIO CALCULATIONS ===
 
-    console.log('📊 Database Analysis Results:', {
-      currentPortfolioValue: formatCurrency(currentPortfolioValue),
-      monthlyContributions: formatCurrency(monthlyContributions),
-      historicalReturn: `${(historicalReturn * 100).toFixed(1)}%`,
-      projectedDividends: formatCurrency(projectedDividends),
-      portfolioVolatility: `${(riskAnalysis.volatility * 100).toFixed(1)}%`,
-      yearsToRetirement,
-      baseCurrency
-    });
-
-    // 5. ENHANCED FIRE TARGET CALCULATIONS WITH DATABASE INSIGHTS
+    // 1. TRADITIONAL FIRE (single phase)
+    const traditionalResult = simulateToTarget(traditionalFireTarget, monthlyRecurringInvestment);
     
-    // Traditional FIRE with dividend income consideration
-    const traditionalFireTarget = Math.max(
-      (annualExpenses - projectedDividends) / withdrawalRate,
-      annualExpenses / withdrawalRate // Minimum based on full expenses
-    );
-
-    // Barista FIRE with comprehensive income sources
-    const baristaAnnualIncome = baristaMonthlyIncome * 12;
-    const totalBaristaIncome = baristaAnnualIncome + projectedDividends;
-    const baristaFireTarget = Math.max(
-      (annualExpenses - totalBaristaIncome) / withdrawalRate,
-      0
-    );
-
-    // Coast FIRE with risk-adjusted returns
-    const coastFireTarget = traditionalFireTarget / Math.pow(1 + riskAnalysis.riskAdjustedReturn, yearsToRetirement);
-
-    // 6. ADVANCED TIME-TO-FIRE CALCULATIONS WITH DATABASE DATA
-    const calculateAdvancedTimeToFire = (targetAmount: number) => {
-      if (currentPortfolioValue >= targetAmount) return 0;
-      if (monthlyContributions <= 0) return -1;
-
-      const monthlyRate = historicalReturn / 12;
-      const monthlyDividends = projectedDividends / 12;
-      const totalMonthlyGrowth = monthlyContributions + monthlyDividends;
-      
-      let currentValue = currentPortfolioValue;
+    // 2. BARISTA FIRE (two-phase simulation with target retirement age)
+    const simulateBaristaFire = () => {
+      // Phase 1: Full-time work until transition point
+      let portfolioValue = currentPortfolioValue;
       let months = 0;
+      const maxMonthsToRetirement = (targetRetirementAge - currentAge) * 12; // ✅ Use target retirement age
       
-      while (currentValue < targetAmount && months < 600) { // Max 50 years
-        months++;
-        currentValue *= (1 + monthlyRate);
-        currentValue += totalMonthlyGrowth;
-      }
-      
-      return months / 12;
-    };
-
-    // 7. CALCULATE RESULTS FOR ALL FIRE TYPES
-    const traditionalYears = calculateAdvancedTimeToFire(traditionalFireTarget);
-    const baristaYears = calculateAdvancedTimeToFire(baristaFireTarget);
-    const coastYears = calculateAdvancedTimeToFire(coastFireTarget);
-
-    // 8. MONTE CARLO SIMULATION WITH DATABASE-DRIVEN PARAMETERS
-    const runMonteCarloSimulation = (targetAmount: number, years: number) => {
-      if (years <= 0) return { successRate: 100, confidenceInterval: [targetAmount, targetAmount] };
-      
-      const simulations = 1000;
-      let successCount = 0;
-      const finalValues = [];
-      
-      for (let i = 0; i < simulations; i++) {
-        let portfolioValue = currentPortfolioValue;
+      // Find transition point where part-time income + portfolio withdrawals can cover expenses
+      // We'll iterate to find the minimum portfolio needed for transition
+      for (let transitionTarget = traditionalFireTarget * 0.2; transitionTarget <= traditionalFireTarget; transitionTarget += traditionalFireTarget * 0.05) {
+        portfolioValue = currentPortfolioValue;
+        months = 0;
         
-        for (let year = 0; year < years; year++) {
-          const randomReturn = historicalReturn + (Math.random() - 0.5) * riskAnalysis.volatility * 2;
-          portfolioValue *= (1 + randomReturn);
-          portfolioValue += monthlyContributions * 12;
+        // Phase 1: Reach transition target with full-time investment
+        while (portfolioValue < transitionTarget && months < maxMonthsToRetirement) {
+          portfolioValue *= (1 + blendedMonthlyReturn);
+          portfolioValue += monthlyRecurringInvestment;
+          months++;
         }
         
-        finalValues.push(portfolioValue);
-        if (portfolioValue >= targetAmount) successCount++;
+        if (months >= maxMonthsToRetirement) continue; // Skip if takes too long
+        
+        const transitionAge = currentAge + (months / 12);
+        const transitionYear = currentYear + Math.round(months / 12);
+        
+        // Phase 2: From transition to Traditional FIRE with part-time work
+        let phase2Months = 0;
+        let phase2Portfolio = portfolioValue;
+        const remainingMonthsToRetirement = maxMonthsToRetirement - months; // ✅ Remaining time to target retirement age
+        
+        while (phase2Portfolio < traditionalFireTarget && phase2Months < remainingMonthsToRetirement) {
+          phase2Portfolio *= (1 + blendedMonthlyReturn);
+          phase2Portfolio += assumptions.baristaMonthlyContribution;
+          phase2Months++;
+        }
+        
+        const totalMonths = months + phase2Months;
+        const totalYears = totalMonths / 12;
+        const finalAge = currentAge + totalYears;
+        const finalYear = currentYear + Math.round(totalYears);
+        
+        // ✅ Check if this transition point works AND achieves goal before target retirement age
+        if (phase2Portfolio >= traditionalFireTarget && finalAge <= targetRetirementAge) {
+          return {
+            achievable: true,
+            transitionTarget: transitionTarget,
+            transitionAge: transitionAge,
+            transitionYear: transitionYear,
+            transitionMonths: months,
+            finalAge: finalAge,
+            finalYear: finalYear,
+            totalYears: totalYears,
+            finalPortfolioValue: phase2Portfolio,
+            withinRetirementWindow: true
+          };
+        }
       }
       
-      finalValues.sort((a, b) => a - b);
-      const successRate = (successCount / simulations) * 100;
-      const confidenceInterval = [
-        finalValues[Math.floor(simulations * 0.1)],
-        finalValues[Math.floor(simulations * 0.9)]
-      ];
-      
-      return { successRate, confidenceInterval };
+      // If no viable transition point found within target retirement age
+      return {
+        achievable: false,
+        transitionTarget: 0,
+        transitionAge: 0,
+        transitionYear: 0,
+        transitionMonths: 0,
+        finalAge: 0,
+        finalYear: 0,
+        totalYears: 0,
+        finalPortfolioValue: 0,
+        withinRetirementWindow: false
+      };
     };
+    
+    const baristaResult = simulateBaristaFire();
+    
+    // 3. COAST FIRE (find minimum amount needed now to reach Traditional FIRE by target retirement age)
+    const yearsToTargetRetirement = targetRetirementAge - currentAge;
+    const futureValueNeededAtRetirement = traditionalFireTarget * Math.pow(1 + assumptions.inflationRate, yearsToTargetRetirement);
+    const coastFireTarget = futureValueNeededAtRetirement / Math.pow(1 + blendedAnnualReturn, yearsToTargetRetirement);
+    const coastResult = simulateToTarget(coastFireTarget, monthlyRecurringInvestment);
 
-    // 9. GENERATE COMPREHENSIVE RESULTS WITH DATABASE INSIGHTS
-    const traditionalMonteCarlo = runMonteCarloSimulation(traditionalFireTarget, traditionalYears);
-    const baristaMonteCarlo = runMonteCarloSimulation(baristaFireTarget, baristaYears);
-    const coastMonteCarlo = runMonteCarloSimulation(coastFireTarget, coastYears);
+    // === 6. GENERATE COMPREHENSIVE RESULTS ===
+    
+    const results = {
+      // Traditional FIRE
+      traditional: {
+        target: traditionalFireTarget,
+        achievable: traditionalResult.achievable,
+        years: traditionalResult.years,
+        age: traditionalResult.achievementAge,
+        year: traditionalResult.achievementYear,
+        finalValue: traditionalResult.finalPortfolioValue,
+        withinRetirementWindow: traditionalResult.withinRetirementWindow,
+        message: (() => {
+          if (traditionalResult.achievable && traditionalResult.withinRetirementWindow) {
+            return `✅ YES! You can achieve Traditional FIRE at age ${traditionalResult.achievementAge.toFixed(1)} (${traditionalResult.achievementYear}). You'll have ${formatCurrency(traditionalResult.finalPortfolioValue)} and can withdraw ${formatCurrency(traditionalResult.finalPortfolioValue * assumptions.safeWithdrawalRate)} annually.`;
+          } else if (traditionalResult.achievable && traditionalResult.achievementAge > targetRetirementAge) {
+            return `⚠️ Traditional FIRE achievable at age ${traditionalResult.achievementAge.toFixed(1)} (${traditionalResult.achievementYear}), but this is after your target retirement age of ${targetRetirementAge}. Consider increasing savings rate or extending retirement age.`;
+          } else {
+            // Calculate what portfolio value would be reached by target retirement age
+            const yearsToTargetRetirement = targetRetirementAge - currentAge;
+            const monthsToTargetRetirement = yearsToTargetRetirement * 12;
+            let projectedValue = currentPortfolioValue;
+            for (let i = 0; i < monthsToTargetRetirement; i++) {
+              projectedValue *= (1 + blendedMonthlyReturn);
+              projectedValue += monthlyRecurringInvestment;
+            }
+            return `❌ Traditional FIRE not achievable by your target retirement age of ${targetRetirementAge}. You would need ${formatCurrency(traditionalFireTarget)} but current trajectory reaches ${formatCurrency(projectedValue)} by age ${targetRetirementAge}.`;
+          }
+        })()
+      },
+      
+      // Coast FIRE
+      coast: {
+        target: coastFireTarget,
+        achievable: coastResult.achievable,
+        years: coastResult.years,
+        age: coastResult.achievementAge,
+        year: coastResult.achievementYear,
+        finalValue: coastResult.finalPortfolioValue,
+        message: coastResult.achievable ?
+          `✅ YES! You can Coast FIRE at age ${coastResult.achievementAge.toFixed(1)} (${coastResult.achievementYear}). Save ${formatCurrency(coastFireTarget)} by then, STOP investing completely, and you'll still reach Traditional FIRE by age ${targetRetirementAge}.` :
+          `❌ Coast FIRE not achievable before target retirement age. You need ${formatCurrency(coastFireTarget)} by age ${targetRetirementAge} to coast, but current trajectory won't reach this amount.`
+      },
+      
+      // Barista FIRE (two-phase approach)
+      barista: {
+        target: baristaResult.transitionTarget,
+        achievable: baristaResult.achievable,
+        years: baristaResult.achievable ? baristaResult.totalYears : -1,
+        age: baristaResult.achievable ? baristaResult.finalAge : 0,
+        year: baristaResult.achievable ? baristaResult.finalYear : 0,
+        finalValue: baristaResult.finalPortfolioValue,
+        partTimeIncome: baristaAnnualIncome,
+        reducedContribution: assumptions.baristaMonthlyContribution,
+        transitionAge: baristaResult.transitionAge,
+        transitionYear: baristaResult.transitionYear,
+        message: (() => {
+          if (baristaResult.achievable && baristaResult.withinRetirementWindow) {
+            return `✅ YES! You can transition to Barista FIRE at age ${baristaResult.transitionAge.toFixed(1)} (${baristaResult.transitionYear}) with ${formatCurrency(baristaResult.transitionTarget)}. Then work part-time (${formatCurrency(baristaMonthlyIncome)}/month), invest ${formatCurrency(assumptions.baristaMonthlyContribution)}/month, and reach Traditional FIRE at age ${baristaResult.finalAge.toFixed(1)} (${baristaResult.finalYear}).`;
+          } else if (baristaResult.achievable && baristaResult.finalAge > targetRetirementAge) {
+            return `⚠️ Barista FIRE transition possible, but Traditional FIRE would be achieved at age ${baristaResult.finalAge.toFixed(1)}, after your target retirement age of ${targetRetirementAge}. Consider increasing part-time investment or extending retirement age.`;
+          } else {
+            return `❌ Barista FIRE transition not achievable within your target retirement age of ${targetRetirementAge}. Consider increasing savings rate or adjusting part-time income expectations.`;
+          }
+        })()
+      }
+    };
 
     return {
       metadata: {
-        historicalReturn,
-        projectedAnnualDividends: projectedDividends,
-        riskAnalysis,
-        monthlyContributions,
+        currentAge,
+        currentPortfolioValue,
+        monthlyRecurringInvestment,
+        targetRetirementAge,
+        annualExpenses,
+        assumptions,
+        blendedAnnualReturn,
+        realAnnualReturn,
         baseCurrency,
+        calculationMethod: 'Database-First FIRE System',
         dataSourcesUsed: [
           '📊 Current portfolio value from assets table',
-          '💰 Recurring investments from recurring_investments table', 
-          '📈 Historical transaction patterns from transactions table',
-          '💸 Dividend projections from portfolio composition',
-          '⚖️ Risk analysis from asset allocation',
-          '🎲 Monte Carlo simulation with market volatility',
-          '🌍 Multi-currency conversion from exchange rates'
-        ],
-        calculationEnhancements: [
-          'Investment behavior analysis for return estimation',
-          'Dividend income integration for reduced withdrawal needs',
-          'Risk-adjusted returns for Coast FIRE calculations',
-          'Monte Carlo simulation for success probability',
-          'Real-time portfolio data integration'
+          '💰 Monthly recurring investments from recurring_investments table',
+          '👤 User age from users table (birth_year)',
+          '🎯 Minimal user input (only retirement age, expenses, barista income)',
+          '📈 Smart assumptions based on professional standards',
+          '🔄 Monthly simulation with compound growth'
         ]
       },
+      results,
       calculations: [
         {
           fire_type: 'Traditional',
           target_amount: traditionalFireTarget,
-          target_amount_real: traditionalFireTarget,
           current_progress: currentPortfolioValue,
-          progress_percentage: Math.min((currentPortfolioValue / traditionalFireTarget) * 100, 100), // Cap at 100%
-          years_remaining: traditionalYears > 0 ? traditionalYears : null,
-          years_to_fire: traditionalYears,
-          monthly_investment_needed: monthlyContributions,
-          annual_savings_rate_required: 0,
-          achieved: currentPortfolioValue >= traditionalFireTarget,
-          projected_fi_date: traditionalYears > 0 ? new Date(Date.now() + traditionalYears * 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] : null,
-          real_purchasing_power: traditionalFireTarget,
-          tax_adjusted_withdrawal: traditionalFireTarget * withdrawalRate,
-          // 🆕 Enhanced database-driven fields
-          dividend_income_annual: projectedDividends,
-          monte_carlo_success_rate: traditionalMonteCarlo.successRate,
-          confidence_interval: traditionalMonteCarlo.confidenceInterval,
-          risk_adjusted_return: riskAnalysis.riskAdjustedReturn,
-          historical_return_estimate: historicalReturn,
-          database_insights: 'Based on actual portfolio composition and investment behavior'
-        },
-        {
-          fire_type: 'Barista',
-          target_amount: baristaFireTarget,
-          target_amount_real: baristaFireTarget,
-          current_progress: currentPortfolioValue,
-          progress_percentage: baristaFireTarget > 0 ? Math.min((currentPortfolioValue / baristaFireTarget) * 100, 100) : 0, // Cap at 100%, handle zero target
-          years_remaining: baristaYears > 0 ? baristaYears : null,
-          years_to_fire: baristaYears,
-          monthly_investment_needed: monthlyContributions,
-          annual_savings_rate_required: 0,
-          achieved: baristaFireTarget > 0 ? currentPortfolioValue >= baristaFireTarget : false, // Handle zero target
-          projected_fi_date: baristaYears > 0 ? new Date(Date.now() + baristaYears * 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] : null,
-          real_purchasing_power: baristaFireTarget,
-          tax_adjusted_withdrawal: baristaFireTarget * withdrawalRate,
-          // 🆕 Enhanced database-driven fields
-          barista_annual_income: baristaAnnualIncome,
-          dividend_income_annual: projectedDividends,
-          total_passive_income: baristaAnnualIncome + projectedDividends,
-          monte_carlo_success_rate: baristaMonteCarlo.successRate,
-          confidence_interval: baristaMonteCarlo.confidenceInterval,
-          risk_adjusted_return: riskAnalysis.riskAdjustedReturn,
-          historical_return_estimate: historicalReturn,
-          database_insights: 'Includes dividend income and part-time work projections'
+          progress_percentage: Math.min((currentPortfolioValue / traditionalFireTarget) * 100, 100),
+          years_to_fire: results.traditional.achievable && results.traditional.withinRetirementWindow ? results.traditional.years : -1,
+          achieved: (currentPortfolioValue >= traditionalFireTarget) && 
+                   (results.traditional.achievable && results.traditional.withinRetirementWindow),
+          monthly_investment_needed: monthlyRecurringInvestment,
+          coast_fire_explanation: results.traditional.message,
+          blended_return: blendedAnnualReturn,
+          real_return: realAnnualReturn,
+          within_retirement_window: results.traditional.withinRetirementWindow
         },
         {
           fire_type: 'Coast',
           target_amount: coastFireTarget,
-          target_amount_real: coastFireTarget,
           current_progress: currentPortfolioValue,
-          progress_percentage: Math.min((currentPortfolioValue / coastFireTarget) * 100, 100), // Cap at 100%
-          years_remaining: coastYears > 0 ? coastYears : null,
-          years_to_fire: coastYears,
-          monthly_investment_needed: monthlyContributions,
-          annual_savings_rate_required: 0,
-          achieved: currentPortfolioValue >= coastFireTarget,
-          projected_fi_date: coastYears > 0 ? new Date(Date.now() + coastYears * 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] : null,
-          real_purchasing_power: coastFireTarget,
-          tax_adjusted_withdrawal: coastFireTarget * withdrawalRate,
-          // 🆕 Enhanced database-driven fields
-          years_to_coast: coastYears,
-          coast_fire_explanation: `Stop investing now and reach Traditional FIRE by age ${targetRetirementAge}`,
-          dividend_income_annual: projectedDividends,
-          monte_carlo_success_rate: coastMonteCarlo.successRate,
-          confidence_interval: coastMonteCarlo.confidenceInterval,
-          risk_adjusted_return: riskAnalysis.riskAdjustedReturn,
-          historical_return_estimate: historicalReturn,
-          database_insights: 'Uses risk-adjusted returns based on portfolio analysis'
+          progress_percentage: Math.min((currentPortfolioValue / coastFireTarget) * 100, 100),
+          years_to_fire: results.coast.achievable ? results.coast.years : -1,
+          achieved: (currentPortfolioValue >= coastFireTarget) && results.coast.achievable,
+          monthly_investment_needed: monthlyRecurringInvestment,
+          coast_fire_explanation: results.coast.message,
+          blended_return: blendedAnnualReturn,
+          real_return: realAnnualReturn
+        },
+        {
+          fire_type: 'Barista',
+          target_amount: results.barista.target || 0,
+          current_progress: currentPortfolioValue,
+          progress_percentage: results.barista.target > 0 ? Math.min((currentPortfolioValue / results.barista.target) * 100, 100) : 0,
+          years_to_fire: results.barista.achievable && results.barista.withinRetirementWindow ? results.barista.years : -1,
+          achieved: results.barista.target > 0 ? 
+            (currentPortfolioValue >= results.barista.target && results.barista.achievable && results.barista.withinRetirementWindow) : 
+            false,
+          monthly_investment_needed: monthlyRecurringInvestment,
+          barista_annual_income: baristaAnnualIncome,
+          coast_fire_explanation: results.barista.message,
+          contribution_after_barista: assumptions.baristaMonthlyContribution,
+          transition_age: results.barista.transitionAge || 0,
+          transition_year: results.barista.transitionYear || 0,
+          blended_return: blendedAnnualReturn,
+          real_return: realAnnualReturn,
+          within_retirement_window: results.barista.withinRetirementWindow
         }
       ]
     };
@@ -905,7 +1018,7 @@ export const Goals: React.FC = () => {
         setFireProgress(progress);
         setCalculations(calculations);
         
-        // Update form with existing data, mapping all comprehensive fields
+        // Update form with existing data, mapping all comprehensive fields including new ones
         const existingProfile = profileResponse.fire_profile;
         setFormData({
           // Use saved values or fallback to reasonable defaults
@@ -919,6 +1032,12 @@ export const Goals: React.FC = () => {
           expected_inflation_rate: existingProfile.expected_inflation_rate || 0.025,
           other_passive_income: existingProfile.other_passive_income || 0,
           effective_tax_rate: existingProfile.effective_tax_rate || 0.15,
+          
+          // Enhanced: New fields for sophisticated calculation
+          barista_annual_contribution: existingProfile.barista_annual_contribution || 100000,
+          inflation_rate: existingProfile.inflation_rate || 0.025,
+          
+          // Legacy fields for backward compatibility
           expected_annual_return: existingProfile.expected_annual_return,
           barista_annual_income: existingProfile.barista_annual_income,
         });
@@ -1286,7 +1405,7 @@ export const Goals: React.FC = () => {
         <Card elevation={0} sx={{ borderRadius: 3, border: '2px solid', borderColor: 'secondary.main', mt: 4 }}>
           <CardContent sx={{ p: 4 }}>
             <Typography variant="h5" sx={{ fontWeight: 'bold', mb: 3, color: 'secondary.main' }}>
-              🔍 Comprehensive Database-Driven Analysis
+              🔍 Comprehensive FIRE Calculation System
             </Typography>
             
             {/* Metadata Display */}
@@ -1434,70 +1553,37 @@ export const Goals: React.FC = () => {
         </Card>
       )}
 
-      {/* FIRE Profile Dialog */}
-      <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="md" fullWidth>
+      {/* Simplified FIRE Profile Dialog - Database-First Approach */}
+      <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="sm" fullWidth>
         <DialogTitle>
           {fireProfile ? 'Update FIRE Goals' : 'Set FIRE Goals'}
         </DialogTitle>
         <DialogContent>
-          <Stack spacing={4} sx={{ mt: 1 }}>
+          <Stack spacing={3} sx={{ mt: 1 }}>
             <Alert severity="info">
               <Typography variant="body2">
-                Configure your comprehensive FIRE parameters for accurate financial independence calculations including inflation, taxes, and multiple income sources.
+                We'll use your existing portfolio data and recurring investments. 
+                Just provide these 3 essential retirement planning details:
               </Typography>
             </Alert>
 
-            {/* Current Financial Snapshot */}
+            {/* Essential Information Only */}
             <Paper elevation={0} sx={{ p: 3, bgcolor: 'grey.50' }}>
               <Typography variant="h6" sx={{ mb: 2, color: 'primary.main' }}>
-                💰 Current Financial Snapshot
+                🎯 Essential Retirement Information
               </Typography>
               <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    label="Annual Income"
-                    type="number"
-                    value={formData.annual_income}
-                    onChange={(e) => setFormData({ ...formData, annual_income: parseFloat(e.target.value) || 0 })}
-                    helperText="Your total annual income before taxes"
-                    fullWidth
-                    InputProps={{
-                      startAdornment: <Typography sx={{ mr: 1 }}>NT$</Typography>
-                    }}
-                  />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    label="Annual Savings"
-                    type="number"
-                    value={formData.annual_savings}
-                    onChange={(e) => setFormData({ ...formData, annual_savings: parseFloat(e.target.value) || 0 })}
-                    helperText={`Savings rate: ${formData.annual_income > 0 ? ((formData.annual_savings / formData.annual_income) * 100).toFixed(1) : 0}%`}
-                    fullWidth
-                    InputProps={{
-                      startAdornment: <Typography sx={{ mr: 1 }}>NT$</Typography>
-                    }}
-                  />
-                </Grid>
-              </Grid>
-            </Paper>
-
-            {/* Retirement Goals */}
-            <Paper elevation={0} sx={{ p: 3, bgcolor: 'grey.50' }}>
-              <Typography variant="h6" sx={{ mb: 2, color: 'success.main' }}>
-                🎯 Retirement Goals
-              </Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
+                <Grid item xs={12}>
                   <TextField
                     label="Annual Expenses in Retirement"
                     type="number"
                     value={formData.annual_expenses}
                     onChange={(e) => setFormData({ ...formData, annual_expenses: parseFloat(e.target.value) || 0 })}
-                    helperText="Expected annual spending in retirement (may differ from current expenses)"
+                    helperText="How much do you expect to spend per year in retirement? (in today's dollars)"
                     fullWidth
+                    required
                     InputProps={{
-                      startAdornment: <Typography sx={{ mr: 1 }}>NT$</Typography>
+                      startAdornment: <Typography sx={{ mr: 1 }}>{user?.base_currency || 'USD'}</Typography>
                     }}
                   />
                 </Grid>
@@ -1507,17 +1593,46 @@ export const Goals: React.FC = () => {
                     type="number"
                     value={formData.target_retirement_age}
                     onChange={(e) => setFormData({ ...formData, target_retirement_age: parseInt(e.target.value) || 65 })}
-                    helperText="Your ideal retirement age"
+                    helperText="When do you want to fully retire?"
                     fullWidth
+                    required
+                    inputProps={{ min: 40, max: 80 }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="Barista FIRE Annual Contribution"
+                    type="number"
+                    value={formData.barista_annual_contribution}
+                    onChange={(e) => setFormData({ ...formData, barista_annual_contribution: parseFloat(e.target.value) || 0 })}
+                    helperText="How much can you invest annually while working part-time?"
+                    fullWidth
+                    InputProps={{
+                      startAdornment: <Typography sx={{ mr: 1 }}>{user?.base_currency || 'USD'}</Typography>
+                    }}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <TextField
+                    label="Inflation Rate"
+                    type="number"
+                    value={(formData.inflation_rate * 100).toFixed(1)}
+                    onChange={(e) => setFormData({ ...formData, inflation_rate: (parseFloat(e.target.value) || 2.5) / 100 })}
+                    helperText="Expected annual inflation rate (2-4% typical)"
+                    fullWidth
+                    inputProps={{ min: 1, max: 6, step: 0.1 }}
+                    InputProps={{
+                      endAdornment: <Typography sx={{ ml: 1 }}>%</Typography>
+                    }}
                   />
                 </Grid>
               </Grid>
             </Paper>
 
-            {/* Core Assumptions */}
+            {/* Optional Advanced Settings */}
             <Paper elevation={0} sx={{ p: 3, bgcolor: 'grey.50' }}>
               <Typography variant="h6" sx={{ mb: 2, color: 'warning.main' }}>
-                ⚙️ Core Assumptions
+                ⚙️ Advanced Settings (Optional)
               </Typography>
               <Grid container spacing={2}>
                 <Grid item xs={12} sm={6}>
@@ -1526,7 +1641,7 @@ export const Goals: React.FC = () => {
                     type="number"
                     value={(formData.safe_withdrawal_rate * 100).toFixed(1)}
                     onChange={(e) => setFormData({ ...formData, safe_withdrawal_rate: (parseFloat(e.target.value) || 4) / 100 })}
-                    helperText="3-5% recommended. Lower = more conservative"
+                    helperText="3-5% recommended (4% is standard)"
                     fullWidth
                     inputProps={{ min: 3, max: 5, step: 0.1 }}
                     InputProps={{
@@ -1536,68 +1651,13 @@ export const Goals: React.FC = () => {
                 </Grid>
                 <Grid item xs={12} sm={6}>
                   <TextField
-                    label="Expected Inflation Rate"
+                    label="Expected Annual Return"
                     type="number"
-                    value={(formData.expected_inflation_rate * 100).toFixed(1)}
-                    onChange={(e) => setFormData({ ...formData, expected_inflation_rate: (parseFloat(e.target.value) || 2.5) / 100 })}
-                    helperText="Long-term inflation rate (2-3% typical)"
-                    fullWidth
-                    inputProps={{ min: 1, max: 5, step: 0.1 }}
-                    InputProps={{
-                      endAdornment: <Typography sx={{ ml: 1 }}>%</Typography>
-                    }}
-                  />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    label="Pre-Retirement Expected Return"
-                    type="number"
-                    value={(formData.expected_return_pre_retirement * 100).toFixed(1)}
-                    onChange={(e) => setFormData({ ...formData, expected_return_pre_retirement: (parseFloat(e.target.value) || 7) / 100 })}
-                    helperText="Expected annual return during accumulation phase (6-8%)"
+                    value={(formData.expected_annual_return * 100).toFixed(1)}
+                    onChange={(e) => setFormData({ ...formData, expected_annual_return: (parseFloat(e.target.value) || 7) / 100 })}
+                    helperText="Expected portfolio return (6-8% typical)"
                     fullWidth
                     inputProps={{ min: 4, max: 12, step: 0.1 }}
-                    InputProps={{
-                      endAdornment: <Typography sx={{ ml: 1 }}>%</Typography>
-                    }}
-                  />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    label="Post-Retirement Expected Return"
-                    type="number"
-                    value={(formData.expected_return_post_retirement * 100).toFixed(1)}
-                    onChange={(e) => setFormData({ ...formData, expected_return_post_retirement: (parseFloat(e.target.value) || 5) / 100 })}
-                    helperText="Expected annual return during withdrawal phase (4-6%)"
-                    fullWidth
-                    inputProps={{ min: 3, max: 8, step: 0.1 }}
-                    InputProps={{
-                      endAdornment: <Typography sx={{ ml: 1 }}>%</Typography>
-                    }}
-                  />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    label="Other Passive Income"
-                    type="number"
-                    value={formData.other_passive_income}
-                    onChange={(e) => setFormData({ ...formData, other_passive_income: parseFloat(e.target.value) || 0 })}
-                    helperText="Rental income, royalties, pensions, etc."
-                    fullWidth
-                    InputProps={{
-                      startAdornment: <Typography sx={{ mr: 1 }}>NT$</Typography>
-                    }}
-                  />
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <TextField
-                    label="Effective Tax Rate"
-                    type="number"
-                    value={(formData.effective_tax_rate * 100).toFixed(1)}
-                    onChange={(e) => setFormData({ ...formData, effective_tax_rate: (parseFloat(e.target.value) || 15) / 100 })}
-                    helperText="Expected tax rate on withdrawals (10-25%)"
-                    fullWidth
-                    inputProps={{ min: 0, max: 50, step: 1 }}
                     InputProps={{
                       endAdornment: <Typography sx={{ ml: 1 }}>%</Typography>
                     }}
@@ -1606,22 +1666,37 @@ export const Goals: React.FC = () => {
               </Grid>
             </Paper>
 
-            {/* Barista FIRE Section */}
-            <Paper elevation={0} sx={{ p: 3, bgcolor: 'grey.50' }}>
-              <Typography variant="h6" sx={{ mb: 2, color: 'info.main' }}>
-                ☕ Barista FIRE Options
+            {/* Data We'll Use From Database */}
+            <Paper elevation={0} sx={{ p: 3, bgcolor: 'success.50' }}>
+              <Typography variant="h6" sx={{ mb: 2, color: 'success.main' }}>
+                ✅ Data We'll Use From Your Account
               </Typography>
-              <TextField
-                label="Barista Annual Income"
-                type="number"
-                value={formData.barista_annual_income}
-                onChange={(e) => setFormData({ ...formData, barista_annual_income: parseFloat(e.target.value) || 0 })}
-                helperText="Expected annual income from part-time work (for Barista FIRE)"
-                fullWidth
-                InputProps={{
-                  startAdornment: <Typography sx={{ mr: 1 }}>NT$</Typography>
-                }}
-              />
+              <Grid container spacing={2}>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="body2" color="text.secondary">
+                    <strong>Current Portfolio Value:</strong><br />
+                    {formatCurrency(portfolioValuation?.totalValueInBaseCurrency || 0)}
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="body2" color="text.secondary">
+                    <strong>Monthly Recurring Investments:</strong><br />
+                    {formatCurrency(calculateMonthlyRecurringTotal())}
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="body2" color="text.secondary">
+                    <strong>Your Current Age:</strong><br />
+                    {user?.birth_year ? new Date().getFullYear() - user.birth_year : 'Not set'} years old
+                  </Typography>
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <Typography variant="body2" color="text.secondary">
+                    <strong>Base Currency:</strong><br />
+                    {user?.base_currency || 'USD'}
+                  </Typography>
+                </Grid>
+              </Grid>
             </Paper>
           </Stack>
         </DialogContent>
@@ -1632,12 +1707,10 @@ export const Goals: React.FC = () => {
             onClick={handleSaveProfile}
             disabled={
               formData.annual_expenses <= 0 ||
-              formData.safe_withdrawal_rate <= 0 ||
-              formData.expected_annual_return <= 0 ||
               formData.target_retirement_age <= 0
             }
           >
-            {fireProfile ? 'Update Goals' : 'Save Goals'}
+            {fireProfile ? 'Update Goals' : 'Calculate FIRE Goals'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1663,12 +1736,18 @@ const FIREDashboardContent: React.FC<{
   };
 
   const getTimeToFIRE = (calculation: FIRECalculation) => {
-    if (!calculation.years_to_fire || calculation.years_to_fire <= 0) {
+    // If already achieved
+    if (calculation.achieved) {
       return 'Already achieved!';
     }
     
-    const years = Math.floor(calculation.years_to_fire);
-    const months = Math.round((calculation.years_to_fire - years) * 12);
+    // If not achievable
+    if (!calculation.years_remaining || calculation.years_remaining <= 0) {
+      return 'Not achievable with current plan';
+    }
+    
+    const years = Math.floor(calculation.years_remaining);
+    const months = Math.round((calculation.years_remaining - years) * 12);
     
     if (years === 0) {
       return `${months} months`;
@@ -1677,6 +1756,25 @@ const FIREDashboardContent: React.FC<{
     } else {
       return `${years} years, ${months} months`;
     }
+  };
+
+  const getAchievementDate = (calculation: FIRECalculation) => {
+    // If already achieved
+    if (calculation.achieved) {
+      return 'Now';
+    }
+    
+    // If not achievable
+    if (!calculation.years_remaining || calculation.years_remaining <= 0) {
+      return 'Not achievable';
+    }
+    
+    const currentYear = new Date().getFullYear();
+    const currentAge = user?.birth_year ? currentYear - user.birth_year : 30;
+    const achievementAge = Math.round(currentAge + calculation.years_remaining);
+    const achievementYear = Math.round(currentYear + calculation.years_remaining);
+    
+    return `Age ${achievementAge} (${achievementYear})`;
   };
 
   const getFIREColor = (fireType: string) => {
@@ -1701,13 +1799,31 @@ const FIREDashboardContent: React.FC<{
     }
   };
 
-  const currentPortfolioValue = portfolioValuation?.totalValueInBaseCurrency || 0;
-
   return (
     <Grid container spacing={3}>
       {calculations.map((calc, index) => {
-        const progress = currentPortfolioValue / calc.target_amount;
-        const progressPercentage = Math.min(progress * 100, 100);
+        // ✅ Use backend's progress_percentage directly (already capped at 100%)
+        const progressPercentage = calc.progress_percentage;
+        
+        // ✅ Use backend's achieved status directly
+        const isAchieved = calc.achieved;
+        
+        // ✅ Get raw progress for over-achievement display
+        const rawProgress = calc.raw_progress_percentage || progressPercentage;
+        
+        // ✅ Add validation to ensure consistency
+        const isConsistent = isAchieved ? progressPercentage >= 99.9 : progressPercentage < 100;
+        
+        if (!isConsistent) {
+          console.warn(`FIRE Card Inconsistency Detected:`, {
+            fireType: calc.fire_type,
+            achieved: isAchieved,
+            progressPercentage: progressPercentage,
+            rawProgress: rawProgress,
+            currentProgress: calc.current_progress,
+            targetAmount: calc.target_amount
+          });
+        }
         
         return (
           <Grid item xs={12} md={4} key={calc.fire_type}>
@@ -1716,19 +1832,21 @@ const FIREDashboardContent: React.FC<{
               sx={{ 
                 borderRadius: 3,
                 border: '2px solid',
-                borderColor: progress >= 1 ? getFIREColor(calc.fire_type) : 'grey.200',
-                background: progress >= 1 
+                borderColor: isAchieved ? getFIREColor(calc.fire_type) : 'grey.200',
+                background: isAchieved 
                   ? `linear-gradient(135deg, ${getFIREColor(calc.fire_type)}15 0%, ${getFIREColor(calc.fire_type)}05 100%)`
                   : 'white',
                 transition: 'all 0.3s ease',
                 '&:hover': {
                   transform: 'translateY(-2px)',
                   boxShadow: 3
-                }
+                },
+                minHeight: 320 // Ensure consistent card height
               }}
             >
               <CardContent sx={{ p: 3 }}>
-                <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
+                {/* Header with Icon and Title */}
+                <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 3 }}>
                   <Box
                     sx={{
                       width: 48,
@@ -1749,38 +1867,80 @@ const FIREDashboardContent: React.FC<{
                     <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
                       {calc.fire_type} FIRE
                     </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem' }}>
-                      {getFIREDescription(calc.fire_type)}
-                    </Typography>
+                    {/* ✅ Consistent badge logic */}
+                    {isAchieved && (
+                      <Chip 
+                        label="Achieved!" 
+                        size="small" 
+                        sx={{ 
+                          bgcolor: getFIREColor(calc.fire_type), 
+                          color: 'white',
+                          fontWeight: 'bold'
+                        }} 
+                      />
+                    )}
                   </Box>
-                  {progress >= 1 && (
-                    <CheckCircle sx={{ color: getFIREColor(calc.fire_type) }} />
+                  {/* ✅ Consistent achievement icon */}
+                  {isAchieved && (
+                    <CheckCircle sx={{ color: getFIREColor(calc.fire_type), fontSize: 32 }} />
                   )}
                 </Stack>
 
-                <Typography 
-                  variant="h4" 
-                  sx={{ 
-                    fontWeight: 'bold',
-                    mb: 2,
-                    color: progress >= 1 ? getFIREColor(calc.fire_type) : 'text.primary'
-                  }}
-                >
-                  {formatCurrency(calc.target_amount)}
-                </Typography>
+                {/* Target Amount - Prominent Display */}
+                <Box sx={{ mb: 3, textAlign: 'center' }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                    Target Amount
+                  </Typography>
+                  <Typography 
+                    variant="h4" 
+                    sx={{ 
+                      fontWeight: 'bold',
+                      color: isAchieved ? getFIREColor(calc.fire_type) : 'text.primary',
+                      mb: 1
+                    }}
+                  >
+                    {formatCurrency(calc.target_amount)}
+                  </Typography>
+                </Box>
 
+                {/* When - Achievement Timeline */}
+                <Box sx={{ mb: 3, textAlign: 'center' }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                    {isAchieved ? 'Achieved' : 'Target Achievement'}
+                  </Typography>
+                  <Typography 
+                    variant="h6" 
+                    sx={{ 
+                      fontWeight: 'bold',
+                      color: isAchieved ? getFIREColor(calc.fire_type) : 'text.primary'
+                    }}
+                  >
+                    {getAchievementDate(calc)}
+                  </Typography>
+                  {!isAchieved && (
+                    <Typography variant="body2" color="text.secondary">
+                      {getTimeToFIRE(calc)} to go
+                    </Typography>
+                  )}
+                </Box>
+
+                {/* ✅ Consistent Progress Bar */}
                 <Box sx={{ mb: 2 }}>
                   <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
                     <Typography variant="body2" color="text.secondary">
                       Progress
                     </Typography>
                     <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                      {progressPercentage.toFixed(1)}%
+                      {/* ✅ Show actual progress, even if >100% */}
+                      {isAchieved && rawProgress > 100 
+                        ? `${rawProgress.toFixed(1)}%` 
+                        : `${progressPercentage.toFixed(1)}%`
+                      }
                     </Typography>
                   </Stack>
                   <LinearProgress 
                     variant="determinate" 
-                    value={progressPercentage}
+                    value={Math.min(progressPercentage, 100)} // Cap visual progress at 100%
                     sx={{
                       height: 8,
                       borderRadius: 4,
@@ -1791,14 +1951,27 @@ const FIREDashboardContent: React.FC<{
                       }
                     }}
                   />
+                  {/* ✅ Show over-achievement indicator */}
+                  {isAchieved && rawProgress > 100 && (
+                    <Typography variant="caption" color="success.main" sx={{ mt: 0.5, display: 'block', textAlign: 'center' }}>
+                      🎉 {(rawProgress - 100).toFixed(1)}% over target!
+                    </Typography>
+                  )}
                 </Box>
 
-                <Stack direction="row" alignItems="center" spacing={1}>
-                  <Schedule sx={{ fontSize: 16, color: 'text.secondary' }} />
-                  <Typography variant="body2" color="text.secondary">
-                    {progress >= 1 ? 'Achieved!' : `${getTimeToFIRE(calc)} to go`}
-                  </Typography>
-                </Stack>
+                {/* Description */}
+                <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.85rem', lineHeight: 1.4 }}>
+                  {getFIREDescription(calc.fire_type)}
+                </Typography>
+
+                {/* Special Messages for Each FIRE Type */}
+                {calc.coast_fire_explanation && (
+                  <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: 2 }}>
+                    <Typography variant="body2" sx={{ fontSize: '0.8rem', fontStyle: 'italic' }}>
+                      {calc.coast_fire_explanation}
+                    </Typography>
+                  </Box>
+                )}
               </CardContent>
             </Card>
           </Grid>
@@ -1815,18 +1988,210 @@ const ProjectionsTab: React.FC<{
   portfolioValuation: PortfolioValuation | null;
   fireProfile: FIREProfile | null;
 }> = ({ fireProgress, calculations, portfolioValuation, fireProfile }) => {
+  const [projectionYears, setProjectionYears] = useState(30);
+  const [showDetails, setShowDetails] = useState(false);
+  
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  // Generate projection data for visualization
+  const generateProjectionData = () => {
+    if (!fireProfile || !portfolioValuation) return [];
+    
+    const currentValue = portfolioValuation.totalValueInBaseCurrency;
+    const monthlyContribution = 5000; // Default or from recurring investments
+    const annualReturn = fireProfile.expected_annual_return || 0.07;
+    const monthlyReturn = Math.pow(1 + annualReturn, 1/12) - 1;
+    
+    const data = [];
+    let portfolioValue = currentValue;
+    
+    for (let year = 0; year <= projectionYears; year++) {
+      const months = year * 12;
+      
+      // Calculate future value with monthly contributions
+      if (months === 0) {
+        portfolioValue = currentValue;
+      } else {
+        // Reset and recalculate from beginning
+        portfolioValue = currentValue;
+        for (let m = 0; m < months; m++) {
+          portfolioValue = portfolioValue * (1 + monthlyReturn) + monthlyContribution;
+        }
+      }
+      
+      data.push({
+        year: new Date().getFullYear() + year,
+        portfolioValue: portfolioValue,
+        age: (fireProfile.target_retirement_age - projectionYears) + year,
+      });
+    }
+    
+    return data;
+  };
+
+  const projectionData = generateProjectionData();
+  const maxValue = Math.max(...projectionData.map(d => d.portfolioValue));
+  const traditionalTarget = calculations.find(c => c.fire_type === 'Traditional')?.target_amount || 0;
+  const baristaTarget = calculations.find(c => c.fire_type === 'Barista')?.target_amount || 0;
+  const coastTarget = calculations.find(c => c.fire_type === 'Coast')?.target_amount || 0;
+
   return (
     <Box>
-      <Card elevation={0} sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', p: 4, textAlign: 'center' }}>
-        <Timeline sx={{ fontSize: 64, color: 'primary.main', mb: 2 }} />
-        <Typography variant="h5" sx={{ fontWeight: 'bold', mb: 2 }}>
-          Interactive Projection Graph
-        </Typography>
-        <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-          Coming soon: Interactive charts showing your portfolio growth over time with FIRE target lines.
-        </Typography>
-        <Chip label="Phase 4 Feature" color="primary" variant="outlined" />
-      </Card>
+      <Grid container spacing={3}>
+        {/* Projection Chart */}
+        <Grid item xs={12}>
+          <Card elevation={0} sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', p: 3 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+              <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                Portfolio Growth Projection
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                <Typography variant="body2">Years to project:</Typography>
+                <Slider
+                  value={projectionYears}
+                  onChange={(e, value) => setProjectionYears(value as number)}
+                  min={10}
+                  max={50}
+                  step={5}
+                  sx={{ width: 120 }}
+                  valueLabelDisplay="auto"
+                />
+                <Button
+                  size="small"
+                  variant={showDetails ? "contained" : "outlined"}
+                  onClick={() => setShowDetails(!showDetails)}
+                >
+                  Details
+                </Button>
+              </Box>
+            </Box>
+            
+            {/* Simple Visual Chart */}
+            <Box sx={{ height: 300, position: 'relative', bgcolor: 'grey.50', borderRadius: 2, p: 2 }}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', height: '100%' }}>
+                {projectionData.filter((_, index) => index % 5 === 0).map((point, index) => {
+                  const height = (point.portfolioValue / maxValue) * 250;
+                  const isCurrentYear = point.year === new Date().getFullYear();
+                  
+                  return (
+                    <Box key={point.year} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                      <Tooltip title={`${point.year}: ${formatCurrency(point.portfolioValue)}`}>
+                        <Box
+                          sx={{
+                            width: 20,
+                            height: height,
+                            bgcolor: isCurrentYear ? 'primary.main' : 'info.main',
+                            borderRadius: 1,
+                            mb: 1,
+                            cursor: 'pointer',
+                            '&:hover': { opacity: 0.8 }
+                          }}
+                        />
+                      </Tooltip>
+                      <Typography variant="caption" sx={{ transform: 'rotate(-45deg)', fontSize: '0.7rem' }}>
+                        {point.year}
+                      </Typography>
+                    </Box>
+                  );
+                })}
+              </Box>
+              
+              {/* FIRE Target Lines */}
+              {traditionalTarget > 0 && (
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    top: 16 + (250 - (traditionalTarget / maxValue) * 250),
+                    left: 16,
+                    right: 16,
+                    height: 2,
+                    bgcolor: 'success.main',
+                    opacity: 0.7,
+                    '&::after': {
+                      content: '"Traditional FIRE"',
+                      position: 'absolute',
+                      right: 0,
+                      top: -20,
+                      fontSize: '0.75rem',
+                      color: 'success.main',
+                      fontWeight: 'bold'
+                    }
+                  }}
+                />
+              )}
+            </Box>
+          </Card>
+        </Grid>
+
+        {/* Projection Details */}
+        {showDetails && (
+          <Grid item xs={12}>
+            <Card elevation={0} sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', p: 3 }}>
+              <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3 }}>
+                Detailed Projections
+              </Typography>
+              <Grid container spacing={2}>
+                {projectionData.filter((_, index) => index % 5 === 0).map((point) => (
+                  <Grid item xs={12} sm={6} md={4} key={point.year}>
+                    <Paper elevation={1} sx={{ p: 2, textAlign: 'center' }}>
+                      <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
+                        {point.year}
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                        Age {point.age}
+                      </Typography>
+                      <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                        {formatCurrency(point.portfolioValue)}
+                      </Typography>
+                    </Paper>
+                  </Grid>
+                ))}
+              </Grid>
+            </Card>
+          </Grid>
+        )}
+
+        {/* Key Milestones */}
+        <Grid item xs={12}>
+          <Card elevation={0} sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', p: 3 }}>
+            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3 }}>
+              Key Milestones
+            </Typography>
+            <Grid container spacing={2}>
+              {calculations.map((calc) => (
+                <Grid item xs={12} md={4} key={calc.fire_type}>
+                  <Paper elevation={1} sx={{ p: 3, textAlign: 'center' }}>
+                    <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1 }}>
+                      {calc.fire_type} FIRE
+                    </Typography>
+                    <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'primary.main', mb: 1 }}>
+                      {formatCurrency(calc.target_amount)}
+                    </Typography>
+                    {calc.years_remaining && calc.years_remaining > 0 ? (
+                      <Typography variant="body2" color="text.secondary">
+                        {calc.years_remaining.toFixed(1)} years to achieve
+                      </Typography>
+                    ) : calc.achieved ? (
+                      <Chip label="Achieved!" color="success" size="small" />
+                    ) : (
+                      <Typography variant="body2" color="error">
+                        Not achievable with current plan
+                      </Typography>
+                    )}
+                  </Paper>
+                </Grid>
+              ))}
+            </Grid>
+          </Card>
+        </Grid>
+      </Grid>
     </Box>
   );
 };
@@ -1850,6 +2215,95 @@ const WhatIfSimulatorTab: React.FC<{
 
   const currentMonthlyInvestment = calculateMonthlyRecurringTotal();
 
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  // Real-time FIRE calculations based on what-if values
+  const calculateWhatIfFIRE = () => {
+    if (!fireProfile || !portfolioValuation) return null;
+
+    const currentValue = portfolioValuation.totalValueInBaseCurrency;
+    const monthlyContribution = whatIfValues.monthlyContribution;
+    const annualExpenses = whatIfValues.annualExpenses;
+    const expectedReturn = whatIfValues.expectedReturn / 100;
+    const targetRetirementAge = whatIfValues.targetRetirementAge;
+    const safeWithdrawalRate = fireProfile.safe_withdrawal_rate || 0.04;
+    
+    // Calculate FIRE targets
+    const traditionalFireTarget = annualExpenses / safeWithdrawalRate;
+    const baristaFireTarget = Math.max(0, (annualExpenses - whatIfValues.partTimeIncome) / safeWithdrawalRate);
+    
+    // Calculate years to achieve each target
+    const calculateYearsToTarget = (targetAmount: number) => {
+      if (currentValue >= targetAmount) return 0;
+      
+      const monthlyRate = Math.pow(1 + expectedReturn, 1/12) - 1;
+      let portfolioValue = currentValue;
+      let months = 0;
+      const maxMonths = 50 * 12; // 50 years max
+      
+      while (portfolioValue < targetAmount && months < maxMonths) {
+        portfolioValue = portfolioValue * (1 + monthlyRate) + monthlyContribution;
+        months++;
+      }
+      
+      return months < maxMonths ? months / 12 : -1; // -1 means not achievable
+    };
+
+    const yearsToTraditional = calculateYearsToTarget(traditionalFireTarget);
+    const yearsToBarista = calculateYearsToTarget(baristaFireTarget);
+    
+    // Calculate current age
+    const currentYear = new Date().getFullYear();
+    const currentAge = 30; // Default, should get from user
+    
+    return {
+      traditionalFire: {
+        target: traditionalFireTarget,
+        years: yearsToTraditional,
+        achievementAge: yearsToTraditional > 0 ? currentAge + yearsToTraditional : currentAge,
+        achievable: yearsToTraditional > 0 && (currentAge + yearsToTraditional) <= targetRetirementAge
+      },
+      baristaFire: {
+        target: baristaFireTarget,
+        years: yearsToBarista,
+        achievementAge: yearsToBarista > 0 ? currentAge + yearsToBarista : currentAge,
+        achievable: yearsToBarista > 0 && (currentAge + yearsToBarista) <= targetRetirementAge
+      },
+      currentScenario: {
+        monthlyContribution,
+        annualExpenses,
+        expectedReturn: expectedReturn * 100,
+        targetRetirementAge
+      }
+    };
+  };
+
+  const whatIfResults = calculateWhatIfFIRE();
+
+  // Calculate impact compared to current plan
+  const calculateImpact = () => {
+    if (!whatIfResults) return null;
+    
+    const currentMonthlyDiff = whatIfValues.monthlyContribution - currentMonthlyInvestment;
+    const currentExpensesDiff = whatIfValues.annualExpenses - (fireProfile?.annual_expenses || 0);
+    
+    return {
+      monthlyContributionDiff: currentMonthlyDiff,
+      annualExpensesDiff: currentExpensesDiff,
+      monthlyContributionImpact: currentMonthlyDiff > 0 ? 'increase' : currentMonthlyDiff < 0 ? 'decrease' : 'same',
+      expensesImpact: currentExpensesDiff > 0 ? 'increase' : currentExpensesDiff < 0 ? 'decrease' : 'same'
+    };
+  };
+
+  const impact = calculateImpact();
+
   return (
     <Box>
       <Grid container spacing={4}>
@@ -1861,10 +2315,18 @@ const WhatIfSimulatorTab: React.FC<{
             
             <Box sx={{ mb: 4 }}>
               <Typography variant="body2" sx={{ mb: 1 }}>
-                Monthly Contribution: ${whatIfValues.monthlyContribution.toLocaleString()}
+                Monthly Contribution: {formatCurrency(whatIfValues.monthlyContribution)}
               </Typography>
               <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
-                Current actual: ${currentMonthlyInvestment.toLocaleString()}
+                Current actual: {formatCurrency(currentMonthlyInvestment)}
+                {impact && impact.monthlyContributionDiff !== 0 && (
+                  <Chip 
+                    label={`${impact.monthlyContributionImpact === 'increase' ? '+' : ''}${formatCurrency(impact.monthlyContributionDiff)}`}
+                    size="small"
+                    color={impact.monthlyContributionImpact === 'increase' ? 'success' : 'warning'}
+                    sx={{ ml: 1 }}
+                  />
+                )}
               </Typography>
               <Slider
                 value={whatIfValues.monthlyContribution}
@@ -1873,13 +2335,24 @@ const WhatIfSimulatorTab: React.FC<{
                 max={20000}
                 step={500}
                 valueLabelDisplay="auto"
-                valueLabelFormat={(value) => `$${value.toLocaleString()}`}
+                valueLabelFormat={(value) => formatCurrency(value)}
               />
             </Box>
 
             <Box sx={{ mb: 4 }}>
-              <Typography variant="body2" sx={{ mb: 2 }}>
-                Annual Expenses: ${whatIfValues.annualExpenses.toLocaleString()}
+              <Typography variant="body2" sx={{ mb: 1 }}>
+                Annual Expenses: {formatCurrency(whatIfValues.annualExpenses)}
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
+                Current plan: {formatCurrency(fireProfile?.annual_expenses || 0)}
+                {impact && impact.annualExpensesDiff !== 0 && (
+                  <Chip 
+                    label={`${impact.annualExpensesDiff > 0 ? '+' : ''}${formatCurrency(impact.annualExpensesDiff)}`}
+                    size="small"
+                    color={impact.expensesImpact === 'decrease' ? 'success' : 'warning'}
+                    sx={{ ml: 1 }}
+                  />
+                )}
               </Typography>
               <Slider
                 value={whatIfValues.annualExpenses}
@@ -1888,7 +2361,7 @@ const WhatIfSimulatorTab: React.FC<{
                 max={3000000}
                 step={50000}
                 valueLabelDisplay="auto"
-                valueLabelFormat={(value) => `$${value.toLocaleString()}`}
+                valueLabelFormat={(value) => formatCurrency(value)}
               />
             </Box>
 
@@ -1920,26 +2393,144 @@ const WhatIfSimulatorTab: React.FC<{
                 valueLabelFormat={(value) => `${value}%`}
               />
             </Box>
+
+            <Box sx={{ mb: 4 }}>
+              <Typography variant="body2" sx={{ mb: 2 }}>
+                Part-time Annual Income: {formatCurrency(whatIfValues.partTimeIncome)}
+              </Typography>
+              <Slider
+                value={whatIfValues.partTimeIncome}
+                onChange={handleSliderChange('partTimeIncome')}
+                min={0}
+                max={1000000}
+                step={50000}
+                valueLabelDisplay="auto"
+                valueLabelFormat={(value) => formatCurrency(value)}
+              />
+            </Box>
           </Card>
         </Grid>
 
         <Grid item xs={12} md={6}>
           <Card elevation={0} sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', p: 3 }}>
             <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3 }}>
-              Impact Analysis
+              Real-time Impact Analysis
             </Typography>
-            <Box sx={{ textAlign: 'center', py: 4 }}>
-              <TuneRounded sx={{ fontSize: 64, color: 'primary.main', mb: 2 }} />
-              <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
-                Real-time calculations will appear here as you adjust the sliders above.
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Current monthly investment: ${currentMonthlyInvestment.toLocaleString()}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Active plans: {recurringInvestments.filter(inv => inv.is_active).length}
-              </Typography>
-            </Box>
+            
+            {whatIfResults ? (
+              <Stack spacing={3}>
+                {/* Traditional FIRE Results */}
+                <Paper elevation={1} sx={{ p: 3 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, color: 'primary.main' }}>
+                    Traditional FIRE
+                  </Typography>
+                  <Grid container spacing={2}>
+                    <Grid item xs={6}>
+                      <Typography variant="body2" color="text.secondary">Target Amount:</Typography>
+                      <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                        {formatCurrency(whatIfResults.traditionalFire.target)}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={6}>
+                      <Typography variant="body2" color="text.secondary">Time to Achieve:</Typography>
+                      <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                        {whatIfResults.traditionalFire.years > 0 
+                          ? `${whatIfResults.traditionalFire.years.toFixed(1)} years`
+                          : whatIfResults.traditionalFire.years === 0 
+                            ? 'Already achieved!'
+                            : 'Not achievable'
+                        }
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={12}>
+                      <Typography variant="body2" color="text.secondary">Achievement Age:</Typography>
+                      <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+                        Age {whatIfResults.traditionalFire.achievementAge.toFixed(0)}
+                        {whatIfResults.traditionalFire.achievable ? (
+                          <Chip label="Within target!" color="success" size="small" sx={{ ml: 1 }} />
+                        ) : (
+                          <Chip label="After target age" color="warning" size="small" sx={{ ml: 1 }} />
+                        )}
+                      </Typography>
+                    </Grid>
+                  </Grid>
+                </Paper>
+
+                {/* Barista FIRE Results */}
+                <Paper elevation={1} sx={{ p: 3 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, color: 'warning.main' }}>
+                    Barista FIRE
+                  </Typography>
+                  <Grid container spacing={2}>
+                    <Grid item xs={6}>
+                      <Typography variant="body2" color="text.secondary">Target Amount:</Typography>
+                      <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                        {formatCurrency(whatIfResults.baristaFire.target)}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={6}>
+                      <Typography variant="body2" color="text.secondary">Time to Achieve:</Typography>
+                      <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                        {whatIfResults.baristaFire.years > 0 
+                          ? `${whatIfResults.baristaFire.years.toFixed(1)} years`
+                          : whatIfResults.baristaFire.years === 0 
+                            ? 'Already achieved!'
+                            : 'Not achievable'
+                        }
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={12}>
+                      <Typography variant="body2" color="text.secondary">Achievement Age:</Typography>
+                      <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+                        Age {whatIfResults.baristaFire.achievementAge.toFixed(0)}
+                        {whatIfResults.baristaFire.achievable ? (
+                          <Chip label="Within target!" color="success" size="small" sx={{ ml: 1 }} />
+                        ) : (
+                          <Chip label="After target age" color="warning" size="small" sx={{ ml: 1 }} />
+                        )}
+                      </Typography>
+                    </Grid>
+                  </Grid>
+                </Paper>
+
+                {/* Key Insights */}
+                <Paper elevation={1} sx={{ p: 3, bgcolor: 'info.50' }}>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 2, color: 'info.main' }}>
+                    💡 Key Insights
+                  </Typography>
+                  <Stack spacing={1}>
+                    {impact && impact.monthlyContributionDiff > 0 && (
+                      <Typography variant="body2">
+                        📈 Increasing monthly contributions by {formatCurrency(impact.monthlyContributionDiff)} could accelerate your FIRE timeline
+                      </Typography>
+                    )}
+                    {impact && impact.annualExpensesDiff < 0 && (
+                      <Typography variant="body2">
+                        💰 Reducing annual expenses by {formatCurrency(Math.abs(impact.annualExpensesDiff))} significantly lowers your FIRE target
+                      </Typography>
+                    )}
+                    {whatIfResults.traditionalFire.years > 0 && whatIfResults.baristaFire.years > 0 && (
+                      <Typography variant="body2">
+                        ⚡ Barista FIRE is {(whatIfResults.traditionalFire.years - whatIfResults.baristaFire.years).toFixed(1)} years faster than Traditional FIRE
+                      </Typography>
+                    )}
+                  </Stack>
+                </Paper>
+              </Stack>
+            ) : (
+              <Box sx={{ textAlign: 'center', py: 4 }}>
+                <TuneRounded sx={{ fontSize: 64, color: 'primary.main', mb: 2 }} />
+                <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
+                  Adjust the parameters to see real-time impact analysis
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Current monthly investment: {formatCurrency(currentMonthlyInvestment)}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Active plans: {recurringInvestments.filter(inv => inv.is_active).length}
+                </Typography>
+              </Box>
+            )}
           </Card>
         </Grid>
       </Grid>
@@ -1952,18 +2543,318 @@ const IncomeBreakdownTab: React.FC<{
   fireProfile: FIREProfile | null;
   calculations: FIRECalculation[];
 }> = ({ fireProfile, calculations }) => {
+  
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  const calculateIncomeBreakdown = () => {
+    if (!fireProfile || calculations.length === 0) return null;
+
+    const safeWithdrawalRate = fireProfile.safe_withdrawal_rate || 0.04;
+    const traditionalCalc = calculations.find(c => c.fire_type === 'Traditional');
+    const baristaCalc = calculations.find(c => c.fire_type === 'Barista');
+    
+    if (!traditionalCalc || !baristaCalc) return null;
+
+    // Traditional FIRE Income
+    const traditionalInvestmentIncome = traditionalCalc.target_amount * safeWithdrawalRate;
+    
+    // Barista FIRE Income
+    const baristaInvestmentIncome = baristaCalc.target_amount * safeWithdrawalRate;
+    const baristaPartTimeIncome = fireProfile.barista_annual_income || 0;
+    const baristaTotalIncome = baristaInvestmentIncome + baristaPartTimeIncome;
+
+    return {
+      traditional: {
+        investmentIncome: traditionalInvestmentIncome,
+        totalIncome: traditionalInvestmentIncome,
+        breakdown: [
+          { source: 'Investment Returns', amount: traditionalInvestmentIncome, percentage: 100 }
+        ]
+      },
+      barista: {
+        investmentIncome: baristaInvestmentIncome,
+        partTimeIncome: baristaPartTimeIncome,
+        totalIncome: baristaTotalIncome,
+        breakdown: [
+          { 
+            source: 'Investment Returns', 
+            amount: baristaInvestmentIncome, 
+            percentage: (baristaInvestmentIncome / baristaTotalIncome) * 100 
+          },
+          { 
+            source: 'Part-time Work', 
+            amount: baristaPartTimeIncome, 
+            percentage: (baristaPartTimeIncome / baristaTotalIncome) * 100 
+          }
+        ]
+      }
+    };
+  };
+
+  const incomeData = calculateIncomeBreakdown();
+
+  if (!incomeData) {
+    return (
+      <Box>
+        <Card elevation={0} sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', p: 4, textAlign: 'center' }}>
+          <PieChart sx={{ fontSize: 64, color: 'primary.main', mb: 2 }} />
+          <Typography variant="h5" sx={{ fontWeight: 'bold', mb: 2 }}>
+            Retirement Income Breakdown
+          </Typography>
+          <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+            Set up your FIRE profile to see detailed retirement income breakdowns.
+          </Typography>
+        </Card>
+      </Box>
+    );
+  }
+
   return (
     <Box>
-      <Card elevation={0} sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', p: 4, textAlign: 'center' }}>
-        <PieChart sx={{ fontSize: 64, color: 'primary.main', mb: 2 }} />
-        <Typography variant="h5" sx={{ fontWeight: 'bold', mb: 2 }}>
-          Retirement Income Breakdown
-        </Typography>
-        <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-          Coming soon: Visual breakdown of your retirement income sources for each FIRE strategy.
-        </Typography>
-        <Chip label="Phase 4 Feature" color="primary" variant="outlined" />
-      </Card>
+      <Grid container spacing={3}>
+        {/* Traditional FIRE Income */}
+        <Grid item xs={12} md={6}>
+          <Card elevation={0} sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', p: 3 }}>
+            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3, color: 'primary.main' }}>
+              Traditional FIRE Income
+            </Typography>
+            
+            {/* Total Income Display */}
+            <Box sx={{ textAlign: 'center', mb: 3 }}>
+              <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
+                {formatCurrency(incomeData.traditional.totalIncome)}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Annual Retirement Income
+              </Typography>
+            </Box>
+
+            {/* Visual Breakdown */}
+            <Box sx={{ mb: 3 }}>
+              <Box
+                sx={{
+                  height: 120,
+                  width: '100%',
+                  bgcolor: 'primary.main',
+                  borderRadius: 2,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'white',
+                  fontWeight: 'bold'
+                }}
+              >
+                100% Investment Returns
+              </Box>
+            </Box>
+
+            {/* Detailed Breakdown */}
+            <Stack spacing={2}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="body2">Investment Portfolio:</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                  {formatCurrency(calculations.find(c => c.fire_type === 'Traditional')?.target_amount || 0)}
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="body2">Safe Withdrawal Rate:</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                  {((fireProfile?.safe_withdrawal_rate || 0.04) * 100).toFixed(1)}%
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="body2">Monthly Income:</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                  {formatCurrency(incomeData.traditional.totalIncome / 12)}
+                </Typography>
+              </Box>
+            </Stack>
+          </Card>
+        </Grid>
+
+        {/* Barista FIRE Income */}
+        <Grid item xs={12} md={6}>
+          <Card elevation={0} sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', p: 3 }}>
+            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3, color: 'warning.main' }}>
+              Barista FIRE Income
+            </Typography>
+            
+            {/* Total Income Display */}
+            <Box sx={{ textAlign: 'center', mb: 3 }}>
+              <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'warning.main' }}>
+                {formatCurrency(incomeData.barista.totalIncome)}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Annual Retirement Income
+              </Typography>
+            </Box>
+
+            {/* Visual Breakdown */}
+            <Box sx={{ mb: 3 }}>
+              <Stack direction="row" sx={{ height: 120, borderRadius: 2, overflow: 'hidden' }}>
+                {incomeData.barista.breakdown.map((item, index) => (
+                  <Box
+                    key={item.source}
+                    sx={{
+                      width: `${item.percentage}%`,
+                      bgcolor: index === 0 ? 'warning.main' : 'info.main',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'white',
+                      fontWeight: 'bold',
+                      fontSize: '0.9rem',
+                      textAlign: 'center',
+                      p: 1
+                    }}
+                  >
+                    {item.percentage.toFixed(0)}%<br />
+                    {item.source}
+                  </Box>
+                ))}
+              </Stack>
+            </Box>
+
+            {/* Detailed Breakdown */}
+            <Stack spacing={2}>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="body2">Investment Income:</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                  {formatCurrency(incomeData.barista.investmentIncome)}
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="body2">Part-time Income:</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                  {formatCurrency(incomeData.barista.partTimeIncome)}
+                </Typography>
+              </Box>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Typography variant="body2">Monthly Total:</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                  {formatCurrency(incomeData.barista.totalIncome / 12)}
+                </Typography>
+              </Box>
+            </Stack>
+          </Card>
+        </Grid>
+
+        {/* Income Comparison */}
+        <Grid item xs={12}>
+          <Card elevation={0} sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', p: 3 }}>
+            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3 }}>
+              Income Strategy Comparison
+            </Typography>
+            
+            <Grid container spacing={3}>
+              <Grid item xs={12} md={4}>
+                <Paper elevation={1} sx={{ p: 3, textAlign: 'center' }}>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1 }}>
+                    Traditional FIRE
+                  </Typography>
+                  <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'primary.main', mb: 1 }}>
+                    {formatCurrency(incomeData.traditional.totalIncome)}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    100% passive income
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    No work required
+                  </Typography>
+                </Paper>
+              </Grid>
+              
+              <Grid item xs={12} md={4}>
+                <Paper elevation={1} sx={{ p: 3, textAlign: 'center' }}>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1 }}>
+                    Barista FIRE
+                  </Typography>
+                  <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'warning.main', mb: 1 }}>
+                    {formatCurrency(incomeData.barista.totalIncome)}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {incomeData.barista.breakdown[0].percentage.toFixed(0)}% passive income
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {incomeData.barista.breakdown[1].percentage.toFixed(0)}% part-time work
+                  </Typography>
+                </Paper>
+              </Grid>
+              
+              <Grid item xs={12} md={4}>
+                <Paper elevation={1} sx={{ p: 3, textAlign: 'center' }}>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1 }}>
+                    Difference
+                  </Typography>
+                  <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'info.main', mb: 1 }}>
+                    {formatCurrency(Math.abs(incomeData.traditional.totalIncome - incomeData.barista.totalIncome))}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {incomeData.traditional.totalIncome > incomeData.barista.totalIncome ? 'Traditional higher' : 'Barista higher'}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Monthly: {formatCurrency(Math.abs(incomeData.traditional.totalIncome - incomeData.barista.totalIncome) / 12)}
+                  </Typography>
+                </Paper>
+              </Grid>
+            </Grid>
+          </Card>
+        </Grid>
+
+        {/* Key Insights */}
+        <Grid item xs={12}>
+          <Card elevation={0} sx={{ borderRadius: 3, border: '1px solid', borderColor: 'info.200', p: 3, bgcolor: 'info.50' }}>
+            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 3, color: 'info.main' }}>
+              💡 Income Strategy Insights
+            </Typography>
+            
+            <Grid container spacing={2}>
+              <Grid item xs={12} md={6}>
+                <Typography variant="body2" sx={{ mb: 2 }}>
+                  <strong>Traditional FIRE Benefits:</strong>
+                </Typography>
+                <ul style={{ margin: 0, paddingLeft: 20 }}>
+                  <li>Complete financial freedom</li>
+                  <li>No work obligations</li>
+                  <li>Predictable passive income</li>
+                  <li>Maximum flexibility</li>
+                </ul>
+              </Grid>
+              
+              <Grid item xs={12} md={6}>
+                <Typography variant="body2" sx={{ mb: 2 }}>
+                  <strong>Barista FIRE Benefits:</strong>
+                </Typography>
+                <ul style={{ margin: 0, paddingLeft: 20 }}>
+                  <li>Earlier retirement possible</li>
+                  <li>Lower savings target</li>
+                  <li>Maintain social connections</li>
+                  <li>Flexible work schedule</li>
+                </ul>
+              </Grid>
+            </Grid>
+
+            <Box sx={{ mt: 3, p: 2, bgcolor: 'white', borderRadius: 2 }}>
+              <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>
+                💰 Portfolio Requirements:
+              </Typography>
+              <Typography variant="body2">
+                • Traditional FIRE: {formatCurrency(calculations.find(c => c.fire_type === 'Traditional')?.target_amount || 0)} portfolio
+              </Typography>
+              <Typography variant="body2">
+                • Barista FIRE: {formatCurrency(calculations.find(c => c.fire_type === 'Barista')?.target_amount || 0)} portfolio + part-time income
+              </Typography>
+            </Box>
+          </Card>
+        </Grid>
+      </Grid>
     </Box>
   );
 };

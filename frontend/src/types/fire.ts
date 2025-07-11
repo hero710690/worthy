@@ -20,9 +20,13 @@ export interface FIREProfile {
   other_passive_income: number; // 其他被動收入 (房租、版稅等)
   effective_tax_rate: number; // 有效稅率 (資本利得稅率)
   
+  // Enhanced: New fields for sophisticated calculation
+  barista_annual_contribution: number; // 兼職期間年投資能力 (instead of income)
+  inflation_rate: number; // 用戶特定通膨假設
+  
   // Legacy fields for backward compatibility
   expected_annual_return: number; // Will be deprecated in favor of pre/post retirement rates
-  barista_annual_income: number; // Part-time income for Barista FIRE
+  barista_annual_income: number; // Part-time income for Barista FIRE (legacy)
   
   created_at: string;
   updated_at: string;
@@ -46,9 +50,13 @@ export interface CreateFIREProfileRequest {
   other_passive_income: number;
   effective_tax_rate: number;
   
+  // Enhanced: New fields for sophisticated calculation
+  barista_annual_contribution: number; // Investment capacity during part-time work
+  inflation_rate: number; // User-specific inflation assumption
+  
   // Legacy/Optional fields
   expected_annual_return?: number;
-  barista_annual_income: number;
+  barista_annual_income: number; // Keep for backward compatibility
 }
 
 // Enhanced FIRE Progress with inflation-adjusted calculations
@@ -93,7 +101,8 @@ export interface FIRECalculation {
   target_amount: number;
   target_amount_real: number; // Inflation-adjusted
   current_progress: number;
-  progress_percentage: number;
+  progress_percentage: number; // Capped at 100% for display
+  raw_progress_percentage?: number; // Actual progress, can exceed 100%
   years_remaining: number;
   monthly_investment_needed: number;
   annual_savings_rate_required: number; // As percentage of income
@@ -132,11 +141,4 @@ export interface FIREFormValidation {
   annual_savings: { min: 0, max_percentage_of_income: 1.0 };
   annual_expenses: { min: 0, required: true };
   target_retirement_age: { min: 18, max: 100 };
-}
-
-export interface FIREProgressResponse {
-  fire_progress: FIREProgress;
-  calculations: FIRECalculation[];
-  user_age: number;
-  base_currency: string;
 }

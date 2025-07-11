@@ -27,6 +27,7 @@ import { useAuthStore } from '../store/authStore';
 import { assetAPI } from '../services/assetApi';
 import { assetValuationService, type PortfolioValuation } from '../services/assetValuationService';
 import { exchangeRateService } from '../services/exchangeRateService';
+import PortfolioPerformanceComponent from './PortfolioPerformance';
 import type { Asset } from '../types/assets';
 
 interface PortfolioAllocation {
@@ -389,6 +390,11 @@ export const Portfolio: React.FC = () => {
           </Card>
         </Grid>
       </Grid>
+
+      {/* Portfolio Performance Section */}
+      <Box sx={{ mb: 4 }}>
+        <PortfolioPerformanceComponent refreshTrigger={refreshing ? Date.now() : undefined} />
+      </Box>
 
       {/* Main Content Grid */}
       <Grid container spacing={4}>
