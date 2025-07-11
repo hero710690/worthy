@@ -3034,12 +3034,45 @@ def calculate_fire_progress(user_id):
         
         # FIRE Calculations
         traditional_fire_target = annual_expenses / safe_withdrawal_rate if annual_expenses > 0 and safe_withdrawal_rate > 0 else 0
-        barista_fire_target = max((annual_expenses - barista_annual_income) / safe_withdrawal_rate, 0) if annual_expenses > 0 and safe_withdrawal_rate > 0 else 0
+        
+        # CORRECTED BARISTA FIRE LOGIC:
+        # Barista FIRE has the SAME target as Traditional FIRE
+        # The difference is the path: invest normally, then switch to part-time work
+        barista_fire_target = traditional_fire_target  # Same target!
+        
+        # Calculate if Barista FIRE is already achievable
+        barista_already_achieved = False
+        barista_transition_amount = 0
+        
+        if barista_annual_income >= annual_expenses:
+            # Part-time income covers all expenses - Barista FIRE is immediately achievable
+            barista_already_achieved = True
+            barista_transition_amount = 0
+        else:
+            # Need portfolio to cover the gap between part-time income and expenses
+            annual_gap = annual_expenses - barista_annual_income
+            gap_coverage_needed = annual_gap / safe_withdrawal_rate if safe_withdrawal_rate > 0 else 0
+            
+            # The transition point: have enough to cover the gap, let compound growth reach full target
+            coast_amount_needed = traditional_fire_target / ((1 + expected_annual_return) ** years_to_retirement) if years_to_retirement > 0 and expected_annual_return > 0 else traditional_fire_target
+            barista_transition_amount = max(gap_coverage_needed, coast_amount_needed)
+            
+            # Check if already achieved
+            barista_already_achieved = current_portfolio_value >= barista_transition_amount
+        
         coast_fire_target = traditional_fire_target / ((1 + expected_annual_return) ** years_to_retirement) if years_to_retirement > 0 and expected_annual_return > 0 else traditional_fire_target
         
         # Calculate progress percentages
         traditional_progress = (current_portfolio_value / traditional_fire_target * 100) if traditional_fire_target > 0 else 0
-        barista_progress = (current_portfolio_value / barista_fire_target * 100) if barista_fire_target > 0 else 0
+        
+        # Barista FIRE progress based on transition amount, not final target
+        if barista_already_achieved:
+            barista_progress = 100  # Already achieved
+        elif barista_transition_amount > 0:
+            barista_progress = (current_portfolio_value / barista_transition_amount * 100)
+        else:
+            barista_progress = 100  # Edge case: no transition needed
+            
         coast_progress = (current_portfolio_value / coast_fire_target * 100) if coast_fire_target > 0 else 0
         
         # Calculate years remaining and monthly investment needed
@@ -3085,11 +3118,27 @@ def calculate_fire_progress(user_id):
         
         # Calculate metrics for each FIRE type
         traditional_years = calculate_years_remaining(traditional_fire_target, current_portfolio_value, 0, expected_annual_return)
-        barista_years = calculate_years_remaining(barista_fire_target, current_portfolio_value, 0, expected_annual_return)
+        
+        # Barista FIRE: Calculate years to reach transition point (not the full target)
+        if barista_already_achieved:
+            barista_years = 0  # Already achieved
+        elif barista_transition_amount > 0:
+            barista_years = calculate_years_remaining(barista_transition_amount, current_portfolio_value, 0, expected_annual_return)
+        else:
+            barista_years = 0  # No transition needed
+            
         coast_years = calculate_years_remaining(coast_fire_target, current_portfolio_value, 0, expected_annual_return)
         
         traditional_monthly = calculate_monthly_needed(traditional_fire_target, current_portfolio_value, min(traditional_years, 30), expected_annual_return)
-        barista_monthly = calculate_monthly_needed(barista_fire_target, current_portfolio_value, min(barista_years, 30), expected_annual_return)
+        
+        # Barista FIRE: Monthly needed to reach transition point
+        if barista_already_achieved:
+            barista_monthly = 0  # Already achieved
+        elif barista_transition_amount > 0:
+            barista_monthly = calculate_monthly_needed(barista_transition_amount, current_portfolio_value, min(barista_years, 30), expected_annual_return)
+        else:
+            barista_monthly = 0  # No transition needed
+            
         coast_monthly = calculate_monthly_needed(coast_fire_target, current_portfolio_value, min(coast_years, 30), expected_annual_return)
         
         # Create calculation objects for frontend
@@ -3106,13 +3155,19 @@ def calculate_fire_progress(user_id):
             },
             {
                 "fire_type": "Barista", 
-                "target_amount": barista_fire_target,
+                "target_amount": barista_fire_target,  # Same as Traditional FIRE
+                "transition_amount": barista_transition_amount,  # Amount needed to transition
                 "current_progress": current_portfolio_value,
                 "progress_percentage": min(barista_progress, 100),
                 "raw_progress_percentage": barista_progress,
                 "years_remaining": barista_years,
                 "monthly_investment_needed": barista_monthly,
-                "achieved": current_portfolio_value >= barista_fire_target and barista_fire_target > 0
+                "achieved": barista_already_achieved,
+                "barista_annual_income": barista_annual_income,
+                "expenses_covered": barista_annual_income >= annual_expenses,
+                "message": "🎉 Barista FIRE already achieved! Your part-time income covers all expenses." if barista_already_achieved else 
+                          f"Reach transition point of {barista_transition_amount:,.0f}, then switch to part-time work." if barista_transition_amount > 0 else
+                          "Barista FIRE calculation error."
             },
             {
                 "fire_type": "Coast",
