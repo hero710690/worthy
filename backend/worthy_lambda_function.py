@@ -3040,15 +3040,22 @@ def calculate_fire_progress(user_id):
         # The difference is the path: invest normally, then switch to part-time work
         barista_fire_target = traditional_fire_target  # Same target!
         
+        # SAFETY CHECK: Ensure Barista FIRE target is never 0 when Traditional FIRE target exists
+        if traditional_fire_target > 0:
+            barista_fire_target = traditional_fire_target
+        else:
+            # If Traditional FIRE target is 0, something is wrong with the inputs
+            barista_fire_target = 0
+        
         # Calculate if Barista FIRE is already achievable
         barista_already_achieved = False
         barista_transition_amount = 0
         
-        if barista_annual_income >= annual_expenses:
+        if barista_annual_income >= annual_expenses and annual_expenses > 0:
             # Part-time income covers all expenses - Barista FIRE is immediately achievable
             barista_already_achieved = True
             barista_transition_amount = 0
-        else:
+        elif annual_expenses > 0 and safe_withdrawal_rate > 0:
             # Need portfolio to cover the gap between part-time income and expenses
             annual_gap = annual_expenses - barista_annual_income
             gap_coverage_needed = annual_gap / safe_withdrawal_rate if safe_withdrawal_rate > 0 else 0
