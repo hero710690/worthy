@@ -418,10 +418,26 @@ export const SevenDayTWRPerformanceComponent: React.FC<SevenDayTWRProps> = ({
                       <TableBody>
                         {performance.start_value_details.map((detail, index) => (
                           <TableRow key={index}>
-                            <TableCell>{detail.ticker}</TableCell>
+                            <TableCell>
+                              {detail.ticker}
+                              {detail.is_fallback_price && (
+                                <Tooltip title="Using fallback price due to API unavailability">
+                                  <Chip size="small" label="Est." color="warning" sx={{ ml: 1 }} />
+                                </Tooltip>
+                              )}
+                              {detail.error && (
+                                <Tooltip title={`Error: ${detail.error}`}>
+                                  <Chip size="small" label="Error" color="error" sx={{ ml: 1 }} />
+                                </Tooltip>
+                              )}
+                            </TableCell>
                             <TableCell align="right">{detail.shares.toFixed(4)}</TableCell>
-                            <TableCell align="right">{formatCurrency(detail.price, detail.currency)}</TableCell>
-                            <TableCell align="right">{formatCurrency(detail.value)}</TableCell>
+                            <TableCell align="right">
+                              {detail.error ? 'N/A' : formatCurrency(detail.price, detail.currency)}
+                            </TableCell>
+                            <TableCell align="right">
+                              {detail.error ? 'N/A' : formatCurrency(detail.value)}
+                            </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -446,10 +462,26 @@ export const SevenDayTWRPerformanceComponent: React.FC<SevenDayTWRProps> = ({
                       <TableBody>
                         {performance.end_value_details.map((detail, index) => (
                           <TableRow key={index}>
-                            <TableCell>{detail.ticker}</TableCell>
+                            <TableCell>
+                              {detail.ticker}
+                              {detail.is_fallback_price && (
+                                <Tooltip title="Using fallback price due to API unavailability">
+                                  <Chip size="small" label="Est." color="warning" sx={{ ml: 1 }} />
+                                </Tooltip>
+                              )}
+                              {detail.error && (
+                                <Tooltip title={`Error: ${detail.error}`}>
+                                  <Chip size="small" label="Error" color="error" sx={{ ml: 1 }} />
+                                </Tooltip>
+                              )}
+                            </TableCell>
                             <TableCell align="right">{detail.shares.toFixed(4)}</TableCell>
-                            <TableCell align="right">{formatCurrency(detail.price, detail.currency)}</TableCell>
-                            <TableCell align="right">{formatCurrency(detail.value)}</TableCell>
+                            <TableCell align="right">
+                              {detail.error ? 'N/A' : formatCurrency(detail.price, detail.currency)}
+                            </TableCell>
+                            <TableCell align="right">
+                              {detail.error ? 'N/A' : formatCurrency(detail.value)}
+                            </TableCell>
                           </TableRow>
                         ))}
                       </TableBody>

@@ -51,6 +51,9 @@ export interface SevenDayTWRPerformance {
     price: number;
     value: number;
     currency: string;
+    has_price_data?: boolean;
+    is_fallback_price?: boolean;
+    error?: string;
   }>;
   end_value_details?: Array<{
     ticker: string;
@@ -58,6 +61,9 @@ export interface SevenDayTWRPerformance {
     price: number;
     value: number;
     currency: string;
+    has_price_data?: boolean;
+    is_fallback_price?: boolean;
+    error?: string;
   }>;
   timestamp: string;
   user_id: number;
