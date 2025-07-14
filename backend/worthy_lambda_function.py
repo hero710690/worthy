@@ -3863,38 +3863,46 @@ def calculate_7day_twr_performance(user_id):
             currency = asset['currency']
             
             # Get historical price for stocks/bonds/ETFs (cash assets already excluded)
+            historical_price = None
+            current_price_for_historical = None
+            
             try:
                 # First get current price
                 price_data = fetch_stock_price_with_fallback(ticker)
                 if price_data and 'current_price' in price_data:
-                    current_price = float(price_data['current_price'])
+                    current_price_for_historical = float(price_data['current_price'])
                     
                     # Use enhanced historical price function
                     historical_price = get_historical_stock_price(
                         ticker, 
                         actual_start_date, 
-                        fallback_current_price=current_price
+                        fallback_current_price=current_price_for_historical
                     )
                     
-                    if historical_price != current_price:
-                        price_change = ((current_price - historical_price) / historical_price) * 100
-                        logger.info(f"📈 {ticker}: Historical ${historical_price:.2f} → Current ${current_price:.2f} ({price_change:+.1f}%)")
+                    if historical_price != current_price_for_historical:
+                        price_change = ((current_price_for_historical - historical_price) / historical_price) * 100
+                        logger.info(f"📈 {ticker}: Historical ${historical_price:.2f} → Current ${current_price_for_historical:.2f} ({price_change:+.1f}%)")
                     else:
                         logger.info(f"📈 {ticker}: Using current price ${historical_price:.2f} as historical approximation")
                 else:
-                    logger.warning(f"⚠️ No price data for {ticker}, skipping")
-                    continue
+                    logger.warning(f"⚠️ No price data for {ticker}, using fallback price $1.00")
+                    historical_price = 1.0  # Fallback price to prevent empty data
             except Exception as e:
-                logger.error(f"❌ Error fetching price for {ticker}: {str(e)}")
-                continue
+                logger.error(f"❌ Error fetching price for {ticker}: {str(e)}, using fallback price $1.00")
+                historical_price = 1.0  # Fallback price to prevent empty data
             
+            # Always try to calculate asset value, even with fallback price
             try:
                 # Calculate asset value 7 days ago
                 asset_value = shares * historical_price
                 
                 # Convert to base currency if needed
                 if currency != base_currency:
-                    asset_value = convert_currency_amount(asset_value, currency, base_currency)
+                    try:
+                        asset_value = convert_currency_amount(asset_value, currency, base_currency)
+                    except Exception as e:
+                        logger.error(f"❌ Currency conversion failed for {ticker}: {str(e)}, using original value")
+                        # Keep original value if conversion fails
                 
                 mv_start += asset_value
                 start_value_details.append({
@@ -3902,14 +3910,25 @@ def calculate_7day_twr_performance(user_id):
                     'shares': shares,
                     'price': historical_price,
                     'value': asset_value,
-                    'currency': currency
+                    'currency': currency,
+                    'has_price_data': current_price_for_historical is not None,
+                    'is_fallback_price': historical_price == 1.0 and current_price_for_historical is None
                 })
                 
                 logger.info(f"💵 {ticker}: {shares} × ${historical_price:.2f} = ${asset_value:.2f} {base_currency}")
                 
             except Exception as e:
                 logger.error(f"❌ Error calculating start value for {ticker}: {str(e)}")
-                continue
+                # Still add to details with error info
+                start_value_details.append({
+                    'ticker': ticker,
+                    'shares': shares,
+                    'price': 0.0,
+                    'value': 0.0,
+                    'currency': currency,
+                    'has_price_data': False,
+                    'error': str(e)
+                })
         
         # Calculate current market value (MV_end)
         mv_end = 0
@@ -3923,24 +3942,31 @@ def calculate_7day_twr_performance(user_id):
             currency = asset['currency']
             
             # Get current price for stocks/bonds/ETFs (cash assets already excluded)
+            current_price = None
+            
             try:
                 price_data = fetch_stock_price_with_fallback(ticker)
                 if price_data and 'current_price' in price_data:
                     current_price = float(price_data['current_price'])
                 else:
-                    logger.warning(f"⚠️ No current price data for {ticker}, skipping")
-                    continue
+                    logger.warning(f"⚠️ No current price data for {ticker}, using fallback price $1.00")
+                    current_price = 1.0  # Fallback price to prevent empty data
             except Exception as e:
-                logger.error(f"❌ Error fetching current price for {ticker}: {str(e)}")
-                continue
+                logger.error(f"❌ Error fetching current price for {ticker}: {str(e)}, using fallback price $1.00")
+                current_price = 1.0  # Fallback price to prevent empty data
             
+            # Always try to calculate asset value, even with fallback price
             try:
                 # Calculate current asset value
                 asset_value = shares * current_price
                 
                 # Convert to base currency if needed
                 if currency != base_currency:
-                    asset_value = convert_currency_amount(asset_value, currency, base_currency)
+                    try:
+                        asset_value = convert_currency_amount(asset_value, currency, base_currency)
+                    except Exception as e:
+                        logger.error(f"❌ Currency conversion failed for {ticker}: {str(e)}, using original value")
+                        # Keep original value if conversion fails
                 
                 mv_end += asset_value
                 end_value_details.append({
@@ -3948,7 +3974,25 @@ def calculate_7day_twr_performance(user_id):
                     'shares': shares,
                     'price': current_price,
                     'value': asset_value,
-                    'currency': currency
+                    'currency': currency,
+                    'has_price_data': price_data is not None and 'current_price' in price_data,
+                    'is_fallback_price': current_price == 1.0 and (price_data is None or 'current_price' not in price_data)
+                })
+                
+                logger.info(f"💵 {ticker}: {shares} × ${current_price:.2f} = ${asset_value:.2f} {base_currency}")
+                
+            except Exception as e:
+                logger.error(f"❌ Error calculating current value for {ticker}: {str(e)}")
+                # Still add to details with error info
+                end_value_details.append({
+                    'ticker': ticker,
+                    'shares': shares,
+                    'price': 0.0,
+                    'value': 0.0,
+                    'currency': currency,
+                    'has_price_data': False,
+                    'error': str(e)
+                })
                 })
                 
                 logger.info(f"💵 {ticker}: {shares} × ${current_price:.2f} = ${asset_value:.2f} {base_currency}")
