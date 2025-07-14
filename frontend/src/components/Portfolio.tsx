@@ -28,6 +28,7 @@ import { assetAPI } from '../services/assetApi';
 import { assetValuationService, type PortfolioValuation } from '../services/assetValuationService';
 import { exchangeRateService } from '../services/exchangeRateService';
 import PortfolioPerformanceComponent from './PortfolioPerformance';
+import SevenDayTWRPerformanceComponent from './SevenDayTWRPerformance';
 import type { Asset } from '../types/assets';
 
 interface PortfolioAllocation {
@@ -390,6 +391,11 @@ export const Portfolio: React.FC = () => {
           </Card>
         </Grid>
       </Grid>
+
+      {/* 7-Day TWR Performance Section */}
+      <Box sx={{ mb: 4 }}>
+        <SevenDayTWRPerformanceComponent refreshTrigger={refreshing ? Date.now() : undefined} />
+      </Box>
 
       {/* Portfolio Performance Section */}
       <Box sx={{ mb: 4 }}>
