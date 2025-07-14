@@ -38,6 +38,16 @@ export const fireApi = {
     return response.data;
   },
 
+  // Alias for create
+  async createFIREProfile(data: CreateFIREProfileRequest): Promise<{ fire_profile: FIREProfile; message: string }> {
+    return this.createOrUpdateFIREProfile(data);
+  },
+
+  // Alias for update
+  async updateFIREProfile(data: CreateFIREProfileRequest): Promise<{ fire_profile: FIREProfile; message: string }> {
+    return this.createOrUpdateFIREProfile(data);
+  },
+
   // Get FIRE profile
   async getFIREProfile(): Promise<FIREProfileResponse> {
     const response = await api.get('/fire-profile');
