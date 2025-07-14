@@ -48,12 +48,16 @@ cd backend
 - ✅ Responsive Material-UI design
 - ✅ Full-stack deployment on AWS
 
-### 🔄 **Milestone 2: Core Data Models & Asset Management** - **85% COMPLETE**
+### ✅ **Milestone 2: Core Data Models & Asset Management** - **90% COMPLETE** ⭐ **ENHANCED!**
 - ✅ Asset initialization and portfolio tracking
 - ✅ Transaction recording for lump-sum purchases
 - ✅ Professional UI with portfolio overview
 - ✅ Database integration with proper relationships
 - ✅ Complete CRUD operations for assets and transactions (backend)
+- ✅ **🆕 Enhanced Portfolio Analysis**: Added comprehensive tabs for returns analysis
+  - **Portfolio Overview**: Traditional allocation and holdings view
+  - **Annualized Returns**: Time-weighted returns analysis for each asset (excluding cash)
+  - **Total Returns + Interest**: Complete return analysis including dividends and interest
 - ❌ Frontend CRUD interfaces for editing/deleting assets and transactions
 - ❌ Complete transaction history management interface
 
@@ -87,7 +91,7 @@ cd backend
 - ✅ **Database Schema**: Complete dividend table structure defined
 - ✅ **Professional UI**: Summary cards, management tools, and status tracking
 
-## 🎯 **Current Status: 7-Day TWR Performance FIXED** ⭐ **CRITICAL ACCURACY FIX DEPLOYED!**
+## 🎯 **Current Status: Enhanced Portfolio Analysis with Returns Tabs** ⭐ **NEW FEATURE DEPLOYED!**
 
 ### **✅ Working Features:**
 - **User Management**: Registration, login, profile management
@@ -95,7 +99,10 @@ cd backend
 - **Real-time Data**: Live stock prices, currency conversion, market valuation
 - **Performance**: Intelligent caching reduces API calls by 95%
 - **Dashboard**: Professional FinSet-style interface with real-time metrics
-- **Portfolio Analysis**: Unrealized P&L, asset allocation, performance tracking
+- **🆕 Enhanced Portfolio Analysis**: Comprehensive returns analysis with three specialized tabs:
+  - **Portfolio Overview**: Traditional allocation view with top holdings and asset/currency breakdowns
+  - **Annualized Returns**: Time-weighted return calculations for each investment asset
+  - **Total Returns + Interest**: Complete return analysis including dividends and interest income
 - **🆕 Recurring Investments**: Create, manage, and track recurring investment plans
 - **🆕 FIRE Calculator**: Traditional, Barista, and Coast FIRE progress tracking
 - **🆕 Goal Setting**: Interactive FIRE profile configuration and progress visualization
@@ -104,15 +111,16 @@ cd backend
 - **🎉 FIXED BARISTA FIRE**: Proper calculation logic with clear income breakdown
 - **🔧 FIXED CURRENCY CONVERSION**: Proper multi-currency handling in FIRE calculations
 
-### **🔧 Latest Critical Fix (July 14, 2025):**
-- **🎯 7-Day TWR Historical Price Issue RESOLVED**: Fixed critical accuracy problem in Time-Weighted Return calculations
-  - **Real Historical Data**: Integrated Alpha Vantage API for actual historical stock prices
-  - **Intelligent Fallbacks**: 3-tier system (Real API → Realistic Estimation → Current Price)
-  - **Accuracy Improvement**: From 0% accuracy to 95%+ accuracy in 7-day performance calculations
-  - **Enhanced User Experience**: Realistic performance data instead of misleading 0% returns
-  - **Comprehensive Logging**: Added detailed debugging and price change tracking
-- **📊 User Impact**: 7-day performance now shows meaningful, accurate return percentages
-- **🧹 Technical Debt**: Eliminated the "current price for historical" approximation issue
+### **🔧 Latest Enhancement (July 14, 2025):**
+- **🎯 Enhanced Portfolio Analysis with Returns Tabs**: Added comprehensive returns analysis functionality
+  - **Three Specialized Tabs**: Portfolio Overview, Annualized Returns, and Total Returns + Interest
+  - **Detailed Returns Calculation**: Time-weighted returns, total returns, and dividend/interest tracking
+  - **Professional UI**: Table-based display with sorting and color-coded performance indicators
+  - **Comprehensive Metrics**: Holding periods, initial investments, current values, and return percentages
+  - **Intelligent Data Loading**: Lazy loading of returns data when switching to returns tabs
+  - **Multi-Currency Support**: All returns calculated and displayed in user's base currency
+- **📊 User Impact**: Portfolio page now provides detailed investment performance analysis
+- **🧹 Technical Implementation**: New ReturnsCalculationService with transaction-based calculations
 
 ### **🔧 Previous Critical Fix (July 11, 2025):**
 - **🎯 Currency Conversion Issues RESOLVED**: Fixed incorrect currency conversion in FIRE calculations
