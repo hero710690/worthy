@@ -3821,19 +3821,22 @@ def calculate_7day_twr_performance(user_id):
             logger.info(f"📅 Adjusting start date from {start_date} to {actual_start_date} (first transaction date)")
             logger.info(f"📊 Calculating {actual_period_days}-day performance instead of 7-day")
         
-        # Get current portfolio holdings
+        # Get current portfolio holdings (EXCLUDE cash assets from performance calculation)
         current_assets = execute_query(
             DATABASE_URL,
             """
-            SELECT ticker_symbol, total_shares, currency
+            SELECT ticker_symbol, total_shares, currency, asset_type
             FROM assets 
-            WHERE user_id = %s AND total_shares > 0
+            WHERE user_id = %s 
+            AND total_shares > 0 
+            AND asset_type != 'Cash'
+            AND ticker_symbol NOT IN ('CASH', 'FIXED DEPOSITE', 'FLEXIBLE')
             """,
             (user_id,)
         )
         
         if not current_assets:
-            logger.info("No current assets found for TWR calculation")
+            logger.info("No investment assets found for TWR calculation (cash assets excluded)")
             return {
                 'seven_day_return': 0,
                 'annualized_return': 0,
@@ -3845,51 +3848,45 @@ def calculate_7day_twr_performance(user_id):
                 'start_date': actual_start_date.isoformat(),
                 'end_date': end_date.isoformat(),
                 'base_currency': base_currency,
-                'error_message': 'No current assets in portfolio'
+                'error_message': 'No investment assets in portfolio (cash assets excluded from performance calculation)'
             }
         
         # Step 1: Calculate starting market value (MV_start) - 7 days ago
         mv_start = 0
         start_value_details = []
         
-        logger.info(f"📊 Calculating starting value for {len(current_assets)} assets")
+        logger.info(f"📊 Calculating starting value for {len(current_assets)} investment assets (cash assets excluded)")
         
         for asset in current_assets:
             ticker = asset['ticker_symbol']
             shares = float(asset['total_shares'])
             currency = asset['currency']
             
-            # Handle cash assets differently - they don't need stock price API
-            if ticker in ['FIXED DEPOSITE', 'FLEXIBLE', 'CASH'] or 'CASH' in ticker.upper():
-                # Cash assets have a price of 1.0 per unit
-                historical_price = 1.0
-                logger.info(f"💰 {ticker}: Cash asset, using price $1.00")
-            else:
-                # Get historical price for stocks/bonds/ETFs
-                try:
-                    # First get current price
-                    price_data = fetch_stock_price_with_fallback(ticker)
-                    if price_data and 'current_price' in price_data:
-                        current_price = float(price_data['current_price'])
-                        
-                        # Use enhanced historical price function
-                        historical_price = get_historical_stock_price(
-                            ticker, 
-                            actual_start_date, 
-                            fallback_current_price=current_price
-                        )
-                        
-                        if historical_price != current_price:
-                            price_change = ((current_price - historical_price) / historical_price) * 100
-                            logger.info(f"📈 {ticker}: Historical ${historical_price:.2f} → Current ${current_price:.2f} ({price_change:+.1f}%)")
-                        else:
-                            logger.info(f"📈 {ticker}: Using current price ${historical_price:.2f} as historical approximation")
+            # Get historical price for stocks/bonds/ETFs (cash assets already excluded)
+            try:
+                # First get current price
+                price_data = fetch_stock_price_with_fallback(ticker)
+                if price_data and 'current_price' in price_data:
+                    current_price = float(price_data['current_price'])
+                    
+                    # Use enhanced historical price function
+                    historical_price = get_historical_stock_price(
+                        ticker, 
+                        actual_start_date, 
+                        fallback_current_price=current_price
+                    )
+                    
+                    if historical_price != current_price:
+                        price_change = ((current_price - historical_price) / historical_price) * 100
+                        logger.info(f"📈 {ticker}: Historical ${historical_price:.2f} → Current ${current_price:.2f} ({price_change:+.1f}%)")
                     else:
-                        logger.warning(f"⚠️ No price data for {ticker}, skipping")
-                        continue
-                except Exception as e:
-                    logger.error(f"❌ Error fetching price for {ticker}: {str(e)}")
+                        logger.info(f"📈 {ticker}: Using current price ${historical_price:.2f} as historical approximation")
+                else:
+                    logger.warning(f"⚠️ No price data for {ticker}, skipping")
                     continue
+            except Exception as e:
+                logger.error(f"❌ Error fetching price for {ticker}: {str(e)}")
+                continue
             
             try:
                 # Calculate asset value 7 days ago
@@ -3918,30 +3915,24 @@ def calculate_7day_twr_performance(user_id):
         mv_end = 0
         end_value_details = []
         
-        logger.info(f"📊 Calculating current value for {len(current_assets)} assets")
+        logger.info(f"📊 Calculating current value for {len(current_assets)} investment assets (cash assets excluded)")
         
         for asset in current_assets:
             ticker = asset['ticker_symbol']
             shares = float(asset['total_shares'])
             currency = asset['currency']
             
-            # Handle cash assets differently - they don't need stock price API
-            if ticker in ['FIXED DEPOSITE', 'FLEXIBLE', 'CASH'] or 'CASH' in ticker.upper():
-                # Cash assets have a price of 1.0 per unit
-                current_price = 1.0
-                logger.info(f"💰 {ticker}: Cash asset, using price $1.00")
-            else:
-                # Get current price for stocks/bonds/ETFs
-                try:
-                    price_data = fetch_stock_price_with_fallback(ticker)
-                    if price_data and 'current_price' in price_data:
-                        current_price = float(price_data['current_price'])
-                    else:
-                        logger.warning(f"⚠️ No current price data for {ticker}, skipping")
-                        continue
-                except Exception as e:
-                    logger.error(f"❌ Error fetching current price for {ticker}: {str(e)}")
+            # Get current price for stocks/bonds/ETFs (cash assets already excluded)
+            try:
+                price_data = fetch_stock_price_with_fallback(ticker)
+                if price_data and 'current_price' in price_data:
+                    current_price = float(price_data['current_price'])
+                else:
+                    logger.warning(f"⚠️ No current price data for {ticker}, skipping")
                     continue
+            except Exception as e:
+                logger.error(f"❌ Error fetching current price for {ticker}: {str(e)}")
+                continue
             
             try:
                 # Calculate current asset value
@@ -4400,13 +4391,16 @@ def calculate_since_inception_performance(user_id):
         
         logger.info(f"💰 Total invested from actual transactions (in {base_currency}): ${total_invested:,.2f}")
         
-        # STEP 2: Calculate Current Value using current market prices
+        # STEP 2: Calculate Current Value using current market prices (EXCLUDE cash assets)
         current_assets = execute_query(
             DATABASE_URL,
             """
-            SELECT ticker_symbol, total_shares, currency
+            SELECT ticker_symbol, total_shares, currency, asset_type
             FROM assets 
-            WHERE user_id = %s AND total_shares > 0
+            WHERE user_id = %s 
+            AND total_shares > 0
+            AND asset_type != 'Cash'
+            AND ticker_symbol NOT IN ('CASH', 'FIXED DEPOSITE', 'FLEXIBLE')
             """,
             (user_id,)
         )
