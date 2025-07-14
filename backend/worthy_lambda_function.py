@@ -3854,8 +3854,6 @@ def calculate_7day_twr_performance(user_id):
         if not current_assets:
             logger.info("No investment assets found for TWR calculation (cash assets excluded)")
             return {
-            logger.info("No investment assets found for TWR calculation (cash assets excluded)")
-            return {
                 'seven_day_return': 0,
                 'annualized_return': 0,
                 'start_value': 0,
@@ -4012,7 +4010,6 @@ def calculate_7day_twr_performance(user_id):
                     'currency': currency,
                     'has_price_data': False,
                     'error': str(e)
-                })
                 })
                 
                 logger.info(f"💵 {ticker}: {shares} × ${current_price:.2f} = ${asset_value:.2f} {base_currency}")
@@ -6159,39 +6156,6 @@ def lambda_handler(event, context):
             period_months = int(query_params.get('period', 12))
             
             return handle_get_portfolio_performance(auth_result['user_id'], period_months)
-        
-        elif path == '/portfolio/performance/7-day-twr' and http_method == 'GET':
-            # Get 7-day Time-Weighted Return performance - requires authentication
-            request_headers = event.get('headers', {})
-            auth_result = verify_jwt_token(request_headers.get('Authorization', ''))
-            if not auth_result['valid']:
-                return create_error_response(401, "Invalid or missing token")
-            
-            return handle_get_7day_twr_performance(auth_result['user_id'])
-        
-        elif path == '/portfolio/performance/since-inception' and http_method == 'GET':
-            # Get since inception portfolio performance - requires authentication
-            request_headers = event.get('headers', {})
-            auth_result = verify_jwt_token(request_headers.get('Authorization', ''))
-            if not auth_result['valid']:
-                return create_error_response(401, "Invalid or missing token")
-            
-            try:
-                performance = calculate_since_inception_performance(auth_result['user_id'])
-                
-                performance_data = {
-                    **performance,
-                    'timestamp': datetime.utcnow().isoformat(),
-                    'user_id': auth_result['user_id']
-                }
-                
-                return create_response(200, {
-                    "portfolio_performance": performance_data
-                })
-                
-            except Exception as e:
-                logger.error(f"Get since inception performance error: {str(e)}")
-                return create_error_response(500, "Failed to calculate since inception performance")
         
         # ============================================================================
         # DIVIDEND MANAGEMENT ENDPOINTS
