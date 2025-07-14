@@ -3835,7 +3835,25 @@ def calculate_7day_twr_performance(user_id):
             (user_id,)
         )
         
+        # Debug: Also get ALL assets to see what's being filtered
+        all_assets = execute_query(
+            DATABASE_URL,
+            """
+            SELECT ticker_symbol, total_shares, currency, asset_type
+            FROM assets 
+            WHERE user_id = %s 
+            AND total_shares > 0
+            """,
+            (user_id,)
+        )
+        
+        logger.info(f"🔍 DEBUG: User {user_id} has {len(all_assets)} total assets, {len(current_assets)} investment assets")
+        for asset in all_assets:
+            logger.info(f"🔍 DEBUG: Asset {asset['ticker_symbol']} ({asset['asset_type']}) - {asset['total_shares']} shares")
+        
         if not current_assets:
+            logger.info("No investment assets found for TWR calculation (cash assets excluded)")
+            return {
             logger.info("No investment assets found for TWR calculation (cash assets excluded)")
             return {
                 'seven_day_return': 0,
@@ -3861,6 +3879,8 @@ def calculate_7day_twr_performance(user_id):
             ticker = asset['ticker_symbol']
             shares = float(asset['total_shares'])
             currency = asset['currency']
+            
+            logger.info(f"🔍 DEBUG: Processing asset {ticker} - {shares} shares in {currency}")
             
             # Get historical price for stocks/bonds/ETFs (cash assets already excluded)
             historical_price = None
@@ -4082,6 +4102,13 @@ def calculate_7day_twr_performance(user_id):
         
         logger.info(f"📈 {actual_period_days}-day return: {period_return:.4f} ({period_return*100:.2f}%)")
         logger.info(f"📈 Annualized return: {annualized_return:.4f} ({annualized_return*100:.2f}%)")
+        
+        # Debug: Log final results
+        logger.info(f"🔍 DEBUG: Final results - Start value: ${mv_start:.2f}, End value: ${mv_end:.2f}")
+        logger.info(f"🔍 DEBUG: Start value details count: {len(start_value_details)}")
+        logger.info(f"🔍 DEBUG: End value details count: {len(end_value_details)}")
+        for detail in start_value_details:
+            logger.info(f"🔍 DEBUG: Start detail - {detail['ticker']}: {detail['shares']} × ${detail['price']:.2f} = ${detail['value']:.2f}")
         
         return {
             'seven_day_return': period_return,
