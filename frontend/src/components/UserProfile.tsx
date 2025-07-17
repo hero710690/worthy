@@ -15,6 +15,7 @@ import {
   Alert,
   IconButton,
   Chip,
+  CircularProgress,
 } from '@mui/material';
 import {
   Edit,
@@ -29,6 +30,7 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import { userAPI } from '../services/userApi';
 
 const currencies = [
   { value: 'USD', label: 'US Dollar (USD)' },
@@ -43,7 +45,7 @@ const currencies = [
 
 export const UserProfile: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuthStore();
+  const { user, updateProfile } = useAuthStore();
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -68,11 +70,16 @@ export const UserProfile: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      // TODO: Implement API call to update user profile
-      // await userAPI.updateProfile(formData);
+      // Call the userAPI to update the profile
+      const response = await userAPI.updateProfile({
+        name: formData.name,
+        email: formData.email,
+        base_currency: formData.base_currency,
+        birth_year: formData.birth_year
+      });
       
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Update the auth store with the new user data
+      useAuthStore.setState({ user: response.user });
       
       setSuccess(true);
       setIsEditing(false);
@@ -191,7 +198,7 @@ export const UserProfile: React.FC = () => {
                 </Button>
                 <Button
                   variant="contained"
-                  startIcon={<Save />}
+                  startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <Save />}
                   onClick={handleSave}
                   disabled={loading}
                   sx={{

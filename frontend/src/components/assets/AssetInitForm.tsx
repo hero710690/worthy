@@ -55,6 +55,7 @@ const assetTypes = [
   { value: 'Mutual Fund', label: 'Mutual Fund' },
   { value: 'Bond', label: 'Bond' },
   { value: 'REIT', label: 'REIT' },
+  { value: 'CD', label: 'Certificate of Deposit (CD)' },
 ];
 
 export const AssetInitForm: React.FC<AssetInitFormProps> = ({ 
@@ -73,6 +74,9 @@ export const AssetInitForm: React.FC<AssetInitFormProps> = ({
     total_shares: 0,
     average_cost_basis: 0,
     currency: 'USD',
+    interest_rate: undefined,
+    maturity_date: undefined,
+    start_date: undefined,
   });
 
   // Transaction data for lump sum purchases
@@ -100,6 +104,9 @@ export const AssetInitForm: React.FC<AssetInitFormProps> = ({
         total_shares: editAsset.total_shares,
         average_cost_basis: editAsset.average_cost_basis,
         currency: editAsset.currency,
+        // Include CD-specific fields when editing
+        interest_rate: editAsset.interest_rate || undefined,
+        maturity_date: editAsset.maturity_date || undefined,
       });
     } else {
       // Reset form for new operations
@@ -162,6 +169,47 @@ export const AssetInitForm: React.FC<AssetInitFormProps> = ({
         setError('Average cost basis must be greater than 0');
         return false;
       }
+      
+      // CD-specific validation
+      if (formData.asset_type === 'CD') {
+        if (!formData.interest_rate || formData.interest_rate <= 0) {
+          setError('Interest rate is required for CD assets and must be greater than 0');
+          return false;
+        }
+        if (formData.interest_rate > 100) {
+          setError('Interest rate cannot exceed 100%');
+          return false;
+        }
+        if (!formData.maturity_date) {
+          setError('Maturity date is required for CD assets');
+          return false;
+        }
+        if (!formData.start_date) {
+          setError('Start date is required for CD assets');
+          return false;
+        }
+        
+        // Validate dates
+        const maturityDate = new Date(formData.maturity_date);
+        const startDate = new Date(formData.start_date);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0); // Reset time to compare dates only
+        
+        if (maturityDate <= today) {
+          setError('Maturity date must be in the future');
+          return false;
+        }
+        
+        if (startDate > today) {
+          setError('Start date cannot be in the future');
+          return false;
+        }
+        
+        if (startDate >= maturityDate) {
+          setError('Start date must be before maturity date');
+          return false;
+        }
+      }
     } else if (operationType === 'purchase') {
       // Validate lump sum purchase
       if (!transactionData.asset_id) {
@@ -188,16 +236,33 @@ export const AssetInitForm: React.FC<AssetInitFormProps> = ({
 
     try {
       if (isEditMode && editAsset) {
-        // Update existing asset
-        await assetAPI.updateAsset(editAsset.asset_id, {
+        // Update existing asset - include CD fields if applicable
+        const updateData = {
           asset_type: formData.asset_type,
           total_shares: formData.total_shares,
           average_cost_basis: formData.average_cost_basis,
           currency: formData.currency,
-        });
+          // Include CD-specific fields for CD assets
+          ...(formData.asset_type === 'CD' && {
+            interest_rate: formData.interest_rate 
+              ? parseFloat(formData.interest_rate.toString()) 
+              : undefined,
+            maturity_date: formData.maturity_date
+          })
+        };
+        
+        await assetAPI.updateAsset(editAsset.asset_id, updateData);
       } else if (operationType === 'init') {
-        // Create new asset
-        await assetAPI.createAsset(formData);
+        // Create new asset - convert CD fields to proper types
+        const assetData = {
+          ...formData,
+          // Convert interest_rate from string to number for CD assets
+          interest_rate: formData.asset_type === 'CD' && formData.interest_rate 
+            ? parseFloat(formData.interest_rate.toString()) 
+            : formData.interest_rate
+        };
+        
+        await assetAPI.createAsset(assetData);
       } else if (operationType === 'purchase') {
         // Create lump sum transaction
         await assetAPI.createTransaction(transactionData);
@@ -276,7 +341,7 @@ export const AssetInitForm: React.FC<AssetInitFormProps> = ({
         </Box>
       </DialogTitle>
 
-      <DialogContent sx={{ pt: 2 }}>
+      <DialogContent sx={{ pt: 3, px: 3 }}>
         {error && (
           <Alert severity="error" sx={{ mb: 3 }}>
             {error}
@@ -313,7 +378,7 @@ export const AssetInitForm: React.FC<AssetInitFormProps> = ({
           </Box>
         )}
 
-        <Grid container spacing={3}>
+        <Grid container spacing={4} sx={{ mt: 3 }}>
           {/* Asset Initialization Form */}
           {operationType === 'init' && (
             <>
@@ -419,6 +484,68 @@ export const AssetInitForm: React.FC<AssetInitFormProps> = ({
               ))}
             </TextField>
           </Grid>
+
+          {/* CD-specific fields */}
+          {formData.asset_type === 'CD' && (
+            <>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  type="number"
+                  label="Annual Interest Rate (%)"
+                  value={formData.interest_rate || ''}
+                  onChange={handleInputChange('interest_rate')}
+                  disabled={loading}
+                  helperText="Annual interest rate (e.g., 4.5 for 4.5%)"
+                  inputProps={{ 
+                    min: 0, 
+                    max: 100,
+                    step: 0.01,
+                    style: { textAlign: 'right' }
+                  }}
+                  InputProps={{
+                    endAdornment: <InputAdornment position="end">%</InputAdornment>,
+                  }}
+                />
+              </Grid>
+
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  type="date"
+                  label="Maturity Date"
+                  value={formData.maturity_date || ''}
+                  onChange={handleInputChange('maturity_date')}
+                  disabled={loading}
+                  helperText="When the CD matures"
+                  InputLabelProps={{
+                    shrink: true,
+                  }}
+                  inputProps={{
+                    min: new Date().toISOString().split('T')[0], // Today's date as minimum
+                  }}
+                />
+              </Grid>
+
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  type="date"
+                  label="Start Date"
+                  value={formData.start_date || ''}
+                  onChange={handleInputChange('start_date')}
+                  disabled={loading}
+                  helperText="When you purchased the CD"
+                  InputLabelProps={{
+                    shrink: true,
+                  }}
+                  inputProps={{
+                    max: new Date().toISOString().split('T')[0], // Today's date as maximum
+                  }}
+                />
+              </Grid>
+            </>
+          )}
 
           <Grid item xs={12} sm={6}>
             <Box

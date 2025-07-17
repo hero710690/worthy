@@ -13,15 +13,6 @@ import {
   Paper,
   Button,
   Tooltip,
-  Tabs,
-  Tab,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Divider,
 } from '@mui/material';
 import {
   PieChart,
@@ -31,14 +22,11 @@ import {
   Assessment,
   Refresh,
   TrendingDown,
-  Timeline,
   MonetizationOn,
-  Percent,
 } from '@mui/icons-material';
 import { useAuthStore } from '../store/authStore';
 import { assetAPI } from '../services/assetApi';
 import { assetValuationService, type PortfolioValuation } from '../services/assetValuationService';
-import { returnsCalculationService, type PortfolioReturns } from '../services/returnsCalculationService';
 import { exchangeRateService } from '../services/exchangeRateService';
 
 import type { Asset } from '../types/assets';
@@ -53,13 +41,10 @@ export const Portfolio: React.FC = () => {
   const { user } = useAuthStore();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [portfolioValuation, setPortfolioValuation] = useState<PortfolioValuation | null>(null);
-  const [portfolioReturns, setPortfolioReturns] = useState<PortfolioReturns | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [allocation, setAllocation] = useState<PortfolioAllocation | null>(null);
-  const [activeTab, setActiveTab] = useState(0);
-  const [returnsLoading, setReturnsLoading] = useState(false);
 
   const fetchPortfolioData = async () => {
     try {
@@ -153,25 +138,7 @@ export const Portfolio: React.FC = () => {
     }
   };
 
-  const fetchReturnsData = async () => {
-    if (!user || assets.length === 0) return;
-    
-    try {
-      setReturnsLoading(true);
-      console.log('📈 Calculating portfolio returns...');
-      
-      const baseCurrency = user.base_currency || 'USD';
-      const returns = await returnsCalculationService.calculatePortfolioReturns(assets, baseCurrency);
-      
-      console.log('✅ Returns calculation completed:', returns);
-      setPortfolioReturns(returns);
-    } catch (error: any) {
-      console.error('❌ Failed to calculate returns:', error);
-      // Don't set error state for returns calculation failure
-    } finally {
-      setReturnsLoading(false);
-    }
-  };
+  // Note: Returns calculation logic moved to Analytics page
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -179,27 +146,11 @@ export const Portfolio: React.FC = () => {
     setRefreshing(false);
   };
 
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-    setActiveTab(newValue);
-    
-    // Fetch returns data when switching to returns tabs
-    if ((newValue === 1 || newValue === 2) && !portfolioReturns && !returnsLoading) {
-      fetchReturnsData();
-    }
-  };
-
   useEffect(() => {
     if (user) {
       fetchPortfolioData();
     }
   }, [user]);
-
-  // Fetch returns data after assets are loaded
-  useEffect(() => {
-    if (assets.length > 0 && (activeTab === 1 || activeTab === 2)) {
-      fetchReturnsData();
-    }
-  }, [assets, activeTab]);
 
   const formatCurrency = (amount: number) => {
     const baseCurrency = user?.base_currency || 'USD';
@@ -443,49 +394,8 @@ export const Portfolio: React.FC = () => {
         </Grid>
       </Grid>
 
-      {/* Tabs Section */}
-      <Box sx={{ mb: 4 }}>
-        <Tabs 
-          value={activeTab} 
-          onChange={handleTabChange}
-          sx={{ 
-            borderBottom: 1, 
-            borderColor: 'divider',
-            '& .MuiTab-root': {
-              textTransform: 'none',
-              fontWeight: 'bold',
-              fontSize: '1rem',
-              minWidth: 120,
-            }
-          }}
-        >
-          <Tab 
-            icon={<PieChart />} 
-            label="Portfolio Overview" 
-            iconPosition="start"
-            sx={{ gap: 1 }}
-          />
-          <Tab 
-            icon={<Percent />} 
-            label="Annualized Returns" 
-            iconPosition="start"
-            sx={{ gap: 1 }}
-          />
-          <Tab 
-            icon={<MonetizationOn />} 
-            label="Total Returns + Interest" 
-            iconPosition="start"
-            sx={{ gap: 1 }}
-          />
-        </Tabs>
-      </Box>
-
-
-
-      {/* Tab Content */}
-      {activeTab === 0 && (
-        /* Main Content Grid */
-        <Grid container spacing={4}>
+      {/* Main Content Grid */}
+      <Grid container spacing={4}>
         {/* Top Holdings - Featured Section */}
         <Grid item xs={12}>
           <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', mb: 2 }}>
@@ -724,347 +634,6 @@ export const Portfolio: React.FC = () => {
           </Card>
         </Grid>
       </Grid>
-      )}
-
-      {/* Annualized Returns Tab */}
-      {activeTab === 1 && (
-        <Box>
-          {returnsLoading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '40vh', flexDirection: 'column', gap: 2 }}>
-              <CircularProgress size={60} />
-              <Typography variant="h6" color="text.secondary">
-                Calculating annualized returns...
-              </Typography>
-            </Box>
-          ) : portfolioReturns ? (
-            <Grid container spacing={4}>
-              {/* Portfolio Summary */}
-              <Grid item xs={12}>
-                <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', mb: 3 }}>
-                  <CardContent sx={{ p: 4 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-                      <Percent sx={{ mr: 2, color: 'primary.main' }} />
-                      <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
-                        Portfolio Annualized Returns
-                      </Typography>
-                    </Box>
-                    
-                    <Grid container spacing={3}>
-                      <Grid item xs={12} sm={6} md={3}>
-                        <Paper sx={{ p: 3, textAlign: 'center', borderRadius: 2, bgcolor: 'primary.50' }}>
-                          <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'primary.main', mb: 1 }}>
-                            {returnsCalculationService.formatReturnPercent(portfolioReturns.portfolioAnnualizedReturnPercent).value}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            Annualized Return
-                          </Typography>
-                        </Paper>
-                      </Grid>
-                      
-                      <Grid item xs={12} sm={6} md={3}>
-                        <Paper sx={{ p: 3, textAlign: 'center', borderRadius: 2, bgcolor: 'success.50' }}>
-                          <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'success.main', mb: 1 }}>
-                            {formatCurrency(portfolioReturns.portfolioAnnualizedReturn)}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            Annual Return Amount
-                          </Typography>
-                        </Paper>
-                      </Grid>
-                      
-                      <Grid item xs={12} sm={6} md={3}>
-                        <Paper sx={{ p: 3, textAlign: 'center', borderRadius: 2, bgcolor: 'info.50' }}>
-                          <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'info.main', mb: 1 }}>
-                            {portfolioReturns.weightedAverageHoldingPeriod.toFixed(1)}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            Avg Holding Period (Years)
-                          </Typography>
-                        </Paper>
-                      </Grid>
-                      
-                      <Grid item xs={12} sm={6} md={3}>
-                        <Paper sx={{ p: 3, textAlign: 'center', borderRadius: 2, bgcolor: 'warning.50' }}>
-                          <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'warning.main', mb: 1 }}>
-                            {portfolioReturns.assets.length}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            Investment Assets
-                          </Typography>
-                        </Paper>
-                      </Grid>
-                    </Grid>
-                  </CardContent>
-                </Card>
-              </Grid>
-
-              {/* Individual Asset Returns */}
-              <Grid item xs={12}>
-                <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200' }}>
-                  <CardContent sx={{ p: 4 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-                      <Timeline sx={{ mr: 2, color: 'primary.main' }} />
-                      <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                        Asset Annualized Returns (Excluding Cash)
-                      </Typography>
-                    </Box>
-                    
-                    <TableContainer>
-                      <Table>
-                        <TableHead>
-                          <TableRow>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Asset</TableCell>
-                            <TableCell align="right" sx={{ fontWeight: 'bold' }}>Annualized Return</TableCell>
-                            <TableCell align="right" sx={{ fontWeight: 'bold' }}>Annual Amount</TableCell>
-                            <TableCell align="right" sx={{ fontWeight: 'bold' }}>Holding Period</TableCell>
-                            <TableCell align="right" sx={{ fontWeight: 'bold' }}>Current Value</TableCell>
-                            <TableCell align="right" sx={{ fontWeight: 'bold' }}>Initial Investment</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {portfolioReturns.assets
-                            .sort((a, b) => b.annualizedReturnPercent - a.annualizedReturnPercent)
-                            .map((assetReturn) => {
-                              const returnFormat = returnsCalculationService.formatReturnPercent(assetReturn.annualizedReturnPercent);
-                              return (
-                                <TableRow key={assetReturn.asset.asset_id} hover>
-                                  <TableCell>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                      <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-                                        {assetReturn.asset.ticker_symbol}
-                                      </Typography>
-                                      <Chip 
-                                        label={assetReturn.asset.asset_type} 
-                                        size="small" 
-                                        variant="outlined"
-                                        color="primary"
-                                      />
-                                    </Box>
-                                  </TableCell>
-                                  <TableCell align="right">
-                                    <Typography 
-                                      variant="body1" 
-                                      sx={{ 
-                                        fontWeight: 'bold',
-                                        color: returnFormat.color
-                                      }}
-                                    >
-                                      {returnFormat.value}
-                                    </Typography>
-                                  </TableCell>
-                                  <TableCell align="right">
-                                    <Typography variant="body1">
-                                      {formatCurrency(assetReturn.annualizedReturn)}
-                                    </Typography>
-                                  </TableCell>
-                                  <TableCell align="right">
-                                    <Typography variant="body2" color="text.secondary">
-                                      {assetReturn.holdingPeriodYears.toFixed(1)} years
-                                    </Typography>
-                                  </TableCell>
-                                  <TableCell align="right">
-                                    <Typography variant="body1">
-                                      {formatCurrency(assetReturn.currentValue)}
-                                    </Typography>
-                                  </TableCell>
-                                  <TableCell align="right">
-                                    <Typography variant="body2" color="text.secondary">
-                                      {formatCurrency(assetReturn.initialInvestment)}
-                                    </Typography>
-                                  </TableCell>
-                                </TableRow>
-                              );
-                            })}
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
-                  </CardContent>
-                </Card>
-              </Grid>
-            </Grid>
-          ) : (
-            <Alert severity="info">
-              No returns data available. Returns are calculated based on transaction history.
-            </Alert>
-          )}
-        </Box>
-      )}
-
-      {/* Total Returns + Interest Tab */}
-      {activeTab === 2 && (
-        <Box>
-          {returnsLoading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '40vh', flexDirection: 'column', gap: 2 }}>
-              <CircularProgress size={60} />
-              <Typography variant="h6" color="text.secondary">
-                Calculating total returns...
-              </Typography>
-            </Box>
-          ) : portfolioReturns ? (
-            <Grid container spacing={4}>
-              {/* Portfolio Summary */}
-              <Grid item xs={12}>
-                <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', mb: 3 }}>
-                  <CardContent sx={{ p: 4 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-                      <MonetizationOn sx={{ mr: 2, color: 'primary.main' }} />
-                      <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
-                        Portfolio Total Returns + Interest/Dividends
-                      </Typography>
-                    </Box>
-                    
-                    <Grid container spacing={3}>
-                      <Grid item xs={12} sm={6} md={3}>
-                        <Paper sx={{ p: 3, textAlign: 'center', borderRadius: 2, bgcolor: 'success.50' }}>
-                          <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'success.main', mb: 1 }}>
-                            {formatCurrency(portfolioReturns.portfolioTotalReturn)}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            Total Return Amount
-                          </Typography>
-                        </Paper>
-                      </Grid>
-                      
-                      <Grid item xs={12} sm={6} md={3}>
-                        <Paper sx={{ p: 3, textAlign: 'center', borderRadius: 2, bgcolor: 'primary.50' }}>
-                          <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'primary.main', mb: 1 }}>
-                            {returnsCalculationService.formatReturnPercent(portfolioReturns.portfolioTotalReturnPercent).value}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            Total Return %
-                          </Typography>
-                        </Paper>
-                      </Grid>
-                      
-                      <Grid item xs={12} sm={6} md={3}>
-                        <Paper sx={{ p: 3, textAlign: 'center', borderRadius: 2, bgcolor: 'info.50' }}>
-                          <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'info.main', mb: 1 }}>
-                            {formatCurrency(portfolioReturns.totalDividendsReceived)}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            Total Dividends
-                          </Typography>
-                        </Paper>
-                      </Grid>
-                      
-                      <Grid item xs={12} sm={6} md={3}>
-                        <Paper sx={{ p: 3, textAlign: 'center', borderRadius: 2, bgcolor: 'warning.50' }}>
-                          <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'warning.main', mb: 1 }}>
-                            {formatCurrency(portfolioReturns.totalInterestReceived)}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            Total Interest
-                          </Typography>
-                        </Paper>
-                      </Grid>
-                    </Grid>
-                  </CardContent>
-                </Card>
-              </Grid>
-
-              {/* Individual Asset Returns */}
-              <Grid item xs={12}>
-                <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200' }}>
-                  <CardContent sx={{ p: 4 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-                      <ShowChart sx={{ mr: 2, color: 'primary.main' }} />
-                      <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                        Asset Total Returns + Interest/Dividends (Excluding Cash)
-                      </Typography>
-                    </Box>
-                    
-                    <TableContainer>
-                      <Table>
-                        <TableHead>
-                          <TableRow>
-                            <TableCell sx={{ fontWeight: 'bold' }}>Asset</TableCell>
-                            <TableCell align="right" sx={{ fontWeight: 'bold' }}>Total Return</TableCell>
-                            <TableCell align="right" sx={{ fontWeight: 'bold' }}>Total Return %</TableCell>
-                            <TableCell align="right" sx={{ fontWeight: 'bold' }}>Dividends</TableCell>
-                            <TableCell align="right" sx={{ fontWeight: 'bold' }}>Interest</TableCell>
-                            <TableCell align="right" sx={{ fontWeight: 'bold' }}>Current Value</TableCell>
-                            <TableCell align="right" sx={{ fontWeight: 'bold' }}>Initial Investment</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {portfolioReturns.assets
-                            .sort((a, b) => b.totalReturn - a.totalReturn)
-                            .map((assetReturn) => {
-                              const returnFormat = returnsCalculationService.formatReturnPercent(assetReturn.totalReturnPercent);
-                              return (
-                                <TableRow key={assetReturn.asset.asset_id} hover>
-                                  <TableCell>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                                      <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
-                                        {assetReturn.asset.ticker_symbol}
-                                      </Typography>
-                                      <Chip 
-                                        label={assetReturn.asset.asset_type} 
-                                        size="small" 
-                                        variant="outlined"
-                                        color="primary"
-                                      />
-                                    </Box>
-                                  </TableCell>
-                                  <TableCell align="right">
-                                    <Typography 
-                                      variant="body1" 
-                                      sx={{ 
-                                        fontWeight: 'bold',
-                                        color: assetReturn.totalReturn >= 0 ? 'success.main' : 'error.main'
-                                      }}
-                                    >
-                                      {formatCurrency(assetReturn.totalReturn)}
-                                    </Typography>
-                                  </TableCell>
-                                  <TableCell align="right">
-                                    <Typography 
-                                      variant="body1" 
-                                      sx={{ 
-                                        fontWeight: 'bold',
-                                        color: returnFormat.color
-                                      }}
-                                    >
-                                      {returnFormat.value}
-                                    </Typography>
-                                  </TableCell>
-                                  <TableCell align="right">
-                                    <Typography variant="body1" color="info.main">
-                                      {formatCurrency(assetReturn.totalDividends)}
-                                    </Typography>
-                                  </TableCell>
-                                  <TableCell align="right">
-                                    <Typography variant="body1" color="warning.main">
-                                      {formatCurrency(assetReturn.totalInterest)}
-                                    </Typography>
-                                  </TableCell>
-                                  <TableCell align="right">
-                                    <Typography variant="body1">
-                                      {formatCurrency(assetReturn.currentValue)}
-                                    </Typography>
-                                  </TableCell>
-                                  <TableCell align="right">
-                                    <Typography variant="body2" color="text.secondary">
-                                      {formatCurrency(assetReturn.initialInvestment)}
-                                    </Typography>
-                                  </TableCell>
-                                </TableRow>
-                              );
-                            })}
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
-                  </CardContent>
-                </Card>
-              </Grid>
-            </Grid>
-          ) : (
-            <Alert severity="info">
-              No returns data available. Returns are calculated based on transaction history.
-            </Alert>
-          )}
-        </Box>
-      )}
     </Box>
   );
 };

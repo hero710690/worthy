@@ -53,6 +53,12 @@ export const assetAPI = {
     return response.data;
   },
 
+  // Get transactions for a specific asset
+  getAssetTransactions: async (assetId: number): Promise<{ transactions: any[]; total_count: number }> => {
+    const response = await assetApi.get(`/assets/${assetId}/transactions`);
+    return response.data;
+  },
+
   // Create new asset (initialization)
   createAsset: async (assetData: CreateAssetRequest): Promise<{ message: string; asset: Asset }> => {
     const response = await assetApi.post('/assets', assetData);

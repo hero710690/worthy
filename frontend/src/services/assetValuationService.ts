@@ -53,25 +53,42 @@ export class AssetValuationService {
   public async valuateAsset(asset: Asset, baseCurrency: string): Promise<AssetValuation> {
     let currentPrice: number | undefined;
     let priceSource: 'API' | 'MOCK' | 'MANUAL' = 'MANUAL';
+    let totalValueInOriginalCurrency: number;
     
-    // Get current market price for non-cash assets
-    if (asset.asset_type !== 'Cash') {
-      try {
-        const stockPrice = await enhancedStockPriceService.getStockPrice(asset.ticker_symbol);
-        if (stockPrice) {
-          currentPrice = stockPrice.price;
-          priceSource = enhancedStockPriceService.getServiceStatus().isUsingRealPrices ? 'API' : 'MOCK';
-        }
-      } catch (error) {
-        console.warn(`Failed to get current price for ${asset.ticker_symbol}:`, error);
+    // Handle CD assets with compound interest calculation
+    if (asset.asset_type === 'CD') {
+      // For CD assets, use the current_market_value calculated by the backend
+      if (asset.current_market_value && asset.current_market_value > 0) {
+        totalValueInOriginalCurrency = asset.current_market_value;
+        currentPrice = asset.current_market_value / asset.total_shares; // Effective price per share
+        priceSource = 'API'; // Backend calculated compound interest
+        console.log(`💰 CD ${asset.ticker_symbol}: Using backend calculated value $${totalValueInOriginalCurrency}`);
+      } else {
+        // Fallback to cost basis if current_market_value is not available
+        totalValueInOriginalCurrency = asset.total_shares * asset.average_cost_basis;
+        currentPrice = asset.average_cost_basis;
+        console.warn(`⚠️ CD ${asset.ticker_symbol}: No current_market_value, using cost basis`);
       }
-    }
+    } else {
+      // Get current market price for non-cash, non-CD assets
+      if (asset.asset_type !== 'Cash') {
+        try {
+          const stockPrice = await enhancedStockPriceService.getStockPrice(asset.ticker_symbol);
+          if (stockPrice) {
+            currentPrice = stockPrice.price;
+            priceSource = enhancedStockPriceService.getServiceStatus().isUsingRealPrices ? 'API' : 'MOCK';
+          }
+        } catch (error) {
+          console.warn(`Failed to get current price for ${asset.ticker_symbol}:`, error);
+        }
+      }
 
-    // Use current price if available, otherwise use average cost basis
-    const pricePerUnit = currentPrice || asset.average_cost_basis;
-    
-    // Calculate total value in original currency
-    const totalValueInOriginalCurrency = asset.total_shares * pricePerUnit;
+      // Use current price if available, otherwise use average cost basis
+      const pricePerUnit = currentPrice || asset.average_cost_basis;
+      
+      // Calculate total value in original currency
+      totalValueInOriginalCurrency = asset.total_shares * pricePerUnit;
+    }
     
     // Convert to base currency
     let totalValueInBaseCurrency = totalValueInOriginalCurrency;
@@ -111,7 +128,7 @@ export class AssetValuationService {
       currentPrice,
       currentPriceInBaseCurrency: asset.currency !== baseCurrency && currentPrice
         ? exchangeRateService.convertCurrency(currentPrice, asset.currency, baseCurrency)
-        : pricePerUnit,
+        : (currentPrice || asset.average_cost_basis),
       totalValueInOriginalCurrency,
       totalValueInBaseCurrency,
       unrealizedGainLoss,
