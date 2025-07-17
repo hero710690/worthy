@@ -47,6 +47,83 @@ class FIRECalculator:
         self.DEFAULT_INFLATION_RATE = 0.025  # 2.5% default inflation
         self.MIN_YEARS_PRECISION = 0.1  # Minimum precision for years calculation
         self.CONVERGENCE_TOLERANCE = 0.01  # 1% tolerance for convergence
+
+def update_user_profile(user_id, profile_data):
+    """Update user profile information"""
+    try:
+        # Validate input data
+        if 'email' in profile_data:
+            try:
+                validate_email(profile_data['email'])
+            except EmailNotValidError:
+                return {"success": False, "message": "Invalid email address"}
+        
+        # Build update query dynamically based on provided fields
+        update_fields = []
+        params = []
+        
+        if 'name' in profile_data:
+            update_fields.append("name = %s")
+            params.append(profile_data['name'])
+        
+        if 'email' in profile_data:
+            # Check if email already exists for another user
+            existing_user = execute_query(
+                DATABASE_URL,
+                "SELECT user_id FROM users WHERE email = %s AND user_id != %s",
+                (profile_data['email'], user_id)
+            )
+            
+            if existing_user:
+                return {"success": False, "message": "Email already in use by another account"}
+            
+            update_fields.append("email = %s")
+            params.append(profile_data['email'])
+        
+        if 'base_currency' in profile_data:
+            valid_currencies = ['USD', 'TWD', 'EUR', 'GBP', 'JPY', 'KRW', 'SGD', 'HKD']
+            if profile_data['base_currency'] not in valid_currencies:
+                return {"success": False, "message": "Invalid currency"}
+            
+            update_fields.append("base_currency = %s")
+            params.append(profile_data['base_currency'])
+        
+        if 'birth_year' in profile_data:
+            current_year = datetime.now().year
+            if not isinstance(profile_data['birth_year'], int) or profile_data['birth_year'] < 1900 or profile_data['birth_year'] > current_year:
+                return {"success": False, "message": "Invalid birth year"}
+            
+            update_fields.append("birth_year = %s")
+            params.append(profile_data['birth_year'])
+        
+        if not update_fields:
+            return {"success": False, "message": "No fields to update"}
+        
+        # Add user_id to params
+        params.append(user_id)
+        
+        # Execute update query
+        execute_query(
+            DATABASE_URL,
+            f"UPDATE users SET {', '.join(update_fields)} WHERE user_id = %s",
+            tuple(params)
+        )
+        
+        # Get updated user data
+        updated_user = execute_query(
+            DATABASE_URL,
+            "SELECT user_id, name, email, base_currency, birth_year, created_at FROM users WHERE user_id = %s",
+            (user_id,)
+        )[0]
+        
+        return {
+            "success": True,
+            "message": "Profile updated successfully",
+            "user": updated_user
+        }
+    except Exception as e:
+        logger.error(f"Error updating user profile: {str(e)}")
+        return {"success": False, "message": f"Error updating profile: {str(e)}"}
         
     def future_value(self, principal: float, rate: float, periods: int, time: float) -> float:
         """Calculate future value with compound interest"""
@@ -769,6 +846,93 @@ class FIRECalculator:
             }
         }
 
+def calculate_cd_compound_interest(principal, annual_rate, start_date, maturity_date, compounding_frequency='daily'):
+    """
+    Calculate compound interest for Certificate of Deposit (CD) assets
+    
+    Args:
+        principal (float): Initial investment amount
+        annual_rate (float): Annual interest rate as percentage (e.g., 4.5 for 4.5%)
+        start_date (str): Start date in YYYY-MM-DD format
+        maturity_date (str): Maturity date in YYYY-MM-DD format
+        compounding_frequency (str): 'daily', 'monthly', 'quarterly', or 'annually'
+    
+    Returns:
+        dict: Contains current value, accrued interest, days elapsed, etc.
+    """
+    try:
+        # Convert dates
+        start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+        maturity_dt = datetime.strptime(maturity_date, '%Y-%m-%d')
+        current_dt = datetime.now()
+        
+        # Calculate time periods
+        total_days = (maturity_dt - start_dt).days
+        elapsed_days = min((current_dt - start_dt).days, total_days)
+        
+        if elapsed_days <= 0:
+            return {
+                'current_value': principal,
+                'accrued_interest': 0,
+                'total_days': total_days,
+                'elapsed_days': 0,
+                'maturity_value': 0,
+                'annual_rate': annual_rate,
+                'is_matured': False
+            }
+        
+        # Convert annual rate to decimal
+        rate_decimal = annual_rate / 100
+        
+        # Determine compounding periods per year
+        if compounding_frequency == 'daily':
+            n = 365
+        elif compounding_frequency == 'monthly':
+            n = 12
+        elif compounding_frequency == 'quarterly':
+            n = 4
+        else:  # annually
+            n = 1
+        
+        # Calculate time in years for current value
+        time_years = elapsed_days / 365.25
+        
+        # Calculate compound interest: A = P(1 + r/n)^(nt)
+        current_value = principal * math.pow(1 + rate_decimal / n, n * time_years)
+        accrued_interest = current_value - principal
+        
+        # Calculate maturity value
+        total_time_years = total_days / 365.25
+        maturity_value = principal * math.pow(1 + rate_decimal / n, n * total_time_years)
+        
+        # Check if CD has matured
+        is_matured = current_dt.date() >= maturity_dt.date()
+        
+        return {
+            'current_value': round(current_value, 2),
+            'accrued_interest': round(accrued_interest, 2),
+            'total_days': total_days,
+            'elapsed_days': elapsed_days,
+            'maturity_value': round(maturity_value, 2),
+            'annual_rate': annual_rate,
+            'is_matured': is_matured,
+            'compounding_frequency': compounding_frequency,
+            'effective_annual_rate': round((math.pow(1 + rate_decimal / n, n) - 1) * 100, 4)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error calculating CD compound interest: {str(e)}")
+        return {
+            'current_value': principal,
+            'accrued_interest': 0,
+            'total_days': 0,
+            'elapsed_days': 0,
+            'maturity_value': principal,
+            'annual_rate': annual_rate,
+            'is_matured': False,
+            'error': str(e)
+        }
+
 # Database connection handling
 try:
     import psycopg2
@@ -863,6 +1027,38 @@ else:
         """Mock database update"""
         logger.warning("Using mock database - update not executed")
         return 0
+
+def ensure_cd_columns_exist():
+    """Ensure CD-specific columns exist in the assets table"""
+    if not PSYCOPG2_AVAILABLE:
+        logger.warning("Skipping CD column migration - psycopg2 not available")
+        return
+    
+    try:
+        # Check if columns exist by trying to select them
+        test_query = "SELECT interest_rate, maturity_date FROM assets LIMIT 1"
+        execute_query(DATABASE_URL, test_query)
+        logger.info("CD columns already exist")
+        return
+        
+    except Exception as e:
+        logger.info(f"CD columns don't exist, attempting to add them: {str(e)}")
+        
+        # Add interest_rate column
+        try:
+            execute_update(DATABASE_URL, "ALTER TABLE assets ADD COLUMN interest_rate DECIMAL(5,4)")
+            logger.info("Added interest_rate column successfully")
+        except Exception as e:
+            logger.warning(f"Failed to add interest_rate column (may already exist): {str(e)}")
+        
+        # Add maturity_date column
+        try:
+            execute_update(DATABASE_URL, "ALTER TABLE assets ADD COLUMN maturity_date DATE")
+            logger.info("Added maturity_date column successfully")
+        except Exception as e:
+            logger.warning(f"Failed to add maturity_date column (may already exist): {str(e)}")
+        
+        logger.info("CD column migration completed")
 
 # Password hashing functions
 def hash_password(password):
@@ -1020,6 +1216,11 @@ def handle_create_asset(body, user_id):
         average_cost_basis = body.get('average_cost_basis', 0)
         currency = body.get('currency', 'USD')
         
+        # CD-specific fields
+        interest_rate = body.get('interest_rate')  # Annual interest rate as percentage (e.g., 4.5 for 4.5%)
+        maturity_date = body.get('maturity_date')  # ISO date string for CD maturity
+        start_date = body.get('start_date')  # ISO date string for CD start date
+        
         if not ticker_symbol:
             return create_error_response(400, "Ticker symbol is required")
         
@@ -1028,6 +1229,35 @@ def handle_create_asset(body, user_id):
         
         if average_cost_basis <= 0:
             return create_error_response(400, "Average cost basis must be greater than 0")
+        
+        # Validate CD-specific fields
+        if asset_type == 'CD':
+            if interest_rate is None or interest_rate <= 0:
+                return create_error_response(400, "Interest rate is required for CD assets and must be greater than 0")
+            
+            if not maturity_date:
+                return create_error_response(400, "Maturity date is required for CD assets")
+            
+            if not start_date:
+                return create_error_response(400, "Start date is required for CD assets")
+            
+            # Validate date formats and logic
+            try:
+                maturity_dt = datetime.strptime(maturity_date, '%Y-%m-%d')
+                start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+                today = datetime.now().date()
+                
+                if maturity_dt.date() <= today:
+                    return create_error_response(400, "Maturity date must be in the future")
+                
+                if start_dt.date() > today:
+                    return create_error_response(400, "Start date cannot be in the future")
+                
+                if start_dt.date() >= maturity_dt.date():
+                    return create_error_response(400, "Start date must be before maturity date")
+                    
+            except ValueError:
+                return create_error_response(400, "Invalid date format. Use YYYY-MM-DD")
         
         # Check if asset already exists for this user
         existing_asset = execute_query(
@@ -1039,15 +1269,75 @@ def handle_create_asset(body, user_id):
         if existing_asset:
             return create_error_response(409, f"Asset {ticker_symbol} already exists for this user")
         
-        # Create asset
-        execute_update(
-            DATABASE_URL,
-            """
-            INSERT INTO assets (user_id, ticker_symbol, asset_type, total_shares, average_cost_basis, currency)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            """,
-            (user_id, ticker_symbol, asset_type, total_shares, average_cost_basis, currency)
-        )
+        # Create asset with CD-specific fields
+        if asset_type == 'CD':
+            try:
+                # Try to insert with CD columns first
+                execute_update(
+                    DATABASE_URL,
+                    """
+                    INSERT INTO assets (user_id, ticker_symbol, asset_type, total_shares, average_cost_basis, currency, interest_rate, maturity_date, start_date)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (user_id, ticker_symbol, asset_type, total_shares, average_cost_basis, currency, interest_rate, maturity_date, start_date)
+                )
+                logger.info(f"CD asset created successfully with interest rate {interest_rate}% and maturity {maturity_date}")
+                
+            except Exception as cd_error:
+                logger.warning(f"Failed to insert CD with specific columns: {str(cd_error)}")
+                
+                # Try to add columns if they don't exist
+                try:
+                    execute_update(DATABASE_URL, "ALTER TABLE assets ADD COLUMN interest_rate DECIMAL(5,4)")
+                    logger.info("Added interest_rate column")
+                except:
+                    pass
+                
+                try:
+                    execute_update(DATABASE_URL, "ALTER TABLE assets ADD COLUMN maturity_date DATE")
+                    logger.info("Added maturity_date column")
+                except:
+                    pass
+                
+                try:
+                    execute_update(DATABASE_URL, "ALTER TABLE assets ADD COLUMN start_date DATE")
+                    logger.info("Added start_date column")
+                except:
+                    pass
+                
+                # Try again with CD columns
+                try:
+                    execute_update(
+                        DATABASE_URL,
+                        """
+                        INSERT INTO assets (user_id, ticker_symbol, asset_type, total_shares, average_cost_basis, currency, interest_rate, maturity_date, start_date)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        """,
+                        (user_id, ticker_symbol, asset_type, total_shares, average_cost_basis, currency, interest_rate, maturity_date, start_date)
+                    )
+                    logger.info("CD asset created successfully after adding columns")
+                    
+                except Exception as retry_error:
+                    logger.error(f"Failed to create CD asset even after adding columns: {str(retry_error)}")
+                    # Final fallback: create without CD columns
+                    execute_update(
+                        DATABASE_URL,
+                        """
+                        INSERT INTO assets (user_id, ticker_symbol, asset_type, total_shares, average_cost_basis, currency)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                        """,
+                        (user_id, ticker_symbol, asset_type, total_shares, average_cost_basis, currency)
+                    )
+                    logger.warning("CD asset created without CD-specific columns - manual database update needed")
+        else:
+            execute_update(
+                DATABASE_URL,
+                """
+                INSERT INTO assets (user_id, ticker_symbol, asset_type, total_shares, average_cost_basis, currency)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                """,
+                (user_id, ticker_symbol, asset_type, total_shares, average_cost_basis, currency)
+            )
         
         # Get created asset
         asset = execute_query(
@@ -1084,7 +1374,7 @@ def handle_create_asset(body, user_id):
         return create_error_response(500, "Failed to create asset")
 
 def handle_get_assets(user_id):
-    """Get all assets for a user"""
+    """Get all assets for a user with CD compound interest calculations"""
     try:
         assets = execute_query(
             DATABASE_URL,
@@ -1103,7 +1393,7 @@ def handle_get_assets(user_id):
         
         asset_list = []
         for asset in assets:
-            asset_list.append({
+            asset_data = {
                 "asset_id": asset['asset_id'],
                 "ticker_symbol": asset['ticker_symbol'],
                 "asset_type": asset['asset_type'],
@@ -1113,7 +1403,57 @@ def handle_get_assets(user_id):
                 "transaction_count": asset['transaction_count'],
                 "created_at": asset['created_at'].isoformat(),
                 "updated_at": asset['updated_at'].isoformat() if asset['updated_at'] else None
-            })
+            }
+            
+            # Add CD-specific fields and calculations
+            if asset['asset_type'] == 'CD':
+                # Safely get CD-specific fields (might be None if columns don't exist yet)
+                interest_rate = None
+                maturity_date = None
+                start_date = None
+                
+                try:
+                    interest_rate = float(asset.get('interest_rate', 0)) if asset.get('interest_rate') else None
+                    maturity_date = asset.get('maturity_date').isoformat() if asset.get('maturity_date') else None
+                    start_date = asset.get('start_date').isoformat() if asset.get('start_date') else None
+                except (TypeError, AttributeError, KeyError):
+                    logger.warning(f"CD columns not available for asset {asset['asset_id']}")
+                
+                asset_data['interest_rate'] = interest_rate
+                asset_data['maturity_date'] = maturity_date
+                asset_data['start_date'] = start_date
+                
+                # Calculate compound interest if we have the required fields
+                if interest_rate and maturity_date and start_date and interest_rate > 0:
+                    principal = float(asset['total_shares']) * float(asset['average_cost_basis'])
+                    cd_calculation = calculate_cd_compound_interest(
+                        principal=principal,
+                        annual_rate=asset_data['interest_rate'],
+                        start_date=start_date[:10],  # Extract date part from start_date
+                        maturity_date=asset_data['maturity_date'][:10]  # Extract date part
+                    )
+                    asset_data['cd_details'] = cd_calculation
+                    
+                    # Update current value to reflect compound interest
+                    asset_data['current_market_value'] = cd_calculation['current_value']
+                    asset_data['accrued_interest'] = cd_calculation['accrued_interest']
+                elif interest_rate and maturity_date and interest_rate > 0:
+                    # Fallback to created_at if start_date is not available (for existing CDs)
+                    principal = float(asset['total_shares']) * float(asset['average_cost_basis'])
+                    cd_calculation = calculate_cd_compound_interest(
+                        principal=principal,
+                        annual_rate=asset_data['interest_rate'],
+                        start_date=asset['created_at'].strftime('%Y-%m-%d'),
+                        maturity_date=asset_data['maturity_date'][:10]  # Extract date part
+                    )
+                    asset_data['cd_details'] = cd_calculation
+                    
+                    # Update current value to reflect compound interest
+                    asset_data['current_market_value'] = cd_calculation['current_value']
+                    asset_data['accrued_interest'] = cd_calculation['accrued_interest']
+                    logger.warning(f"CD {asset['ticker_symbol']}: Using created_at as fallback for start_date")
+            
+            asset_list.append(asset_data)
         
         return create_response(200, {
             "assets": asset_list,
@@ -2220,18 +2560,31 @@ def handle_process_dividend(dividend_id, body, user_id):
             # Reinvest in specified asset
             reinvest_asset_id = body.get('reinvest_asset_id', dividend['asset_id'])
             
-            # Get current stock price for reinvestment
             try:
+                # Get current stock price for reinvestment
                 stock_price_data = fetch_stock_price_with_fallback(dividend['ticker_symbol'])
                 if stock_price_data and 'price' in stock_price_data:
                     current_price = stock_price_data['price']
                 else:
                     return create_error_response(400, "Unable to get current stock price for reinvestment")
                 
-                # Calculate shares to buy
-                shares_to_buy = float(dividend['total_dividend_amount']) / current_price
+                # 🔧 FIXED: Calculate after-tax dividend amount for reinvestment
+                # In real life, dividends are taxed before reinvestment
+                tax_rate = float(dividend.get('tax_rate', 20.0))  # Default 20% if not set
+                gross_dividend_amount = float(dividend['total_dividend_amount'])
+                after_tax_dividend_amount = gross_dividend_amount * (1 - tax_rate / 100)
                 
-                # Create transaction
+                # Calculate shares to buy with after-tax amount
+                shares_to_buy = after_tax_dividend_amount / current_price
+                
+                logger.info(f"Dividend reinvestment calculation:")
+                logger.info(f"  Gross dividend: {gross_dividend_amount}")
+                logger.info(f"  Tax rate: {tax_rate}%")
+                logger.info(f"  After-tax amount: {after_tax_dividend_amount}")
+                logger.info(f"  Current price: {current_price}")
+                logger.info(f"  Shares to buy: {shares_to_buy}")
+                
+                # Create transaction with after-tax amount
                 execute_update(
                     DATABASE_URL,
                     """
@@ -2253,9 +2606,19 @@ def handle_process_dividend(dividend_id, body, user_id):
                 
                 new_total_shares = float(asset['total_shares']) + shares_to_buy
                 current_total_value = float(asset['total_shares']) * float(asset['average_cost_basis'])
-                new_investment_value = shares_to_buy * current_price
+                
+                # 🔧 FIXED: Use after-tax amount for investment value calculation
+                # This represents the actual cash value invested (after taxes)
+                new_investment_value = after_tax_dividend_amount  # Use after-tax amount, not shares * price
                 new_total_value = current_total_value + new_investment_value
                 new_avg_cost = new_total_value / new_total_shares
+                
+                logger.info(f"Asset update calculation:")
+                logger.info(f"  Previous shares: {asset['total_shares']}")
+                logger.info(f"  New shares added: {shares_to_buy}")
+                logger.info(f"  Total shares: {new_total_shares}")
+                logger.info(f"  Previous avg cost: {asset['average_cost_basis']}")
+                logger.info(f"  New avg cost: {new_avg_cost}")
                 
                 execute_update(
                     DATABASE_URL,
@@ -2275,6 +2638,17 @@ def handle_process_dividend(dividend_id, body, user_id):
             # Add to specified cash asset or create default if not specified
             cash_asset_id = body.get('cash_asset_id')
             
+            # 🔧 FIXED: Calculate after-tax dividend amount for cash
+            # In real life, dividends are taxed before being added to cash
+            tax_rate = float(dividend.get('tax_rate', 20.0))  # Default 20% if not set
+            gross_dividend_amount = float(dividend['total_dividend_amount'])
+            after_tax_dividend_amount = gross_dividend_amount * (1 - tax_rate / 100)
+            
+            logger.info(f"Dividend cash processing:")
+            logger.info(f"  Gross dividend: {gross_dividend_amount}")
+            logger.info(f"  Tax rate: {tax_rate}%")
+            logger.info(f"  After-tax amount: {after_tax_dividend_amount}")
+            
             if cash_asset_id:
                 # Use specified cash asset
                 cash_asset = execute_query(
@@ -2288,8 +2662,8 @@ def handle_process_dividend(dividend_id, body, user_id):
                 
                 cash_asset = cash_asset[0]
                 
-                # Update existing cash asset
-                new_cash_amount = float(cash_asset['total_shares']) + float(dividend['total_dividend_amount'])
+                # Update existing cash asset with after-tax amount
+                new_cash_amount = float(cash_asset['total_shares']) + after_tax_dividend_amount
                 execute_update(
                     DATABASE_URL,
                     """
@@ -2309,7 +2683,7 @@ def handle_process_dividend(dividend_id, body, user_id):
                 )
                 
                 if not cash_asset:
-                    # Create default cash asset
+                    # Create default cash asset with after-tax amount
                     execute_update(
                         DATABASE_URL,
                         """
@@ -2318,7 +2692,7 @@ def handle_process_dividend(dividend_id, body, user_id):
                             average_cost_basis, currency
                         ) VALUES (%s, %s, %s, %s, %s, %s)
                         """,
-                        (user_id, 'CASH', 'Cash', float(dividend['total_dividend_amount']), 
+                        (user_id, 'CASH', 'Cash', after_tax_dividend_amount, 
                          1.0, dividend['currency'])
                     )
                     
@@ -2329,10 +2703,10 @@ def handle_process_dividend(dividend_id, body, user_id):
                         (user_id,)
                     )[0]['asset_id']
                 else:
-                    # Update existing default cash asset
+                    # Update existing default cash asset with after-tax amount
                     cash_asset = cash_asset[0]
                     cash_asset_id = cash_asset['asset_id']
-                    new_cash_amount = float(cash_asset['total_shares']) + float(dividend['total_dividend_amount'])
+                    new_cash_amount = float(cash_asset['total_shares']) + after_tax_dividend_amount
                     execute_update(
                         DATABASE_URL,
                         """
@@ -2343,7 +2717,7 @@ def handle_process_dividend(dividend_id, body, user_id):
                         (new_cash_amount, cash_asset_id)
                     )
             
-            # Create cash transaction
+            # Create cash transaction with after-tax amount
             execute_update(
                 DATABASE_URL,
                 """
@@ -2353,7 +2727,7 @@ def handle_process_dividend(dividend_id, body, user_id):
                 ) VALUES (%s, %s, %s, %s, %s, %s)
                 """,
                 (cash_asset_id, 'Dividend', dividend['payment_date'], 
-                 float(dividend['total_dividend_amount']), 1.0, dividend['currency'])
+                 after_tax_dividend_amount, 1.0, dividend['currency'])
             )
         
         # Mark dividend as processed
@@ -4828,11 +5202,12 @@ def get_portfolio_total_value(user_id):
         )[0]
         base_currency = user['base_currency']
         
-        # Get assets
+        # Get assets with asset type information
         assets = execute_query(
             DATABASE_URL,
             """
-            SELECT ticker_symbol, total_shares, average_cost_basis, currency
+            SELECT ticker_symbol, total_shares, average_cost_basis, currency, asset_type, 
+                   interest_rate, maturity_date, start_date, created_at
             FROM assets WHERE user_id = %s AND total_shares > 0
             """,
             (user_id,)
@@ -4844,18 +5219,62 @@ def get_portfolio_total_value(user_id):
             ticker = asset['ticker_symbol']
             shares = float(asset['total_shares'])
             currency = asset.get('currency', 'USD')
+            asset_type = asset.get('asset_type', 'Stock')
             
-            # Try to get real-time price, fallback to cost basis
-            try:
-                price_data = fetch_stock_price_with_fallback(ticker)
-                if price_data and 'current_price' in price_data:
-                    current_price = float(price_data['current_price'])
+            # Handle CD assets with compound interest calculation
+            if asset_type == 'CD':
+                interest_rate = asset.get('interest_rate')
+                maturity_date = asset.get('maturity_date')
+                start_date = asset.get('start_date')
+                
+                if interest_rate and maturity_date:
+                    # Calculate CD compound interest
+                    principal = shares * float(asset['average_cost_basis'])
+                    
+                    # Use start_date if available, otherwise fall back to created_at
+                    if start_date:
+                        start_date_str = start_date.strftime('%Y-%m-%d') if hasattr(start_date, 'strftime') else str(start_date)
+                        logger.info(f"💰 CD {ticker}: Using start_date {start_date_str}")
+                    else:
+                        # Fallback to created_at for existing CDs without start_date
+                        created_at = asset.get('created_at')
+                        if created_at:
+                            start_date_str = created_at.strftime('%Y-%m-%d') if hasattr(created_at, 'strftime') else str(created_at)
+                            logger.warning(f"⚠️ CD {ticker}: Using created_at as fallback start_date {start_date_str}")
+                        else:
+                            # Final fallback to principal if no dates available
+                            asset_value = principal
+                            logger.warning(f"⚠️ CD {ticker}: No start date available, using principal ${asset_value}")
+                            continue
+                    
+                    maturity_date_str = maturity_date.strftime('%Y-%m-%d') if hasattr(maturity_date, 'strftime') else str(maturity_date)
+                    
+                    cd_calculation = calculate_cd_compound_interest(
+                        principal=principal,
+                        annual_rate=float(interest_rate),
+                        start_date=start_date_str,
+                        maturity_date=maturity_date_str,
+                        compounding_frequency='daily'
+                    )
+                    
+                    asset_value = cd_calculation['current_value']
+                    logger.info(f"💰 CD {ticker}: ${principal} → ${asset_value} (${cd_calculation['accrued_interest']} interest)")
                 else:
+                    # Fallback to cost basis if CD data is incomplete
+                    asset_value = shares * float(asset['average_cost_basis'])
+                    logger.warning(f"⚠️ CD {ticker}: Missing rate/maturity, using cost basis ${asset_value}")
+            else:
+                # Handle stocks, bonds, cash, etc. with market prices
+                try:
+                    price_data = fetch_stock_price_with_fallback(ticker)
+                    if price_data and 'current_price' in price_data:
+                        current_price = float(price_data['current_price'])
+                    else:
+                        current_price = float(asset['average_cost_basis'])
+                except:
                     current_price = float(asset['average_cost_basis'])
-            except:
-                current_price = float(asset['average_cost_basis'])
-            
-            asset_value = shares * current_price
+                
+                asset_value = shares * current_price
             
             # Convert to base currency if needed
             if currency != base_currency:
@@ -5158,12 +5577,23 @@ def fetch_stock_price_with_fallback(symbol):
     if cached_price:
         return cached_price
     
-    # API priority order: Finnhub -> Alpha Vantage -> Yahoo Finance -> Mock Data
-    apis = [
-        ('finnhub', fetch_from_finnhub), 
-        ('alphavantage', fetch_from_alphavantage_single),
-        ('yahoo', fetch_from_yahoo_finance)
-    ]
+    # API priority order: For Taiwan stocks, prioritize Yahoo Finance direct HTTP
+    # For other stocks, use Finnhub -> Alpha Vantage -> Yahoo Finance -> Mock Data
+    if symbol.upper().endswith('.TW') or symbol.upper().endswith('.TWO'):
+        # Taiwan stocks: Use Yahoo Finance direct HTTP first (no numpy dependency)
+        apis = [
+            ('yahoo_direct', fetch_from_yahoo_finance_direct),
+            ('finnhub', fetch_from_finnhub), 
+            ('alphavantage', fetch_from_alphavantage_single)
+        ]
+        logger.info(f"🇹🇼 Taiwan stock detected: {symbol}, using Yahoo Finance direct HTTP first")
+    else:
+        # Other stocks: Standard priority order
+        apis = [
+            ('finnhub', fetch_from_finnhub), 
+            ('alphavantage', fetch_from_alphavantage_single),
+            ('yahoo', fetch_from_yahoo_finance)
+        ]
     
     for api_name, fetch_func in apis:
         try:
@@ -5336,7 +5766,94 @@ def fetch_from_alphavantage_single(symbol):
     }
 
 def fetch_from_yahoo_finance(symbol):
-    """Fetch from Yahoo Finance (no API key required)"""
+    """Fetch from Yahoo Finance using yfinance library (no API key required)"""
+    try:
+        import yfinance as yf
+        logger.info(f"✅ yfinance imported successfully for {symbol}")
+        
+        # Create a Ticker object
+        ticker = yf.Ticker(symbol)
+        
+        # Get ticker info
+        info = ticker.info
+        logger.info(f"📊 Got ticker info for {symbol}, keys: {len(info.keys())}")
+        
+        # Try to get current price from multiple sources
+        current_price = None
+        previous_close = None
+        
+        # Method 1: Try regularMarketPrice and previousClose from info
+        current_price = info.get('regularMarketPrice')
+        previous_close = info.get('previousClose')
+        logger.info(f"Method 1 - regularMarketPrice: {current_price}, previousClose: {previous_close}")
+        
+        # Method 2: If not available, try currentPrice
+        if current_price is None:
+            current_price = info.get('currentPrice')
+            logger.info(f"Method 2 - currentPrice: {current_price}")
+        
+        # Method 3: If still not available, try historical data
+        if current_price is None or previous_close is None:
+            logger.info(f"Trying historical data for {symbol}")
+            try:
+                hist = ticker.history(period="2d")  # Get last 2 days
+                logger.info(f"Historical data shape: {hist.shape if not hist.empty else 'empty'}")
+                if not hist.empty:
+                    if current_price is None:
+                        current_price = hist['Close'].iloc[-1]  # Latest close
+                        logger.info(f"Got current_price from history: {current_price}")
+                    if previous_close is None and len(hist) > 1:
+                        previous_close = hist['Close'].iloc[-2]  # Previous close
+                        logger.info(f"Got previous_close from history: {previous_close}")
+                    elif previous_close is None:
+                        previous_close = current_price  # Use same price if only 1 day available
+                        logger.info(f"Using current_price as previous_close: {previous_close}")
+            except Exception as hist_error:
+                logger.warning(f"Historical data failed for {symbol}: {str(hist_error)}")
+        
+        if current_price is None:
+            raise Exception("Could not retrieve current price from yfinance")
+        
+        if previous_close is None:
+            previous_close = current_price  # Fallback to current price
+        
+        # Calculate change and change percent
+        change = current_price - previous_close
+        change_percent = (change / previous_close) * 100 if previous_close > 0 else 0
+        
+        # Get additional data with fallbacks
+        currency = info.get('currency', 'USD')
+        market_state = info.get('marketState', 'CLOSED')
+        
+        logger.info(f"✅ yfinance success for {symbol}: price={current_price}, currency={currency}")
+        
+        return {
+            'symbol': symbol,
+            'price': float(current_price),
+            'change': float(change),
+            'changePercent': float(change_percent),
+            'currency': currency,
+            'lastUpdated': datetime.now().isoformat(),
+            'marketStatus': map_yahoo_market_status(market_state),
+            'high': float(info.get('regularMarketDayHigh', current_price)),
+            'low': float(info.get('regularMarketDayLow', current_price)),
+            'open': float(info.get('regularMarketOpen', current_price)),
+            'previousClose': float(previous_close),
+            'volume': int(info.get('regularMarketVolume', 0))
+        }
+        
+    except ImportError as import_error:
+        # Fallback to direct HTTP if yfinance is not available
+        logger.warning(f"yfinance not available for {symbol}: {str(import_error)}")
+        return fetch_from_yahoo_finance_direct(symbol)
+    except Exception as e:
+        logger.error(f"yfinance error for {symbol}: {str(e)}")
+        # Try direct HTTP as fallback
+        logger.info(f"Trying direct HTTP fallback for {symbol}")
+        return fetch_from_yahoo_finance_direct(symbol)
+
+def fetch_from_yahoo_finance_direct(symbol):
+    """Fallback: Fetch from Yahoo Finance using direct HTTP - Updated to match working implementation"""
     import requests
     
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
@@ -5344,40 +5861,70 @@ def fetch_from_yahoo_finance(symbol):
         'User-Agent': 'Mozilla/5.0 (compatible; Worthy-Portfolio-App/1.0)'
     }
     
-    response = requests.get(url, headers=headers, timeout=10)
-    response.raise_for_status()
+    logger.info(f"🌐 Fetching {symbol} from Yahoo Finance direct HTTP: {url}")
     
-    data = response.json()
-    
-    if not data.get('chart') or not data['chart'].get('result'):
-        raise Exception("No data from Yahoo Finance API")
-    
-    result = data['chart']['result'][0]
-    meta = result.get('meta', {})
-    
-    current_price = meta.get('regularMarketPrice')
-    previous_close = meta.get('previousClose')
-    
-    if not current_price or not previous_close:
-        raise Exception("Incomplete data from Yahoo Finance API")
-    
-    change = current_price - previous_close
-    change_percent = (change / previous_close) * 100 if previous_close > 0 else 0
-    
-    return {
-        'symbol': symbol,
-        'price': current_price,
-        'change': change,
-        'changePercent': change_percent,
-        'currency': meta.get('currency', 'USD'),
-        'lastUpdated': datetime.now().isoformat(),
-        'marketStatus': map_yahoo_market_status(meta.get('marketState', 'CLOSED')),
-        'high': meta.get('regularMarketDayHigh', current_price),
-        'low': meta.get('regularMarketDayLow', current_price),
-        'open': meta.get('regularMarketOpen', current_price),
-        'previousClose': previous_close,
-        'volume': meta.get('regularMarketVolume', 0)
-    }
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        response.raise_for_status()  # Raise an HTTPError for bad responses (4xx or 5xx)
+        
+        data = response.json()
+        logger.info(f"📊 Yahoo Finance response structure for {symbol}: chart={bool(data.get('chart'))}")
+        
+        # Extract the price from the response - matching your working code
+        if data and 'chart' in data and 'result' in data['chart'] and data['chart']['result']:
+            meta_data = data['chart']['result'][0]['meta']
+            logger.info(f"📈 Meta data keys for {symbol}: {list(meta_data.keys())}")
+            
+            current_price = meta_data.get('regularMarketPrice')
+            if current_price is None:
+                current_price = meta_data.get('previousClose')  # Fallback to previous close
+                logger.info(f"⚠️ Using previousClose as fallback for {symbol}: {current_price}")
+            
+            if current_price:
+                previous_close = meta_data.get('previousClose', current_price)
+                change = current_price - previous_close
+                change_percent = (change / previous_close) * 100 if previous_close > 0 else 0
+                
+                currency = meta_data.get('currency', 'USD')
+                logger.info(f"✅ Yahoo Finance direct success for {symbol}: price={current_price}, currency={currency}")
+                
+                return {
+                    'symbol': symbol,
+                    'price': float(current_price),
+                    'change': float(change),
+                    'changePercent': float(change_percent),
+                    'currency': currency,
+                    'lastUpdated': datetime.now().isoformat(),
+                    'marketStatus': map_yahoo_market_status(meta_data.get('marketState', 'CLOSED')),
+                    'high': float(meta_data.get('regularMarketDayHigh', current_price)),
+                    'low': float(meta_data.get('regularMarketDayLow', current_price)),
+                    'open': float(meta_data.get('regularMarketOpen', current_price)),
+                    'previousClose': float(previous_close),
+                    'volume': int(meta_data.get('regularMarketVolume', 0))
+                }
+            else:
+                logger.error(f"❌ Could not find price data in the response for {symbol}")
+                raise Exception(f"Could not find price data for {symbol}")
+        else:
+            logger.error(f"❌ No valid chart data found for {symbol}")
+            raise Exception(f"No valid chart data found for {symbol}")
+            
+    except requests.exceptions.HTTPError as errh:
+        logger.error(f"❌ HTTP Error for {symbol}: {errh}")
+        raise Exception(f"HTTP Error: {errh}")
+    except requests.exceptions.ConnectionError as errc:
+        logger.error(f"❌ Connection Error for {symbol}: {errc}")
+        raise Exception(f"Connection Error: {errc}")
+    except requests.exceptions.Timeout as errt:
+        logger.error(f"❌ Timeout Error for {symbol}: {errt}")
+        raise Exception(f"Timeout Error: {errt}")
+    except requests.exceptions.RequestException as err:
+        logger.error(f"❌ Request Error for {symbol}: {err}")
+        raise Exception(f"Request Error: {err}")
+    except ValueError as e:  # For json.JSONDecodeError if response is not JSON
+        logger.error(f"❌ JSON Decode Error for {symbol}: {e}")
+        logger.error(f"Response content: {response.text[:200]}...")
+        raise Exception(f"JSON Decode Error: {e}")
 
 def get_mock_stock_price(symbol):
     """Get mock stock price data as fallback"""
@@ -5757,6 +6304,9 @@ def lambda_handler(event, context):
         # Log the incoming event
         logger.info(f"Received event: {json.dumps(event, default=str)}")
         
+        # Ensure CD columns exist (run once per cold start)
+        ensure_cd_columns_exist()
+        
         # Extract HTTP method and path
         http_method = event.get('httpMethod', '').upper()
         path = event.get('path', '')
@@ -5773,6 +6323,80 @@ def lambda_handler(event, context):
                 "timestamp": datetime.utcnow().isoformat(),
                 "environment": os_module.getenv('AWS_LAMBDA_FUNCTION_NAME', 'local')
             })
+        
+        elif http_method == 'GET' and path == '/test/cd-calculation':
+            # Test CD calculation endpoint
+            try:
+                # Example CD calculation
+                example_cd = calculate_cd_compound_interest(
+                    principal=10000,  # $10,000 initial investment
+                    annual_rate=4.5,  # 4.5% annual interest rate
+                    start_date='2024-01-01',  # Started January 1, 2024
+                    maturity_date='2025-01-01',  # Matures January 1, 2025
+                    compounding_frequency='daily'
+                )
+                
+                return create_response(200, {
+                    "message": "CD calculation example",
+                    "example": {
+                        "principal": 10000,
+                        "annual_rate": "4.5%",
+                        "term": "1 year (365 days)",
+                        "compounding": "daily",
+                        "start_date": "2024-01-01",
+                        "maturity_date": "2025-01-01"
+                    },
+                    "calculation": example_cd,
+                    "explanation": {
+                        "formula": "A = P(1 + r/n)^(nt)",
+                        "where": {
+                            "A": "Final amount",
+                            "P": "Principal ($10,000)",
+                            "r": "Annual rate (0.045)",
+                            "n": "Compounding periods per year (365)",
+                            "t": "Time in years"
+                        }
+                    }
+                })
+            except Exception as e:
+                return create_error_response(500, f"CD calculation error: {str(e)}")
+        
+        elif http_method == 'POST' and path == '/admin/migrate-cd-columns':
+            # Manual database migration endpoint for CD columns
+            try:
+                # Add interest_rate column
+                try:
+                    execute_update(DATABASE_URL, "ALTER TABLE assets ADD COLUMN interest_rate DECIMAL(5,4)")
+                    logger.info("Added interest_rate column")
+                    interest_rate_added = True
+                except Exception as e:
+                    logger.info(f"Interest rate column may already exist: {str(e)}")
+                    interest_rate_added = False
+                
+                # Add maturity_date column
+                try:
+                    execute_update(DATABASE_URL, "ALTER TABLE assets ADD COLUMN maturity_date DATE")
+                    logger.info("Added maturity_date column")
+                    maturity_date_added = True
+                except Exception as e:
+                    logger.info(f"Maturity date column may already exist: {str(e)}")
+                    maturity_date_added = False
+                
+                # Test the columns
+                test_result = execute_query(DATABASE_URL, "SELECT interest_rate, maturity_date FROM assets LIMIT 1")
+                
+                return create_response(200, {
+                    "message": "CD column migration completed",
+                    "results": {
+                        "interest_rate_added": interest_rate_added,
+                        "maturity_date_added": maturity_date_added,
+                        "columns_working": True
+                    },
+                    "next_steps": "You can now create CD assets with interest rates and maturity dates"
+                })
+                
+            except Exception as e:
+                return create_error_response(500, f"Migration failed: {str(e)}")
         
         elif http_method == 'GET' and path == '/cache/status':
             # Cache status endpoint for monitoring
@@ -5872,6 +6496,49 @@ def lambda_handler(event, context):
                 "version": "1.0.0",
                 "environment": "lambda"
             })
+        
+        # User profile routes
+        elif path.startswith('/user/'):
+            # Verify JWT token
+            request_headers = event.get('headers', {})
+            auth_result = verify_jwt_token(request_headers.get('Authorization', ''))
+            
+            if not auth_result['valid']:
+                return create_error_response(401, "Invalid or missing token")
+            
+            user_id = auth_result['user_id']
+            
+            # Handle user profile routes
+            if http_method == 'PUT' and path == '/user/profile':
+                # Update user profile
+                try:
+                    body = json.loads(event.get('body', '{}'))
+                    result = update_user_profile(user_id, body)
+                    
+                    if result['success']:
+                        return create_response(200, result)
+                    else:
+                        return create_error_response(400, result['message'])
+                except Exception as e:
+                    logger.error(f"Error updating user profile: {str(e)}")
+                    return create_error_response(500, f"Error updating profile: {str(e)}")
+            
+            elif http_method == 'GET' and path == '/user/profile':
+                # Get user profile
+                try:
+                    user = execute_query(
+                        DATABASE_URL,
+                        "SELECT user_id, name, email, base_currency, birth_year, created_at FROM users WHERE user_id = %s",
+                        (user_id,)
+                    )[0]
+                    
+                    return create_response(200, {"user": user})
+                except Exception as e:
+                    logger.error(f"Error getting user profile: {str(e)}")
+                    return create_error_response(500, f"Error getting profile: {str(e)}")
+            
+            else:
+                return create_error_response(404, f"Endpoint not found: {path}")
         
         # Authentication endpoints
         elif path.startswith('/auth/'):
@@ -6499,25 +7166,112 @@ def lambda_handler(event, context):
                 
                 if users:
                     user = users[0]
+                    
+                    # Get user's assets
+                    assets = execute_query(
+                        DATABASE_URL,
+                        "SELECT * FROM assets WHERE user_id = %s ORDER BY ticker_symbol",
+                        (user['user_id'],)
+                    )
+                    
+                    # Get user's transactions
+                    transactions = execute_query(
+                        DATABASE_URL,
+                        """
+                        SELECT t.*, a.ticker_symbol, a.asset_type 
+                        FROM transactions t
+                        JOIN assets a ON t.asset_id = a.asset_id
+                        WHERE a.user_id = %s
+                        ORDER BY t.transaction_date DESC, t.created_at DESC
+                        """,
+                        (user['user_id'],)
+                    )
+                    
+                    # Get user's dividends
+                    dividends = execute_query(
+                        DATABASE_URL,
+                        """
+                        SELECT d.*, a.ticker_symbol, a.total_shares as shares_owned, a.currency as asset_currency
+                        FROM dividends d
+                        JOIN assets a ON d.asset_id = a.asset_id
+                        WHERE d.user_id = %s
+                        ORDER BY d.payment_date DESC, d.created_at DESC
+                        """,
+                        (user['user_id'],)
+                    )
+                    
+                    # Format the data
+                    asset_list = []
+                    for asset in assets:
+                        asset_list.append({
+                            "asset_id": asset['asset_id'],
+                            "ticker_symbol": asset['ticker_symbol'],
+                            "asset_type": asset['asset_type'],
+                            "total_shares": float(asset['total_shares']),
+                            "average_cost_basis": float(asset['average_cost_basis']),
+                            "currency": asset['currency'],
+                            "created_at": asset['created_at'].isoformat()
+                        })
+                    
+                    transaction_list = []
+                    for txn in transactions:
+                        transaction_list.append({
+                            "transaction_id": txn['transaction_id'],
+                            "asset_id": txn['asset_id'],
+                            "ticker_symbol": txn['ticker_symbol'],
+                            "asset_type": txn['asset_type'],
+                            "transaction_type": txn['transaction_type'],
+                            "transaction_date": txn['transaction_date'].isoformat(),
+                            "shares": float(txn['shares']),
+                            "price_per_share": float(txn['price_per_share']),
+                            "total_amount": float(txn['shares']) * float(txn['price_per_share']),
+                            "currency": txn['currency'],
+                            "created_at": txn['created_at'].isoformat()
+                        })
+                    
+                    dividend_list = []
+                    for div in dividends:
+                        dividend_list.append({
+                            "dividend_id": div['dividend_id'],
+                            "asset_id": div['asset_id'],
+                            "ticker_symbol": div['ticker_symbol'],
+                            "dividend_per_share": float(div['dividend_per_share']),
+                            "total_dividend_amount": float(div['total_dividend_amount']),
+                            "shares_owned": float(div['shares_owned']),
+                            "currency": div['asset_currency'],
+                            "ex_dividend_date": div['ex_dividend_date'].isoformat() if div['ex_dividend_date'] else None,
+                            "payment_date": div['payment_date'].isoformat() if div['payment_date'] else None,
+                            "is_reinvested": div.get('is_reinvested', False),
+                            "created_at": div['created_at'].isoformat()
+                        })
+                    
                     return create_response(200, {
-                        "user_exists": True,
-                        "user_info": {
+                        "user_found": True,
+                        "user": {
                             "user_id": user['user_id'],
                             "name": user['name'],
                             "email": user['email'],
                             "base_currency": user['base_currency'],
                             "birth_year": user['birth_year'],
                             "created_at": user['created_at'].isoformat()
+                        },
+                        "assets": asset_list,
+                        "transactions": transaction_list,
+                        "dividends": dividend_list,
+                        "summary": {
+                            "total_assets": len(asset_list),
+                            "total_transactions": len(transaction_list),
+                            "total_dividends": len(dividend_list)
                         }
                     })
                 else:
                     return create_response(200, {
-                        "user_exists": False,
+                        "user_found": False,
                         "message": f"No user found with email: {email}"
                     })
                     
             except Exception as e:
-                logger.error(f"Database query error: {str(e)}")
+                logger.error(f"Check user error: {str(e)}")
                 return create_error_response(500, f"Database error: {str(e)}")
         
         elif path == '/test/stock-prices' and http_method == 'GET':

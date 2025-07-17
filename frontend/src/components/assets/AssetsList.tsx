@@ -178,7 +178,8 @@ export const AssetsList: React.FC = () => {
       'Cash': 'success',
       'Bond': 'warning',
       'REIT': 'info',
-      'Mutual Fund': 'error'
+      'Mutual Fund': 'error',
+      'CD': 'success'
     };
     return colors[type] || 'default';
   };
@@ -544,8 +545,20 @@ export const AssetsList: React.FC = () => {
                   </TableHead>
                   <TableBody>
                     {assets.map((asset) => {
-                      const currentPrice = currentPrices.get(asset.ticker_symbol);
-                      const marketValue = currentPrice ? asset.total_shares * currentPrice : asset.total_shares * asset.average_cost_basis;
+                      // Handle CD assets differently - use compound interest calculation
+                      let marketValue: number;
+                      let currentPrice: number | undefined;
+                      
+                      if (asset.asset_type === 'CD' && asset.cd_details) {
+                        // For CD assets, use the compound interest calculation
+                        marketValue = asset.cd_details.current_value;
+                        currentPrice = asset.cd_details.current_value / asset.total_shares; // Effective price per share
+                      } else {
+                        // For other assets, use market price
+                        currentPrice = currentPrices.get(asset.ticker_symbol);
+                        marketValue = currentPrice ? asset.total_shares * currentPrice : asset.total_shares * asset.average_cost_basis;
+                      }
+                      
                       const priceChange = currentPrice ? calculatePriceChange(currentPrice, asset.average_cost_basis) : null;
                       
                       return (
@@ -601,7 +614,41 @@ export const AssetsList: React.FC = () => {
                             </Typography>
                           </TableCell>
                           <TableCell align="right" sx={{ py: { xs: 2, md: 2.5 } }}>
-                            {currentPrice ? (
+                            {asset.asset_type === 'CD' && asset.cd_details ? (
+                              // CD-specific display
+                              <Stack direction="column" alignItems="flex-end" spacing={0.5}>
+                                <Typography 
+                                  variant="body2"
+                                  sx={{ 
+                                    fontSize: { xs: '0.875rem', md: '1rem' },
+                                    fontWeight: 'medium',
+                                    color: 'success.main'
+                                  }}
+                                >
+                                  {asset.interest_rate}% APY
+                                </Typography>
+                                <Typography 
+                                  variant="caption"
+                                  sx={{ 
+                                    color: 'text.secondary',
+                                    fontSize: '0.75rem'
+                                  }}
+                                >
+                                  {asset.cd_details.is_matured ? 'Matured' : `${asset.cd_details.elapsed_days}/${asset.cd_details.total_days} days`}
+                                </Typography>
+                                {asset.cd_details.accrued_interest > 0 && (
+                                  <Typography 
+                                    variant="caption"
+                                    sx={{ 
+                                      color: 'success.main',
+                                      fontSize: '0.75rem'
+                                    }}
+                                  >
+                                    +{formatCurrency(asset.cd_details.accrued_interest, asset.currency)} interest
+                                  </Typography>
+                                )}
+                              </Stack>
+                            ) : currentPrice ? (
                               <Stack direction="column" alignItems="flex-end" spacing={0.5}>
                                 <Typography 
                                   variant="body2"

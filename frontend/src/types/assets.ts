@@ -9,6 +9,25 @@ export interface Asset {
   created_at: string;
   updated_at?: string;
   transactions?: Transaction[];
+  
+  // CD-specific fields
+  interest_rate?: number; // Annual interest rate as percentage
+  maturity_date?: string; // ISO date string
+  cd_details?: CDDetails; // Compound interest calculations
+  current_market_value?: number; // For CDs, this includes accrued interest
+  accrued_interest?: number; // Interest earned so far
+}
+
+export interface CDDetails {
+  current_value: number;
+  accrued_interest: number;
+  total_days: number;
+  elapsed_days: number;
+  maturity_value: number;
+  annual_rate: number;
+  is_matured: boolean;
+  compounding_frequency: string;
+  effective_annual_rate: number;
 }
 
 export interface Transaction {
@@ -44,6 +63,11 @@ export interface CreateAssetRequest {
   total_shares: number;
   average_cost_basis: number;
   currency: string;
+  
+  // CD-specific fields
+  interest_rate?: number; // Annual interest rate as percentage
+  maturity_date?: string; // ISO date string (YYYY-MM-DD)
+  start_date?: string; // ISO date string (YYYY-MM-DD) - when the CD was purchased
 }
 
 export interface CreateTransactionRequest {

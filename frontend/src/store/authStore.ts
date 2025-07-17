@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { AuthState, User, LoginRequest, RegisterRequest } from '../types/auth';
 import { authAPI } from '../services/api';
+import { userAPI, type UpdateProfileRequest } from '../services/userApi';
 
 interface AuthActions {
   login: (credentials: LoginRequest) => Promise<void>;
@@ -12,6 +13,7 @@ interface AuthActions {
   initialize: () => void;
   startTokenRefresh: () => void;
   stopTokenRefresh: () => void;
+  updateProfile: (profileData: UpdateProfileRequest) => Promise<void>;
 }
 
 type AuthStore = AuthState & AuthActions;
@@ -250,5 +252,31 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
 
   setLoading: (loading: boolean) => {
     set({ isLoading: loading });
+  },
+
+  updateProfile: async (profileData: UpdateProfileRequest) => {
+    try {
+      set({ isLoading: true, error: null });
+      
+      // Call API to update profile
+      const response = await userAPI.updateProfile(profileData);
+      
+      // Update local storage with new user data
+      localStorage.setItem('worthy_user', JSON.stringify(response.user));
+      
+      // Update state
+      set({
+        user: response.user,
+        isLoading: false,
+        error: null,
+      });
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || 'Failed to update profile';
+      set({
+        isLoading: false,
+        error: errorMessage,
+      });
+      throw error;
+    }
   },
 }));
