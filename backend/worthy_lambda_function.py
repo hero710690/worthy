@@ -14,6 +14,7 @@ import requests
 import pytz
 import math
 from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
 from email_validator import validate_email, EmailNotValidError
 
 # Caching imports
@@ -103,7 +104,7 @@ def update_user_profile(user_id, profile_data):
         params.append(user_id)
         
         # Execute update query
-        execute_query(
+        execute_update(
             DATABASE_URL,
             f"UPDATE users SET {', '.join(update_fields)} WHERE user_id = %s",
             tuple(params)
@@ -115,6 +116,10 @@ def update_user_profile(user_id, profile_data):
             "SELECT user_id, name, email, base_currency, birth_year, created_at FROM users WHERE user_id = %s",
             (user_id,)
         )[0]
+        
+        # Convert datetime to string for JSON serialization
+        if updated_user.get('created_at'):
+            updated_user['created_at'] = updated_user['created_at'].isoformat()
         
         return {
             "success": True,
@@ -2445,7 +2450,7 @@ def handle_get_dividends(user_id):
                 'currency': asset_currency,  # Use asset currency, not dividend currency
                 'base_currency': base_currency,
                 'exchange_rate_used': exchange_rates.get(asset_currency) if asset_currency != base_currency else 1.0,
-                'tax_rate': float(d.get('tax_rate', 20.0)),  # Include tax rate, default to 20%
+                'tax_rate': float(d['tax_rate']) if 'tax_rate' in d and d['tax_rate'] is not None else 20.0,  # Handle 0 as valid tax rate
                 'status': 'processed' if d.get('is_reinvested', False) else 'pending',
                 'created_at': d['created_at'].isoformat() if d['created_at'] else None,
                 'updated_at': d['updated_at'].isoformat() if d['updated_at'] else None
@@ -2482,7 +2487,8 @@ def handle_create_dividend(body, user_id):
         dividend_per_share = float(body['dividend_per_share'])
         ex_dividend_date = body['ex_dividend_date']
         payment_date = body['payment_date']
-        tax_rate = float(body.get('tax_rate', 20.0))  # Default to 20% if not provided
+        # Handle tax_rate properly - 0 is a valid value, only use default if not provided
+        tax_rate = float(body['tax_rate']) if 'tax_rate' in body else 20.0
         
         # Verify asset belongs to user and get details including currency
         asset = execute_query(
@@ -2570,7 +2576,8 @@ def handle_process_dividend(dividend_id, body, user_id):
                 
                 # 🔧 FIXED: Calculate after-tax dividend amount for reinvestment
                 # In real life, dividends are taxed before reinvestment
-                tax_rate = float(dividend.get('tax_rate', 20.0))  # Default 20% if not set
+                # Handle tax_rate properly - 0 is a valid value, only use default if not set
+                tax_rate = float(dividend['tax_rate']) if 'tax_rate' in dividend and dividend['tax_rate'] is not None else 20.0
                 gross_dividend_amount = float(dividend['total_dividend_amount'])
                 after_tax_dividend_amount = gross_dividend_amount * (1 - tax_rate / 100)
                 
@@ -2640,7 +2647,8 @@ def handle_process_dividend(dividend_id, body, user_id):
             
             # 🔧 FIXED: Calculate after-tax dividend amount for cash
             # In real life, dividends are taxed before being added to cash
-            tax_rate = float(dividend.get('tax_rate', 20.0))  # Default 20% if not set
+            # Handle tax_rate properly - 0 is a valid value, only use default if not set
+            tax_rate = float(dividend['tax_rate']) if 'tax_rate' in dividend and dividend['tax_rate'] is not None else 20.0
             gross_dividend_amount = float(dividend['total_dividend_amount'])
             after_tax_dividend_amount = gross_dividend_amount * (1 - tax_rate / 100)
             
@@ -2827,7 +2835,7 @@ def handle_update_dividend(dividend_id, body, user_id):
                 "total_dividend": float(updated_dividend['total_dividend_amount']),
                 "shares_owned": float(updated_dividend['shares_owned']),
                 "currency": updated_dividend['asset_currency'],
-                "tax_rate": float(updated_dividend.get('tax_rate', 20.0)),
+                "tax_rate": float(updated_dividend['tax_rate']) if 'tax_rate' in updated_dividend and updated_dividend['tax_rate'] is not None else 20.0,
                 "status": "processed" if updated_dividend.get('is_reinvested', False) else "pending",
                 "created_at": updated_dividend['created_at'].isoformat(),
                 "updated_at": updated_dividend['updated_at'].isoformat() if updated_dividend['updated_at'] else None
@@ -3254,9 +3262,9 @@ def handle_create_recurring_investment(body, user_id):
         elif frequency == 'weekly':
             next_run_date = start_dt + timedelta(weeks=1)
         elif frequency == 'monthly':
-            next_run_date = start_dt + timedelta(days=30)  # Approximate
+            next_run_date = start_dt + relativedelta(months=1)  # Approximate
         elif frequency == 'quarterly':
-            next_run_date = start_dt + timedelta(days=90)  # Approximate
+            next_run_date = start_dt + relativedelta(months=3)  # Approximate
         
         # Create recurring investment
         execute_update(

@@ -513,24 +513,6 @@ export const AssetInitForm: React.FC<AssetInitFormProps> = ({
                 <TextField
                   fullWidth
                   type="date"
-                  label="Maturity Date"
-                  value={formData.maturity_date || ''}
-                  onChange={handleInputChange('maturity_date')}
-                  disabled={loading}
-                  helperText="When the CD matures"
-                  InputLabelProps={{
-                    shrink: true,
-                  }}
-                  inputProps={{
-                    min: new Date().toISOString().split('T')[0], // Today's date as minimum
-                  }}
-                />
-              </Grid>
-
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  type="date"
                   label="Start Date"
                   value={formData.start_date || ''}
                   onChange={handleInputChange('start_date')}
@@ -541,6 +523,24 @@ export const AssetInitForm: React.FC<AssetInitFormProps> = ({
                   }}
                   inputProps={{
                     max: new Date().toISOString().split('T')[0], // Today's date as maximum
+                  }}
+                />
+              </Grid>
+
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  type="date"
+                  label="Maturity Date"
+                  value={formData.maturity_date || ''}
+                  onChange={handleInputChange('maturity_date')}
+                  disabled={loading}
+                  helperText="When the CD matures"
+                  InputLabelProps={{
+                    shrink: true,
+                  }}
+                  inputProps={{
+                    min: new Date().toISOString().split('T')[0], // Today's date as minimum
                   }}
                 />
               </Grid>

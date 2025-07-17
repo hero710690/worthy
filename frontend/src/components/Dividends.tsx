@@ -54,11 +54,11 @@ export const Dividends: React.FC = () => {
   const [taxRateEditDialog, setTaxRateEditDialog] = useState<{
     open: boolean;
     dividend: Dividend | null;
-    newTaxRate: number;
+    newTaxRate: string; // Changed to string to handle input better
   }>({
     open: false,
     dividend: null,
-    newTaxRate: 20
+    newTaxRate: '20'
   });
 
   // Additional state for dividend response data
@@ -218,7 +218,7 @@ export const Dividends: React.FC = () => {
     setTaxRateEditDialog({
       open: true,
       dividend,
-      newTaxRate: dividend.tax_rate || 20
+      newTaxRate: (dividend.tax_rate ?? 20).toString() // Use nullish coalescing to handle 0 properly
     });
   };
 
@@ -226,7 +226,7 @@ export const Dividends: React.FC = () => {
     setTaxRateEditDialog({
       open: false,
       dividend: null,
-      newTaxRate: 20
+      newTaxRate: '20'
     });
   };
 
@@ -235,7 +235,16 @@ export const Dividends: React.FC = () => {
 
     try {
       const dividendId = taxRateEditDialog.dividend.dividend_id;
-      const newTaxRate = taxRateEditDialog.newTaxRate;
+      const taxRateInput = taxRateEditDialog.newTaxRate.trim();
+      
+      // Handle empty input - default to 0
+      const newTaxRate = taxRateInput === '' ? 0 : parseFloat(taxRateInput);
+
+      // Validate the tax rate - explicitly allow 0
+      if (isNaN(newTaxRate) || newTaxRate < 0 || newTaxRate > 100) {
+        setError('Tax rate must be a valid number between 0 and 100 (inclusive)');
+        return;
+      }
 
       // Update the dividend in the local state immediately for responsive UI
       setDividends(prevDividends => 
@@ -580,7 +589,7 @@ export const Dividends: React.FC = () => {
                       <TableCell>
                         <Stack direction="row" alignItems="center" spacing={1}>
                           <Typography variant="body2">
-                            {(dividend.tax_rate || 20).toFixed(1)}%
+                            {(dividend.tax_rate ?? 20).toFixed(1)}%
                           </Typography>
                           <Tooltip title="Edit tax rate">
                             <IconButton 
@@ -598,14 +607,14 @@ export const Dividends: React.FC = () => {
                           <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
                             {formatCurrency(
                               (dividend.total_dividend_base_currency || dividend.total_dividend) * 
-                              (1 - (dividend.tax_rate || 20) / 100), 
+                              (1 - (dividend.tax_rate ?? 20) / 100), 
                               dividendSummary.base_currency
                             )}
                           </Typography>
                           {dividend.currency !== dividendSummary.base_currency && dividend.total_dividend_base_currency && (
                             <Typography variant="caption" color="text.secondary">
                               {formatCurrency(
-                                dividend.total_dividend * (1 - (dividend.tax_rate || 20) / 100), 
+                                dividend.total_dividend * (1 - (dividend.tax_rate ?? 20) / 100), 
                                 dividend.currency
                               )} {dividend.currency}
                             </Typography>
@@ -700,7 +709,7 @@ export const Dividends: React.FC = () => {
                       <TableCell>
                         <Stack direction="row" alignItems="center" spacing={1}>
                           <Typography variant="body2">
-                            {(dividend.tax_rate || 20).toFixed(1)}%
+                            {(dividend.tax_rate ?? 20).toFixed(1)}%
                           </Typography>
                           <Tooltip title="Edit tax rate">
                             <IconButton 
@@ -718,14 +727,14 @@ export const Dividends: React.FC = () => {
                           <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'success.main' }}>
                             {formatCurrency(
                               (dividend.total_dividend_base_currency || dividend.total_dividend) * 
-                              (1 - (dividend.tax_rate || 20) / 100), 
+                              (1 - (dividend.tax_rate ?? 20) / 100), 
                               dividendSummary.base_currency
                             )}
                           </Typography>
                           {dividend.currency !== dividendSummary.base_currency && dividend.total_dividend_base_currency && (
                             <Typography variant="caption" color="text.secondary">
                               {formatCurrency(
-                                dividend.total_dividend * (1 - (dividend.tax_rate || 20) / 100), 
+                                dividend.total_dividend * (1 - (dividend.tax_rate ?? 20) / 100), 
                                 dividend.currency
                               )} {dividend.currency}
                             </Typography>
@@ -805,9 +814,15 @@ export const Dividends: React.FC = () => {
               type="number"
               label="Tax Rate (%)"
               value={addForm.tax_rate}
-              onChange={(e) => setAddForm(prev => ({ ...prev, tax_rate: Number(e.target.value) }))}
+              onChange={(e) => {
+                const value = e.target.value;
+                const numericValue = value === '' ? 0 : parseFloat(value);
+                if (!isNaN(numericValue) && numericValue >= 0 && numericValue <= 100) {
+                  setAddForm(prev => ({ ...prev, tax_rate: numericValue }));
+                }
+              }}
               inputProps={{ min: 0, max: 100, step: 0.1 }}
-              helperText="Default is 20%. You can modify this later in the table."
+              helperText="Enter 0 for tax-free dividends. Default is 20%. You can modify this later in the table."
             />
           </Stack>
         </DialogContent>
@@ -938,12 +953,14 @@ export const Dividends: React.FC = () => {
                 type="number"
                 label="Tax Rate (%)"
                 value={taxRateEditDialog.newTaxRate}
-                onChange={(e) => setTaxRateEditDialog(prev => ({ 
-                  ...prev, 
-                  newTaxRate: Number(e.target.value) 
-                }))}
+                onChange={(e) => {
+                  setTaxRateEditDialog(prev => ({ 
+                    ...prev, 
+                    newTaxRate: e.target.value
+                  }));
+                }}
                 inputProps={{ min: 0, max: 100, step: 0.1 }}
-                helperText="Enter the tax rate as a percentage (0-100%)"
+                helperText="Enter the tax rate as a percentage (0-100%). Use 0 for tax-free dividends."
               />
 
               <Box sx={{ p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
@@ -961,13 +978,20 @@ export const Dividends: React.FC = () => {
                     </Typography>
                   </Stack>
                   <Stack direction="row" justifyContent="space-between">
-                    <Typography variant="body2">Tax ({taxRateEditDialog.newTaxRate.toFixed(1)}%):</Typography>
-                    <Typography variant="body2" color="error.main">
-                      -{formatCurrency(
-                        (taxRateEditDialog.dividend.total_dividend_base_currency || taxRateEditDialog.dividend.total_dividend) * 
-                        (taxRateEditDialog.newTaxRate / 100), 
-                        dividendSummary.base_currency
-                      )}
+                    <Typography variant="body2">
+                      Tax ({parseFloat(taxRateEditDialog.newTaxRate || '0').toFixed(1)}%):
+                    </Typography>
+                    <Typography 
+                      variant="body2" 
+                      color={parseFloat(taxRateEditDialog.newTaxRate || '0') === 0 ? 'text.secondary' : 'error.main'}
+                    >
+                      {parseFloat(taxRateEditDialog.newTaxRate || '0') === 0 ? 'Tax-free' : 
+                        `-${formatCurrency(
+                          (taxRateEditDialog.dividend.total_dividend_base_currency || taxRateEditDialog.dividend.total_dividend) * 
+                          (parseFloat(taxRateEditDialog.newTaxRate || '0') / 100), 
+                          dividendSummary.base_currency
+                        )}`
+                      }
                     </Typography>
                   </Stack>
                   <Stack direction="row" justifyContent="space-between" sx={{ borderTop: 1, borderColor: 'divider', pt: 1 }}>
@@ -975,7 +999,7 @@ export const Dividends: React.FC = () => {
                     <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
                       {formatCurrency(
                         (taxRateEditDialog.dividend.total_dividend_base_currency || taxRateEditDialog.dividend.total_dividend) * 
-                        (1 - taxRateEditDialog.newTaxRate / 100), 
+                        (1 - parseFloat(taxRateEditDialog.newTaxRate || '0') / 100), 
                         dividendSummary.base_currency
                       )}
                     </Typography>
