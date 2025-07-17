@@ -114,13 +114,27 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   // Actions
   login: async (credentials: LoginRequest) => {
     try {
+      console.log('🔑 Login attempt with:', { email: credentials.email });
       set({ isLoading: true, error: null });
       
       const response = await authAPI.login(credentials);
+      console.log('✅ Login successful, received data:', { 
+        token: response.token ? '✓ Present' : '✗ Missing',
+        user: response.user ? '✓ Present' : '✗ Missing'
+      });
+      
+      // Check if user data from login includes profile fields
+      console.log('👤 User data from login:', {
+        name: response.user?.name,
+        email: response.user?.email,
+        base_currency: response.user?.base_currency,
+        birth_year: response.user?.birth_year
+      });
       
       // Store token and user data
       localStorage.setItem('worthy_token', response.token);
       localStorage.setItem('worthy_user', JSON.stringify(response.user));
+      console.log('💾 Saved user data to localStorage');
       
       set({
         user: response.user,
@@ -133,6 +147,7 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       // Start automatic token refresh
       get().startTokenRefresh();
     } catch (error: any) {
+      console.error('❌ Login failed:', error);
       const errorMessage = error.response?.data?.message || 'Login failed';
       set({
         isLoading: false,
@@ -223,16 +238,39 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       // Verify token with backend
       await authAPI.verifyToken();
       
-      // Token is valid, restore user state
-      const user: User = JSON.parse(userStr);
-      set({
-        user,
-        token,
-        isAuthenticated: true,
-        isLoading: false,
-        error: null,
-      });
+      // Token is valid, try to get fresh user data from backend
+      try {
+        const profileResponse = await userAPI.getProfile();
+        const freshUser = profileResponse.user;
+        
+        // Update localStorage with fresh data
+        localStorage.setItem('worthy_user', JSON.stringify(freshUser));
+        
+        set({
+          user: freshUser,
+          token,
+          isAuthenticated: true,
+          isLoading: false,
+          error: null,
+        });
+        
+        console.log('✅ Token verified and user profile refreshed from backend');
+      } catch (profileError) {
+        console.warn('⚠️ Token valid but failed to refresh profile, using cached data:', profileError);
+        
+        // Fallback to cached user data if profile fetch fails
+        const user: User = JSON.parse(userStr);
+        set({
+          user,
+          token,
+          isAuthenticated: true,
+          isLoading: false,
+          error: null,
+        });
+      }
     } catch (error) {
+      console.error('❌ Token verification failed:', error);
+      
       // Token is invalid, clear everything
       localStorage.removeItem('worthy_token');
       localStorage.removeItem('worthy_user');

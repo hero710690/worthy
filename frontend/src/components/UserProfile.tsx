@@ -70,16 +70,13 @@ export const UserProfile: React.FC = () => {
       setLoading(true);
       setError(null);
       
-      // Call the userAPI to update the profile
-      const response = await userAPI.updateProfile({
+      // Use the auth store's updateProfile method for consistency
+      await updateProfile({
         name: formData.name,
         email: formData.email,
         base_currency: formData.base_currency,
         birth_year: formData.birth_year
       });
-      
-      // Update the auth store with the new user data
-      useAuthStore.setState({ user: response.user });
       
       setSuccess(true);
       setIsEditing(false);
