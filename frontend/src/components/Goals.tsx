@@ -83,7 +83,8 @@ const Goals: React.FC = () => {
     fireNumber: 2000000,
     principal: 0,
     pmtMonthlyBarista: 2000,
-    calcMode: "coast" as "coast" | "barista"
+    calcMode: "coast" as "coast" | "barista",
+    withdrawalRate: 4.0 // 🔧 ADDED: Default withdrawal rate to prevent crashes
   });
 
   // 🆕 NEW: FIRE calculation results for Dashboard tab
