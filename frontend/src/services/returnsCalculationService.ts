@@ -34,8 +34,29 @@ class ReturnsCalculationService {
       });
       
       return transactions;
-    } catch (error) {
+    } catch (error: any) {
       console.error(`❌ Error fetching transactions for asset ${assetId}:`, error);
+      
+      // If it's a 400 error (endpoint not found), try to get transactions from asset details
+      if (error.response?.status === 400) {
+        console.log(`🔄 Trying to get transactions from asset details for asset ${assetId}`);
+        try {
+          const assetResponse = await assetAPI.getAsset(assetId);
+          const transactions = assetResponse.transactions || [];
+          
+          // Cache the result
+          this.transactionsCache.set(assetId, {
+            data: transactions,
+            timestamp: Date.now()
+          });
+          
+          return transactions;
+        } catch (fallbackError) {
+          console.error(`❌ Fallback error for asset ${assetId}:`, fallbackError);
+          return [];
+        }
+      }
+      
       return [];
     }
   }

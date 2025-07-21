@@ -1,272 +1,549 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
   Card,
   CardContent,
+  Alert,
+  CircularProgress,
+  Button,
   Grid,
   Stack,
-  Alert,
   Chip,
+  Divider,
 } from '@mui/material';
-import {
-  Analytics as AnalyticsIcon,
-  TrendingUp,
-  Assessment,
-  ShowChart,
-  PieChart,
-  BarChart,
+import { 
+  Assessment, 
+  TrendingUp, 
+  TrendingDown, 
+  TrendingFlat,
+  Refresh,
 } from '@mui/icons-material';
+import { useAuthStore } from '../store/authStore';
+import { assetAPI } from '../services/assetApi';
+import { portfolioAPI, type PortfolioValueChangesResponse } from '../services/portfolioApi';
+import { returnsCalculationService } from '../services/returnsCalculationService';
+import { fireApi } from '../services/fireApi';
+import type { PortfolioReturns } from '../types/returns';
 
 export const Analytics: React.FC = () => {
-  return (
-    <Box sx={{ p: { xs: 2, md: 3 } }}>
-      {/* Header */}
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 1 }}>
-          Portfolio Analytics
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          Advanced analytics and insights for your investment portfolio
+  const { user } = useAuthStore();
+  const [assets, setAssets] = useState<any[]>([]);
+  const [portfolioChanges, setPortfolioChanges] = useState<PortfolioValueChangesResponse | null>(null);
+  const [portfolioReturns, setPortfolioReturns] = useState<PortfolioReturns | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [updatingFIREProfile, setUpdatingFIREProfile] = useState(false);
+
+  const fetchAssetData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      console.log('🔄 Fetching asset data for analytics...');
+      const response = await assetAPI.getAssets();
+      console.log('✅ Assets fetched:', response.assets.length, 'assets');
+      setAssets(response.assets);
+      
+      setError(null);
+    } catch (error: any) {
+      console.error('❌ Failed to fetch asset data:', error);
+      setError(error.response?.data?.message || error.message || 'Failed to fetch asset data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchPortfolioChanges = async () => {
+    try {
+      setRefreshing(true);
+      console.log('🔄 Fetching portfolio value changes...');
+      const changes = await portfolioAPI.getPortfolioValueChanges();
+      console.log('✅ Portfolio changes fetched:', changes);
+      setPortfolioChanges(changes);
+    } catch (error: any) {
+      console.error('❌ Failed to fetch portfolio changes:', error);
+      // Don't set error state for portfolio changes, just log it
+      // The component can still show assets without performance data
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const fetchPortfolioReturns = async () => {
+    try {
+      if (assets.length === 0) {
+        setPortfolioReturns(null);
+        return;
+      }
+      
+      console.log('🔄 Calculating portfolio returns...');
+      const baseCurrency = user?.base_currency || 'USD';
+      const returns = await returnsCalculationService.calculatePortfolioReturns(assets, baseCurrency);
+      console.log('✅ Portfolio returns calculated:', returns);
+      setPortfolioReturns(returns);
+    } catch (error: any) {
+      console.error('❌ Failed to calculate portfolio returns:', error);
+      // Don't set error state for returns calculation failure
+      setPortfolioReturns(null);
+    }
+  };
+
+  const fetchAllData = async () => {
+    await Promise.all([
+      fetchAssetData(),
+      fetchPortfolioChanges(),
+    ]);
+    
+    // Calculate returns after assets are loaded
+    if (assets.length > 0) {
+      await fetchPortfolioReturns();
+    }
+  };
+
+  useEffect(() => {
+    if (user) {
+      fetchAllData();
+    }
+  }, [user]);
+
+  // Calculate returns when assets change
+  useEffect(() => {
+    if (assets.length > 0) {
+      fetchPortfolioReturns();
+    }
+  }, [assets]);
+
+  const updateFIREProfileWithCalculatedReturn = async () => {
+    if (!portfolioReturns || !user) {
+      return;
+    }
+
+    try {
+      setUpdatingFIREProfile(true);
+      
+      // Get current FIRE profile
+      const profileResponse = await fireApi.getFIREProfile();
+      
+      if (!profileResponse.fire_profile) {
+        alert('Please set up your FIRE profile first in the Goals page before using calculated returns.');
+        return;
+      }
+
+      const currentProfile = profileResponse.fire_profile;
+      const calculatedReturn = portfolioReturns.portfolioAnnualizedReturnPercent / 100; // Convert to decimal
+      
+      // Update the profile with calculated return
+      const updatedProfile = {
+        annual_expenses: currentProfile.annual_expenses,
+        target_retirement_age: currentProfile.target_retirement_age,
+        annual_income: currentProfile.annual_income || 100000,
+        safe_withdrawal_rate: currentProfile.safe_withdrawal_rate,
+        expected_return_pre_retirement: calculatedReturn,
+        expected_return_post_retirement: currentProfile.expected_return_post_retirement || 0.05,
+        expected_inflation_rate: currentProfile.expected_inflation_rate,
+        other_passive_income: currentProfile.other_passive_income || 0,
+        effective_tax_rate: currentProfile.effective_tax_rate || 0.15,
+        barista_monthly_contribution: currentProfile.barista_monthly_contribution || 0,
+        inflation_rate: currentProfile.inflation_rate
+      };
+
+      await fireApi.createOrUpdateFIREProfile(updatedProfile);
+      
+      alert(`✅ FIRE profile updated! Expected return set to ${portfolioReturns.portfolioAnnualizedReturnPercent.toFixed(2)}% based on your portfolio performance.`);
+      
+    } catch (error: any) {
+      console.error('❌ Failed to update FIRE profile:', error);
+      alert('Failed to update FIRE profile. Please try again.');
+    } finally {
+      setUpdatingFIREProfile(false);
+    }
+  };
+
+  // Helper function to format currency
+  const formatCurrency = (amount: number, currency: string = 'USD') => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currency,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount);
+  };
+
+  // Helper function to get trend icon and color
+  const getTrendDisplay = (change: number) => {
+    if (change > 0) {
+      return {
+        icon: <TrendingUp />,
+        color: 'success.main',
+        sign: '+',
+      };
+    } else if (change < 0) {
+      return {
+        icon: <TrendingDown />,
+        color: 'error.main',
+        sign: '',
+      };
+    } else {
+      return {
+        icon: <TrendingFlat />,
+        color: 'text.secondary',
+        sign: '',
+      };
+    }
+  };
+
+  if (loading) {
+    return (
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        minHeight: '60vh',
+        flexDirection: 'column',
+        gap: 2,
+        p: { xs: 2, md: 3 }
+      }}>
+        <CircularProgress size={60} />
+        <Typography variant="h6" color="text.secondary">
+          Loading analytics data...
         </Typography>
       </Box>
+    );
+  }
 
-      {/* Coming Soon Alert */}
-      <Alert severity="info" sx={{ mb: 4 }}>
-        <Typography variant="body2">
-          <strong>Coming in Milestone 6:</strong> Advanced portfolio analytics including performance metrics, 
-          risk assessment, and detailed charts will be available soon.
-        </Typography>
+  if (error) {
+    return (
+      <Alert severity="error" sx={{ mb: 2 }}>
+        {error}
+        <Button onClick={() => fetchAllData()} sx={{ ml: 2 }}>
+          Retry
+        </Button>
       </Alert>
+    );
+  }
 
-      {/* Analytics Features Preview */}
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={6}>
-          <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', height: '100%' }}>
-            <CardContent>
-              <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
-                <Box
-                  sx={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: 2,
-                    bgcolor: 'primary.main',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'white'
-                  }}
-                >
-                  <TrendingUp />
-                </Box>
-                <Box>
-                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                    Performance Metrics
-                  </Typography>
-                  <Chip label="Coming Soon" size="small" color="primary" variant="outlined" />
-                </Box>
-              </Stack>
+  // Handle case where user has no assets
+  if (assets.length === 0) {
+    return (
+      <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1400, mx: 'auto' }}>
+        <Box sx={{ mb: 4 }}>
+          <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 1, color: 'primary.main' }}>
+            Portfolio Analytics
+          </Typography>
+          <Typography variant="body1" color="text.secondary">
+            Advanced performance metrics and investment analysis
+          </Typography>
+        </Box>
+        
+        <Alert severity="info" sx={{ mb: 3 }}>
+          <Typography variant="h6" sx={{ mb: 1 }}>
+            No Assets Found
+          </Typography>
+          <Typography variant="body1">
+            You need to add assets to your portfolio before you can view analytics. 
+            Start by adding your first investment asset to see detailed performance metrics, 
+            returns analysis, and portfolio insights.
+          </Typography>
+        </Alert>
+        
+        <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200' }}>
+          <CardContent sx={{ p: 4, textAlign: 'center' }}>
+            <Assessment sx={{ fontSize: 80, color: 'primary.main', mb: 2 }} />
+            <Typography variant="h5" sx={{ fontWeight: 'bold', mb: 2 }}>
+              Ready to Track Your Investments?
+            </Typography>
+            <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+              Add your first asset to unlock powerful analytics features.
+            </Typography>
+            <Button 
+              variant="contained" 
+              size="large" 
+              href="/portfolio"
+              sx={{ borderRadius: 2, px: 4 }}
+            >
+              Add Your First Asset
+            </Button>
+          </CardContent>
+        </Card>
+      </Box>
+    );
+  }
+
+  // Simple analytics view for users with assets
+  return (
+    <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 1400, mx: 'auto' }}>
+      {/* Header */}
+      <Box sx={{ mb: 4 }}>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+          <Box>
+            <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 1, color: 'primary.main' }}>
+              Portfolio Analytics
+            </Typography>
+            <Typography variant="body1" color="text.secondary">
+              Advanced performance metrics and investment analysis
+            </Typography>
+          </Box>
+          <Button
+            variant="outlined"
+            startIcon={refreshing ? <CircularProgress size={16} /> : <Refresh />}
+            onClick={fetchAllData}
+            disabled={refreshing}
+            sx={{ borderRadius: 2 }}
+          >
+            {refreshing ? 'Refreshing...' : 'Refresh'}
+          </Button>
+        </Stack>
+      </Box>
+
+      {/* Portfolio Value Change Tracker */}
+      {portfolioChanges && (
+        <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', mb: 4 }}>
+          <CardContent sx={{ p: 4 }}>
+            <Typography variant="h6" sx={{ mb: 3, fontWeight: 'bold' }}>
+              Portfolio Value Changes
+            </Typography>
+            
+            {/* Current Portfolio Value */}
+            <Box sx={{ mb: 4, p: 3, bgcolor: 'primary.50', borderRadius: 2 }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                Current Portfolio Value
+              </Typography>
+              <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
+                {formatCurrency(portfolioChanges.current_value, portfolioChanges.base_currency)}
+              </Typography>
+            </Box>
+
+            {/* Period Changes Grid */}
+            <Grid container spacing={3}>
+              {Object.entries(portfolioChanges.value_changes).map(([period, change]) => {
+                const trend = getTrendDisplay(change.percentage_change);
+                
+                return (
+                  <Grid item xs={12} sm={6} md={3} key={period}>
+                    <Card sx={{ 
+                      borderRadius: 2, 
+                      border: '1px solid', 
+                      borderColor: 'grey.100',
+                      height: '100%',
+                    }}>
+                      <CardContent sx={{ p: 3 }}>
+                        <Stack spacing={2}>
+                          {/* Period Header */}
+                          <Stack direction="row" alignItems="center" justifyContent="space-between">
+                            <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                              {period}
+                            </Typography>
+                            <Box sx={{ color: trend.color }}>
+                              {trend.icon}
+                            </Box>
+                          </Stack>
+
+                          {/* Absolute Change */}
+                          <Box>
+                            <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                              Change
+                            </Typography>
+                            <Typography 
+                              variant="h6" 
+                              sx={{ 
+                                fontWeight: 'bold',
+                                color: trend.color,
+                              }}
+                            >
+                              {trend.sign}{formatCurrency(Math.abs(change.absolute_change), change.base_currency)}
+                            </Typography>
+                          </Box>
+
+                          {/* Percentage Change */}
+                          <Box>
+                            <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                              Return
+                            </Typography>
+                            <Chip
+                              label={`${trend.sign}${Math.abs(change.percentage_change).toFixed(2)}%`}
+                              size="small"
+                              sx={{
+                                bgcolor: trend.color === 'success.main' ? 'success.50' : 
+                                        trend.color === 'error.main' ? 'error.50' : 'grey.100',
+                                color: trend.color,
+                                fontWeight: 'bold',
+                              }}
+                            />
+                          </Box>
+
+                          {/* Period Info */}
+                          <Divider />
+                          <Box>
+                            <Typography variant="caption" color="text.secondary">
+                              {new Date(change.start_date).toLocaleDateString()} - {new Date(change.end_date).toLocaleDateString()}
+                            </Typography>
+                          </Box>
+                        </Stack>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                );
+              })}
+            </Grid>
+
+            {/* Performance Notes */}
+            <Alert severity="info" sx={{ mt: 3 }}>
+              <Typography variant="body2">
+                <strong>Performance Calculation:</strong> Returns are calculated using time-weighted methodology, 
+                excluding cash assets from performance calculations. Values are converted to your base currency 
+                ({portfolioChanges.base_currency}) using current exchange rates.
+              </Typography>
+            </Alert>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Estimated Annual Return Section */}
+      {portfolioReturns && (
+        <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', mb: 4 }}>
+          <CardContent sx={{ p: 4 }}>
+            <Typography variant="h6" sx={{ mb: 3, fontWeight: 'bold' }}>
+              📊 Estimated Annual Return Rate
+            </Typography>
+            
+            {/* Main Return Display */}
+            <Box sx={{ mb: 4, p: 3, bgcolor: 'success.50', borderRadius: 2, textAlign: 'center' }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                Based on Your Portfolio Performance
+              </Typography>
+              <Typography variant="h3" sx={{ fontWeight: 'bold', color: 'success.main', mb: 1 }}>
+                {portfolioReturns.portfolioAnnualizedReturnPercent.toFixed(2)}%
+              </Typography>
               <Typography variant="body2" color="text.secondary">
-                Track your portfolio's performance over time with detailed metrics including:
+                Annualized Return (CAGR) over {portfolioReturns.weightedAverageHoldingPeriod.toFixed(1)} years
               </Typography>
-              <Box component="ul" sx={{ mt: 1, pl: 2 }}>
-                <Typography component="li" variant="body2" color="text.secondary">
-                  Total return and annualized returns
-                </Typography>
-                <Typography component="li" variant="body2" color="text.secondary">
-                  Volatility and risk metrics
-                </Typography>
-                <Typography component="li" variant="body2" color="text.secondary">
-                  Sharpe ratio and risk-adjusted returns
-                </Typography>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
+            </Box>
 
-        <Grid item xs={12} md={6}>
-          <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', height: '100%' }}>
-            <CardContent>
-              <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
-                <Box
-                  sx={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: 2,
-                    bgcolor: 'success.main',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'white'
-                  }}
-                >
-                  <PieChart />
-                </Box>
-                <Box>
+            {/* Performance Details */}
+            <Grid container spacing={3} sx={{ mb: 4 }}>
+              <Grid item xs={12} sm={6} md={3}>
+                <Box sx={{ textAlign: 'center', p: 2 }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                    Total Return
+                  </Typography>
                   <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                    Asset Allocation Analysis
+                    {portfolioReturns.portfolioTotalReturnPercent.toFixed(2)}%
                   </Typography>
-                  <Chip label="Coming Soon" size="small" color="success" variant="outlined" />
                 </Box>
-              </Stack>
-              <Typography variant="body2" color="text.secondary">
-                Deep dive into your portfolio allocation with advanced visualizations:
-              </Typography>
-              <Box component="ul" sx={{ mt: 1, pl: 2 }}>
-                <Typography component="li" variant="body2" color="text.secondary">
-                  Interactive pie charts and treemaps
-                </Typography>
-                <Typography component="li" variant="body2" color="text.secondary">
-                  Sector and geographic diversification
-                </Typography>
-                <Typography component="li" variant="body2" color="text.secondary">
-                  Rebalancing recommendations
-                </Typography>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12} md={6}>
-          <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', height: '100%' }}>
-            <CardContent>
-              <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
-                <Box
-                  sx={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: 2,
-                    bgcolor: 'info.main',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'white'
-                  }}
-                >
-                  <ShowChart />
-                </Box>
-                <Box>
-                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                    Historical Performance
-                  </Typography>
-                  <Chip label="Coming Soon" size="small" color="info" variant="outlined" />
-                </Box>
-              </Stack>
-              <Typography variant="body2" color="text.secondary">
-                Visualize your portfolio's growth and performance over time:
-              </Typography>
-              <Box component="ul" sx={{ mt: 1, pl: 2 }}>
-                <Typography component="li" variant="body2" color="text.secondary">
-                  Portfolio value charts over time
-                </Typography>
-                <Typography component="li" variant="body2" color="text.secondary">
-                  Individual asset performance tracking
-                </Typography>
-                <Typography component="li" variant="body2" color="text.secondary">
-                  Benchmark comparisons
-                </Typography>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12} md={6}>
-          <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', height: '100%' }}>
-            <CardContent>
-              <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
-                <Box
-                  sx={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: 2,
-                    bgcolor: 'warning.main',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'white'
-                  }}
-                >
-                  <Assessment />
-                </Box>
-                <Box>
-                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                    Risk Assessment
-                  </Typography>
-                  <Chip label="Coming Soon" size="small" color="warning" variant="outlined" />
-                </Box>
-              </Stack>
-              <Typography variant="body2" color="text.secondary">
-                Understand and manage your portfolio risk with advanced analytics:
-              </Typography>
-              <Box component="ul" sx={{ mt: 1, pl: 2 }}>
-                <Typography component="li" variant="body2" color="text.secondary">
-                  Portfolio beta and correlation analysis
-                </Typography>
-                <Typography component="li" variant="body2" color="text.secondary">
-                  Value at Risk (VaR) calculations
-                </Typography>
-                <Typography component="li" variant="body2" color="text.secondary">
-                  Stress testing scenarios
-                </Typography>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12}>
-          <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200' }}>
-            <CardContent>
-              <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
-                <Box
-                  sx={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: 2,
-                    bgcolor: 'secondary.main',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'white'
-                  }}
-                >
-                  <BarChart />
-                </Box>
-                <Box>
-                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                    Advanced Visualizations
-                  </Typography>
-                  <Chip label="Coming Soon" size="small" color="secondary" variant="outlined" />
-                </Box>
-              </Stack>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Interactive charts and graphs to help you understand your portfolio better:
-              </Typography>
-              <Grid container spacing={2}>
-                <Grid item xs={12} sm={6} md={3}>
-                  <Typography variant="body2" color="text.secondary">
-                    • Interactive line charts for performance tracking
-                  </Typography>
-                </Grid>
-                <Grid item xs={12} sm={6} md={3}>
-                  <Typography variant="body2" color="text.secondary">
-                    • Heatmaps for correlation analysis
-                  </Typography>
-                </Grid>
-                <Grid item xs={12} sm={6} md={3}>
-                  <Typography variant="body2" color="text.secondary">
-                    • Candlestick charts for price movements
-                  </Typography>
-                </Grid>
-                <Grid item xs={12} sm={6} md={3}>
-                  <Typography variant="body2" color="text.secondary">
-                    • Custom date range selections
-                  </Typography>
-                </Grid>
               </Grid>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <Box sx={{ textAlign: 'center', p: 2 }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                    Holding Period
+                  </Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                    {portfolioReturns.weightedAverageHoldingPeriod.toFixed(1)} years
+                  </Typography>
+                </Box>
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <Box sx={{ textAlign: 'center', p: 2 }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                    Total Assets
+                  </Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                    {portfolioReturns.totalAssets}
+                  </Typography>
+                </Box>
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <Box sx={{ textAlign: 'center', p: 2 }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                    Performance Grade
+                  </Typography>
+                  <Chip
+                    label={portfolioReturns.advancedMetrics.performanceGrade}
+                    size="medium"
+                    sx={{
+                      bgcolor: portfolioReturns.portfolioAnnualizedReturnPercent >= 10 ? 'success.50' : 
+                              portfolioReturns.portfolioAnnualizedReturnPercent >= 7 ? 'info.50' : 
+                              portfolioReturns.portfolioAnnualizedReturnPercent >= 0 ? 'warning.50' : 'error.50',
+                      color: portfolioReturns.portfolioAnnualizedReturnPercent >= 10 ? 'success.main' : 
+                             portfolioReturns.portfolioAnnualizedReturnPercent >= 7 ? 'info.main' : 
+                             portfolioReturns.portfolioAnnualizedReturnPercent >= 0 ? 'warning.main' : 'error.main',
+                      fontWeight: 'bold',
+                    }}
+                  />
+                </Box>
+              </Grid>
+            </Grid>
+
+            {/* Use in FIRE Settings */}
+            <Box sx={{ p: 3, bgcolor: 'primary.50', borderRadius: 2 }}>
+              <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'stretch', sm: 'center' }} spacing={2}>
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'primary.main', mb: 1 }}>
+                    🎯 Use in FIRE Calculations
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Apply this calculated return rate to your FIRE profile for more accurate projections based on your actual investment performance.
+                  </Typography>
+                </Box>
+                <Button
+                  variant="contained"
+                  size="large"
+                  onClick={updateFIREProfileWithCalculatedReturn}
+                  disabled={updatingFIREProfile}
+                  startIcon={updatingFIREProfile ? <CircularProgress size={16} /> : <TrendingUp />}
+                  sx={{ borderRadius: 2, minWidth: { xs: '100%', sm: 'auto' } }}
+                >
+                  {updatingFIREProfile ? 'Updating...' : 'Update FIRE Settings'}
+                </Button>
+              </Stack>
+            </Box>
+
+            {/* Calculation Notes */}
+            <Alert severity="info" sx={{ mt: 3 }}>
+              <Typography variant="body2">
+                <strong>How it's calculated:</strong> This annualized return rate (CAGR) is based on your actual investment transactions and current portfolio value. 
+                It represents the compound annual growth rate of your investments, excluding cash positions. 
+                This rate can be used as your "Expected Return" in FIRE calculations for more personalized projections.
+              </Typography>
+            </Alert>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Portfolio Summary */}
+      <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200' }}>
+        <CardContent sx={{ p: 4 }}>
+          <Typography variant="h6" sx={{ mb: 2 }}>
+            Portfolio Summary
+          </Typography>
+          <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
+            You have {assets.length} asset{assets.length !== 1 ? 's' : ''} in your portfolio.
+          </Typography>
+          
+          {!portfolioChanges && (
+            <Alert severity="warning" sx={{ mt: 3, mb: 3 }}>
+              <Typography variant="body1">
+                <strong>Performance data unavailable</strong><br/>
+                Portfolio performance tracking requires transaction history. 
+                Make sure you have recorded some transactions to see performance metrics.
+              </Typography>
+            </Alert>
+          )}
+          
+          <Alert severity="info" sx={{ mt: 3 }}>
+            <Typography variant="body1">
+              🚧 <strong>More Analytics Coming Soon!</strong><br/>
+              We're working on additional analytics features including:
+              <br/>• Detailed annualized returns calculation (XIRR/CAGR)
+              <br/>• Asset allocation analysis and rebalancing suggestions
+              <br/>• Risk metrics and correlation analysis
+              <br/>• Interactive charts and historical performance visualization
+              <br/>• Portfolio export and reporting functionality
+            </Typography>
+          </Alert>
+        </CardContent>
+      </Card>
     </Box>
   );
 };

@@ -87,6 +87,48 @@ const Goals: React.FC = () => {
     withdrawalRate: 4.0 // 🔧 ADDED: Default withdrawal rate to prevent crashes
   });
 
+  // 🆕 NEW: Function to sync important parameter changes back to FIRE profile
+  const syncParametersToProfile = async (updatedParams: any) => {
+    if (!fireProfile) return; // Only sync if profile exists
+    
+    try {
+      // Check if important parameters have changed significantly
+      const currentRate = fireProfile.expected_return_pre_retirement * 100;
+      const newRate = updatedParams.rate;
+      const currentWithdrawalRate = fireProfile.safe_withdrawal_rate * 100;
+      const newWithdrawalRate = updatedParams.withdrawalRate;
+      
+      // Only update if there's a significant change (more than 0.5%)
+      const rateChanged = Math.abs(currentRate - newRate) > 0.5;
+      const withdrawalRateChanged = Math.abs(currentWithdrawalRate - newWithdrawalRate) > 0.1;
+      const fireNumberChanged = Math.abs(fireProfile.annual_expenses - updatedParams.fireNumber) > 10000;
+      const retirementAgeChanged = fireProfile.target_retirement_age !== updatedParams.retireAge;
+      
+      if (rateChanged || withdrawalRateChanged || fireNumberChanged || retirementAgeChanged) {
+        console.log('🔄 Syncing parameter changes to FIRE profile...');
+        
+        const updatedProfile = {
+          ...formData,
+          expected_return_pre_retirement: newRate / 100, // Convert back to decimal
+          safe_withdrawal_rate: newWithdrawalRate / 100, // Convert back to decimal
+          annual_expenses: updatedParams.fireNumber,
+          target_retirement_age: updatedParams.retireAge
+        };
+        
+        // Update the form data
+        setFormData(updatedProfile);
+        
+        // Optionally auto-save to backend (commented out to avoid too many API calls)
+        // await fireApi.createOrUpdateFIREProfile(updatedProfile);
+        // await loadFIREData();
+        
+        console.log('✅ Parameters synced to form data');
+      }
+    } catch (error) {
+      console.error('❌ Error syncing parameters to profile:', error);
+    }
+  };
+
   // 🆕 NEW: FIRE calculation results for Dashboard tab
   const [fireResults, setFireResults] = useState<any>(null);
 
@@ -248,6 +290,8 @@ const Goals: React.FC = () => {
             currentAge: userAge,
             retireAge: profileResponse.fire_profile.target_retirement_age,
             fireNumber: profileResponse.fire_profile.annual_expenses, // Using as FIRE number
+            rate: Math.round((profileResponse.fire_profile.expected_return_pre_retirement || 0.07) * 100 * 10) / 10, // Convert to percentage and round to 1 decimal
+            withdrawalRate: Math.round((profileResponse.fire_profile.safe_withdrawal_rate || 0.04) * 100 * 10) / 10, // Convert to percentage and round to 1 decimal
             principal: portfolioValuation?.totalValueInBaseCurrency || 0
           }));
           
@@ -434,6 +478,7 @@ const Goals: React.FC = () => {
           baristaMonthlyContribution={baristaMonthlyContribution}
           setBaristaMonthlyContribution={setBaristaMonthlyContribution}
           formatCurrency={formatCurrency}
+          onParametersChange={syncParametersToProfile}
         />
       )}
 
@@ -537,6 +582,24 @@ const FIREProfileDialog: React.FC<{
                   helperText="Your target portfolio value for financial independence (e.g., $2,000,000)"
                 />
               </Grid>
+              
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Expected Annual Return"
+                  type="number"
+                  value={(formData.expected_return_pre_retirement * 100).toFixed(1)}
+                  onChange={(e) => {
+                    const value = Number(e.target.value) / 100; // Convert percentage to decimal
+                    setFormData(prev => ({ ...prev, expected_return_pre_retirement: value }));
+                  }}
+                  InputProps={{
+                    endAdornment: <Typography sx={{ ml: 1 }}>%</Typography>
+                  }}
+                  inputProps={{ min: 1, max: 20, step: 0.1 }}
+                  helperText="Expected annual return on your investments (e.g., 7% for stock market average)"
+                />
+              </Grid>
             </Grid>
 
             <Box sx={{ mt: 3, p: 2, bgcolor: 'info.50', borderRadius: 1 }}>
@@ -544,6 +607,7 @@ const FIREProfileDialog: React.FC<{
                 💡 <strong>How it works:</strong><br/>
                 • <strong>Current Portfolio:</strong> Uses your actual portfolio value<br/>
                 • <strong>Monthly Contributions:</strong> Uses your recurring investments<br/>
+                • <strong>Expected Return:</strong> Used in all FIRE calculations and projections<br/>
                 • <strong>Coast-Fire-Calculator:</strong> Provides proven FIRE calculations<br/>
                 • <strong>Real-time Updates:</strong> Adjust parameters in the calculator tab
               </Typography>

@@ -773,6 +773,21 @@ export const FIREChart: React.FC<FIREChartProps> = ({ parameters, formatCurrency
   };
 
   // Handle mouse leave to clear hovered data
+  // Compact currency formatter for y-axis
+  const formatCompactCurrency = (value: number) => {
+    const absValue = Math.abs(value);
+    
+    if (absValue >= 1000000000) {
+      return `${(value / 1000000000).toFixed(1)}B`;
+    } else if (absValue >= 1000000) {
+      return `${(value / 1000000).toFixed(1)}M`;
+    } else if (absValue >= 1000) {
+      return `${(value / 1000).toFixed(0)}K`;
+    } else {
+      return value.toString();
+    }
+  };
+
   const handleMouseLeave = () => {
     setHoveredData(null);
   };
@@ -827,7 +842,7 @@ export const FIREChart: React.FC<FIREChartProps> = ({ parameters, formatCurrency
                 top: 20,
                 right: 30,
                 left: 20,
-                bottom: 20,
+                bottom: 60, // Increased from 20 to 60 to provide more space for legend and x-axis title
               }}
               onMouseLeave={handleMouseLeave}
             >
@@ -857,11 +872,11 @@ export const FIREChart: React.FC<FIREChartProps> = ({ parameters, formatCurrency
               <YAxis 
                 stroke={theme.palette.text.secondary}
                 tick={{ fontSize: 12 }}
-                tickFormatter={(value) => formatCurrency(value).replace(/\.\d+/, '')}
+                tickFormatter={formatCompactCurrency}
                 domain={[0, dataMax => Math.ceil(dataMax * 1.05)]}
                 allowDecimals={false}
-                tickCount={15}
-                width={120}
+                tickCount={12}
+                width={60}
                 scale="linear"
                 label={{ 
                   value: "Portfolio Value", 
@@ -875,10 +890,18 @@ export const FIREChart: React.FC<FIREChartProps> = ({ parameters, formatCurrency
                     fill: theme.palette.text.primary
                   }
                 }}
-                minTickGap={5}
+                minTickGap={8}
               />
               <Tooltip content={<CustomTooltip />} />
-              <Legend />
+              <Legend 
+                verticalAlign="bottom"
+                height={36}
+                iconType="line"
+                wrapperStyle={{
+                  paddingTop: '20px', // Add padding between legend and chart
+                  fontSize: '12px'
+                }}
+              />
               
               {/* FIRE Target Line */}
               <ReferenceLine 

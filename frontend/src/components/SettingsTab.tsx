@@ -122,6 +122,13 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
             • <strong>Barista FIRE:</strong> Partial FIRE with part-time income to bridge the gap
           </Typography>
         </Stack>
+        
+        <Alert severity="info" sx={{ mt: 2 }}>
+          <Typography variant="body2">
+            <strong>💡 Pro Tip:</strong> Your Expected Return setting is automatically used in all FIRE calculations. 
+            You can experiment with different values in the What-If Simulator tab to see how they affect your projections.
+          </Typography>
+        </Alert>
       </Paper>
     </Box>
   );
