@@ -1524,6 +1524,51 @@ def handle_get_asset(asset_id, user_id):
         logger.error(f"Get asset error: {str(e)}")
         return create_error_response(500, "Failed to retrieve asset")
 
+def handle_get_asset_transactions(asset_id, user_id):
+    """Get transactions for a specific asset"""
+    try:
+        # First verify the asset belongs to the user
+        asset = execute_query(
+            DATABASE_URL,
+            "SELECT * FROM assets WHERE asset_id = %s AND user_id = %s",
+            (asset_id, user_id)
+        )
+        
+        if not asset:
+            return create_error_response(404, "Asset not found")
+        
+        # Get transaction history
+        transactions = execute_query(
+            DATABASE_URL,
+            """
+            SELECT * FROM transactions 
+            WHERE asset_id = %s 
+            ORDER BY transaction_date DESC, created_at DESC
+            """,
+            (asset_id,)
+        )
+        
+        transaction_list = []
+        for txn in transactions:
+            transaction_list.append({
+                "transaction_id": txn['transaction_id'],
+                "transaction_type": txn['transaction_type'],
+                "transaction_date": txn['transaction_date'].isoformat(),
+                "shares": float(txn['shares']),
+                "price_per_share": float(txn['price_per_share']),
+                "currency": txn['currency'],
+                "created_at": txn['created_at'].isoformat()
+            })
+        
+        return create_response(200, {
+            "transactions": transaction_list,
+            "total_count": len(transaction_list)
+        })
+        
+    except Exception as e:
+        logger.error(f"Get asset transactions error: {str(e)}")
+        return create_error_response(500, "Failed to retrieve asset transactions")
+
 def handle_create_transaction(body, user_id):
     """Handle transaction creation"""
     try:
@@ -4712,38 +4757,37 @@ def calculate_portfolio_performance(user_id, period_months=12):
         
         return {
             'real_annual_return': annual_return,
+            'total_return_percentage': total_return * 100,  # Convert to percentage
             'total_return': total_return,
             'total_invested': total_invested,
             'current_value': current_value,
+            'absolute_gain_loss': current_value - total_invested,
             'period_months': effective_months,
+            'start_date': (datetime.utcnow() - timedelta(days=effective_months * 30)).isoformat(),
+            'end_date': datetime.utcnow().isoformat(),
             'base_currency': base_currency,
             'calculation_method': calculation_method,
             'actual_investment_months': actual_months,
-            'requested_months': period_months
+            'requested_months': period_months,
+            'annualized_return': annual_return * 100  # Convert to percentage
         }
         
     except Exception as e:
         logger.error(f"Portfolio performance calculation error: {str(e)}")
         return {
             'real_annual_return': 0,
+            'total_return_percentage': 0,
             'total_return': 0,
             'total_invested': 0,
             'current_value': 0,
+            'absolute_gain_loss': 0,
             'period_months': period_months,
+            'start_date': datetime.utcnow().isoformat(),
+            'end_date': datetime.utcnow().isoformat(),
             'error': str(e),
             'calculation_method': 'error',
-            'base_currency': 'USD'
-        }
-        
-    except Exception as e:
-        logger.error(f"Portfolio performance calculation error: {str(e)}")
-        return {
-            'real_annual_return': 0,
-            'total_return': 0,
-            'total_invested': 0,
-            'current_value': 0,
-            'error': str(e),
-            'calculation_method': 'error'
+            'base_currency': base_currency if 'base_currency' in locals() else 'USD',
+            'annualized_return': 0
         }
 
 def calculate_since_inception_performance(user_id):
@@ -6607,15 +6651,22 @@ def lambda_handler(event, context):
             return handle_get_assets(auth_result['user_id'])
         
         elif path.startswith('/assets/') and http_method == 'GET':
-            # Get specific asset - requires authentication
+            # Get specific asset or asset transactions - requires authentication
             request_headers = event.get('headers', {})
             auth_result = verify_jwt_token(request_headers.get('Authorization', ''))
             if not auth_result['valid']:
                 return create_error_response(401, "Invalid or missing token")
             
             try:
-                asset_id = int(path.split('/')[-1])
-                return handle_get_asset(asset_id, auth_result['user_id'])
+                # Check if this is a request for asset transactions
+                if path.endswith('/transactions'):
+                    # Extract asset ID from path like /assets/4/transactions
+                    asset_id = int(path.split('/')[-2])
+                    return handle_get_asset_transactions(asset_id, auth_result['user_id'])
+                else:
+                    # Regular asset request
+                    asset_id = int(path.split('/')[-1])
+                    return handle_get_asset(asset_id, auth_result['user_id'])
             except ValueError:
                 return create_error_response(400, "Invalid asset ID")
         
@@ -6828,9 +6879,23 @@ def lambda_handler(event, context):
             
             # Get period parameter (default to 12 months)
             query_params = event.get('queryStringParameters') or {}
-            period_months = int(query_params.get('period', 12))
+            try:
+                period_months = float(query_params.get('period', 12))
+                # Ensure minimum period of 0.1 months to avoid division by zero
+                period_months = max(period_months, 0.1)
+            except (ValueError, TypeError):
+                period_months = 12
             
             return handle_get_portfolio_performance(auth_result['user_id'], period_months)
+        
+        elif path == '/portfolio/performance/7day' and http_method == 'GET':
+            # Get 7-day portfolio performance - requires authentication
+            request_headers = event.get('headers', {})
+            auth_result = verify_jwt_token(request_headers.get('Authorization', ''))
+            if not auth_result['valid']:
+                return create_error_response(401, "Invalid or missing token")
+            
+            return handle_get_7day_twr_performance(auth_result['user_id'])
         
         # ============================================================================
         # DIVIDEND MANAGEMENT ENDPOINTS

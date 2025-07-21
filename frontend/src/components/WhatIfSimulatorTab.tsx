@@ -47,6 +47,7 @@ interface WhatIfSimulatorTabProps {
   baristaMonthlyContribution: number;
   setBaristaMonthlyContribution: (value: number) => void;
   formatCurrency: (amount: number) => string;
+  onParametersChange?: (params: any) => void; // Optional callback for parameter changes
 }
 
 export const WhatIfSimulatorTab: React.FC<WhatIfSimulatorTabProps> = ({
@@ -54,7 +55,8 @@ export const WhatIfSimulatorTab: React.FC<WhatIfSimulatorTabProps> = ({
   setParameters,
   baristaMonthlyContribution,
   setBaristaMonthlyContribution,
-  formatCurrency
+  formatCurrency,
+  onParametersChange
 }) => {
   const [results, setResults] = useState<any>(null);
 
@@ -115,6 +117,12 @@ export const WhatIfSimulatorTab: React.FC<WhatIfSimulatorTabProps> = ({
         [key]: value
       };
       console.log('📊 New parameters:', newParams);
+      
+      // Call the callback to sync changes back to FIRE profile
+      if (onParametersChange) {
+        onParametersChange(newParams);
+      }
+      
       return newParams;
     });
   };
@@ -131,22 +139,23 @@ export const WhatIfSimulatorTab: React.FC<WhatIfSimulatorTabProps> = ({
         All calculations use the proven coast-fire-calculator algorithms.
       </Alert>
 
-      {/* Main Layout Container */}
+      {/* Main Layout Container - Responsive: Horizontal on desktop, Vertical on mobile */}
       <Box sx={{
         display: 'flex',
-        height: '850px',
+        flexDirection: { xs: 'column', md: 'row' }, // Vertical on mobile, horizontal on desktop
+        minHeight: { xs: 'auto', md: '850px' },
         gap: 3,
         width: '100%'
       }}>
-        {/* Left Side - Parameters (25% width) */}
+        {/* Parameters Section - Full width on mobile, 25% on desktop */}
         <Box sx={{
-          width: '25%',
+          width: { xs: '100%', md: '25%' },
           flexShrink: 0
         }}>
           <Card elevation={2} sx={{
             p: 3,
             px: 4, // Add more horizontal padding
-            height: '100%',
+            height: { xs: 'auto', md: '100%' },
             overflowY: 'auto',
             display: 'flex',
             flexDirection: 'column'
@@ -181,7 +190,7 @@ export const WhatIfSimulatorTab: React.FC<WhatIfSimulatorTabProps> = ({
             <Divider sx={{ my: 1 }} />
 
             {/* Current Age */}
-            <Box sx={{ mb: 1.5 }}>
+            <Box sx={{ mb: { xs: 2, md: 1.5 } }}>
               <Typography variant="body2" sx={{ mb: 0.5, fontSize: '0.875rem' }}>
                 Current Age: {parameters.currentAge}
               </Typography>
@@ -199,10 +208,10 @@ export const WhatIfSimulatorTab: React.FC<WhatIfSimulatorTabProps> = ({
               />
             </Box>
 
-            <Divider sx={{ my: 2 }} />
+            <Divider sx={{ my: { xs: 1.5, md: 2 } }} />
 
             {/* Retirement Age */}
-            <Box sx={{ mb: 3 }}>
+            <Box sx={{ mb: { xs: 2, md: 3 } }}>
               <Typography variant="body2" sx={{ mb: 1 }}>
                 Retirement Age: {parameters.retireAge}
               </Typography>
@@ -220,10 +229,10 @@ export const WhatIfSimulatorTab: React.FC<WhatIfSimulatorTabProps> = ({
               />
             </Box>
 
-            <Divider sx={{ my: 2 }} />
+            <Divider sx={{ my: { xs: 1.5, md: 2 } }} />
 
             {/* Initial Principal */}
-            <Box sx={{ mb: 3 }}>
+            <Box sx={{ mb: { xs: 2, md: 3 } }}>
               <Typography variant="body2" sx={{ mb: 1 }}>
                 Initial Principal: {formatCurrency(parameters.principal)}
               </Typography>
@@ -245,17 +254,17 @@ export const WhatIfSimulatorTab: React.FC<WhatIfSimulatorTabProps> = ({
                 type="number"
                 value={parameters.principal}
                 onChange={(e) => updateParameter('principal', Number(e.target.value))}
-                sx={{ mt: 1, width: '150px' }}
+                sx={{ mt: 1, width: { xs: '100%', md: '150px' } }} // Full width on mobile
                 InputProps={{
                   startAdornment: <Typography sx={{ mr: 1 }}>$</Typography>
                 }}
               />
             </Box>
 
-            <Divider sx={{ my: 2 }} />
+            <Divider sx={{ my: { xs: 1.5, md: 2 } }} />
 
             {/* FIRE Number */}
-            <Box sx={{ mb: 3 }}>
+            <Box sx={{ mb: { xs: 2, md: 3 } }}>
               <Typography variant="body2" sx={{ mb: 1 }}>
                 FIRE Number: {formatCurrency(parameters.fireNumber)}
               </Typography>
@@ -276,17 +285,17 @@ export const WhatIfSimulatorTab: React.FC<WhatIfSimulatorTabProps> = ({
                 type="number"
                 value={parameters.fireNumber}
                 onChange={(e) => updateParameter('fireNumber', Number(e.target.value))}
-                sx={{ mt: 1, width: '150px' }}
+                sx={{ mt: 1, width: { xs: '100%', md: '150px' } }} // Full width on mobile
                 InputProps={{
                   startAdornment: <Typography sx={{ mr: 1 }}>$</Typography>
                 }}
               />
             </Box>
 
-            <Divider sx={{ my: 2 }} />
+            <Divider sx={{ my: { xs: 1.5, md: 2 } }} />
 
             {/* Monthly Contributions */}
-            <Box sx={{ mb: 3 }}>
+            <Box sx={{ mb: { xs: 2, md: 3 } }}>
               <Typography variant="body2" sx={{ mb: 1 }}>
                 Contributions (monthly): {formatCurrency(parameters.pmtMonthly)}
               </Typography>
@@ -305,10 +314,10 @@ export const WhatIfSimulatorTab: React.FC<WhatIfSimulatorTabProps> = ({
               />
             </Box>
 
-            <Divider sx={{ my: 2 }} />
+            <Divider sx={{ my: { xs: 1.5, md: 2 } }} />
 
             {/* Barista FIRE Contributions */}
-            <Box sx={{ mb: 3 }}>
+            <Box sx={{ mb: { xs: 2, md: 3 } }}>
               <Typography variant="body2" sx={{ mb: 1 }}>
                 Barista FIRE Contributions (monthly): {formatCurrency(parameters.pmtMonthlyBarista)}
               </Typography>
@@ -333,12 +342,12 @@ export const WhatIfSimulatorTab: React.FC<WhatIfSimulatorTabProps> = ({
               )}
             </Box>
 
-            <Divider sx={{ my: 2 }} />
+            <Divider sx={{ my: { xs: 1.5, md: 2 } }} />
 
             {/* APR (Real Return) */}
-            <Box sx={{ mb: 3 }}>
+            <Box sx={{ mb: { xs: 2, md: 3 } }}>
               <Typography variant="body2" sx={{ mb: 1 }}>
-                APR (real return): {parameters.rate}%
+                APR (real return): {(parameters.rate || 7).toFixed(1)}%
               </Typography>
               <Slider
                 value={parameters.rate}
@@ -355,9 +364,9 @@ export const WhatIfSimulatorTab: React.FC<WhatIfSimulatorTabProps> = ({
             </Box>
 
             {/* Withdrawal Rate */}
-            <Box sx={{ mb: 2 }}>
+            <Box sx={{ mb: { xs: 1, md: 2 } }}>
               <Typography variant="body2" sx={{ mb: 1 }}>
-                Withdrawal Rate: {parameters.withdrawalRate || 4}%
+                Withdrawal Rate: {(parameters.withdrawalRate || 4).toFixed(1)}%
               </Typography>
               <Slider
                 value={parameters.withdrawalRate || 4}
@@ -378,32 +387,32 @@ export const WhatIfSimulatorTab: React.FC<WhatIfSimulatorTabProps> = ({
           </Card>
         </Box>
 
-        {/* Right Side - Chart and Results (75% width) */}
+        {/* Chart and Results Section - Full width on mobile, 75% on desktop */}
         <Box sx={{
-          width: '75%',
+          width: { xs: '100%', md: '75%' },
           display: 'flex',
           flexDirection: 'column',
           gap: 2,
-          height: '100%'
+          height: { xs: 'auto', md: '100%' }
         }}>
-          {/* Top - FIRE Chart (takes most of the space) */}
+          {/* FIRE Chart Section - Responsive height */}
           <Card elevation={2} sx={{
-            flex: 1,
+            flex: { xs: 'none', md: 1 },
             display: 'flex',
             flexDirection: 'column',
-            minHeight: '500px'
+            minHeight: { xs: '400px', md: '500px' } // Smaller on mobile
           }}>
             <CardContent sx={{
               flex: 1,
               display: 'flex',
               flexDirection: 'column',
-              p: 3
+              p: { xs: 2, md: 3 } // Less padding on mobile
             }}>
-              {/* Chart visualization area - No title here, let FIREChart handle it */}
+              {/* Chart visualization area - Responsive sizing */}
               <Box sx={{
                 flex: 1,
                 width: '100%',
-                height: '600px', // Increased height for the chart
+                height: { xs: '350px', md: '600px' }, // Responsive height
                 position: 'relative'
               }}>
                 <FIREChart
@@ -424,26 +433,31 @@ export const WhatIfSimulatorTab: React.FC<WhatIfSimulatorTabProps> = ({
             </CardContent>
           </Card>
 
-          {/* Bottom - Results Cards (fixed height) */}
+          {/* Results Cards Section - Responsive layout */}
           {results && (
             <Card elevation={2} sx={{
-              height: '250px',
+              height: { xs: 'auto', md: '250px' }, // Auto height on mobile
               flexShrink: 0
             }}>
-              <CardContent sx={{ p: 2, pb: 6, height: '100%' }}>
+              <CardContent sx={{ 
+                p: { xs: 2, md: 2 }, 
+                pb: { xs: 2, md: 6 }, 
+                height: { xs: 'auto', md: '100%' }
+              }}>
                 <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold' }}>
                   📊 Calculation Results
                 </Typography>
 
-                {/* Three Result Cards in a Row */}
+                {/* Results Cards - Responsive: Stack on mobile, Row on desktop */}
                 <Box sx={{ 
                   display: 'flex', 
+                  flexDirection: { xs: 'column', md: 'row' }, // Stack on mobile
                   gap: 2, 
-                  height: 'calc(100% - 60px)',
+                  height: { xs: 'auto', md: 'calc(100% - 60px)' },
                   width: '100%'
                 }}>
-                  {/* Quick Results */}
-                  <Box sx={{ flex: 1 }}>
+                  {/* Quick Results Card */}
+                  <Box sx={{ flex: 1, minHeight: { xs: '120px', md: 'auto' } }}>
                     <Paper sx={{
                       p: 2,
                       bgcolor: 'grey.50',
@@ -477,21 +491,21 @@ export const WhatIfSimulatorTab: React.FC<WhatIfSimulatorTabProps> = ({
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <Typography variant="body2" sx={{ fontSize: '0.75rem' }}>Expected Return:</Typography>
                           <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.75rem' }}>
-                            {parameters.rate}% annually
+                            {(parameters.rate || 7).toFixed(1)}% annually
                           </Typography>
                         </Box>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <Typography variant="body2" sx={{ fontSize: '0.75rem' }}>Withdrawal Rate:</Typography>
                           <Typography variant="body2" sx={{ fontWeight: 'bold', fontSize: '0.75rem' }}>
-                            {parameters.withdrawalRate || 4}% annually
+                            {(parameters.withdrawalRate || 4).toFixed(1)}% annually
                           </Typography>
                         </Box>
                       </Stack>
                     </Paper>
                   </Box>
 
-                  {/* FIRE Targets */}
-                  <Box sx={{ flex: 1 }}>
+                  {/* FIRE Targets Card */}
+                  <Box sx={{ flex: 1, minHeight: { xs: '120px', md: 'auto' } }}>
                     <Paper sx={{
                       p: 2,
                       bgcolor: 'primary.50',
@@ -544,8 +558,8 @@ export const WhatIfSimulatorTab: React.FC<WhatIfSimulatorTabProps> = ({
                     </Paper>
                   </Box>
 
-                  {/* Progress */}
-                  <Box sx={{ flex: 1 }}>
+                  {/* Progress Card */}
+                  <Box sx={{ flex: 1, minHeight: { xs: '120px', md: 'auto' } }}>
                     <Paper sx={{
                       p: 2,
                       bgcolor: 'success.50',
