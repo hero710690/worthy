@@ -134,7 +134,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
         </Stack>
       </Box>
       
-      {/* FIRE Cards Container - Aligned with toggle container above */}
+      {/* FIRE Cards Container - Equal width cards */}
       <Box sx={{ 
         width: '100%',
         mx: 0,
@@ -142,33 +142,28 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
       }}>
         <Grid container spacing={3} sx={{ 
           width: '100%',
-          margin: 0,
-          // Remove default Grid spacing adjustments to align with container
-          '& > .MuiGrid-item': {
-            paddingLeft: '12px', // Half of spacing={3}
-            paddingTop: '12px'
-          },
-          // First item aligns with left edge
-          '& > .MuiGrid-item:first-of-type': {
-            paddingLeft: 0
-          },
-          // Last item aligns with right edge  
-          '& > .MuiGrid-item:last-of-type': {
-            paddingRight: 0
-          }
+          margin: 0
         }}>
           {/* Traditional FIRE */}
           <Grid item xs={12} md={4} sx={{ 
-            display: 'flex'
+            display: 'flex',
+            width: '100%'
           }}>
             <Card elevation={2} sx={{ 
               border: '2px solid', 
               borderColor: fireResults?.traditional.achieved ? 'success.main' : 'primary.main',
               height: '100%',
               width: '100%',
-              flex: 1
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column'
             }}>
-            <CardContent>
+            <CardContent sx={{ 
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              height: '100%'
+            }}>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                 <GpsFixed sx={{ color: 'primary.main', mr: 1 }} />
                 <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
@@ -195,7 +190,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                 Progress: {(fireResults?.traditional.progress || 0).toFixed(1)}%
               </Typography>
               
-              <Stack spacing={1}>
+              <Stack spacing={1} sx={{ flexGrow: 1 }}>
                 {fireResults?.traditional.achieved ? (
                   <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                     <Typography variant="caption">Status:</Typography>
@@ -252,16 +247,24 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
 
         {/* Coast FIRE */}
         <Grid item xs={12} md={4} sx={{ 
-          display: 'flex'
+          display: 'flex',
+          width: '100%'
         }}>
           <Card elevation={2} sx={{ 
             border: '2px solid', 
             borderColor: fireResults?.coast.alreadyCoastFire ? 'success.main' : 'success.light',
             height: '100%',
             width: '100%',
-            flex: 1
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column'
           }}>
-            <CardContent>
+            <CardContent sx={{ 
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              height: '100%'
+            }}>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                 <BeachAccess sx={{ color: 'success.main', mr: 1 }} />
                 <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
@@ -290,7 +293,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
               </Typography>
               
               {fireResults?.coast.isPossible ? (
-                <Stack spacing={1}>
+                <Stack spacing={1} sx={{ flexGrow: 1 }}>
                   {fireResults.coast.coastFireAge && (
                     <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                       <Typography variant="caption">Coast Age:</Typography>
@@ -317,16 +320,24 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
 
         {/* Barista FIRE */}
         <Grid item xs={12} md={4} sx={{ 
-          display: 'flex'
+          display: 'flex',
+          width: '100%'
         }}>
           <Card elevation={2} sx={{ 
             border: '2px solid', 
             borderColor: fireResults?.barista.alreadyCoastFire ? 'success.main' : 'warning.main',
             height: '100%',
             width: '100%',
-            flex: 1
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column'
           }}>
-            <CardContent>
+            <CardContent sx={{ 
+              flex: 1,
+              display: 'flex',
+              flexDirection: 'column',
+              height: '100%'
+            }}>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                 <Coffee sx={{ color: 'warning.main', mr: 1 }} />
                 <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
@@ -355,7 +366,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
               </Typography>
               
               {fireResults?.barista.isPossible ? (
-                <Stack spacing={1}>
+                <Stack spacing={1} sx={{ flexGrow: 1 }}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                     <Typography variant="caption">Before barista:</Typography>
                     <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
