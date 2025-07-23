@@ -54,6 +54,36 @@ const Goals: React.FC = () => {
   const [calculations, setCalculations] = useState<any[]>([]);
   const [portfolioValuation, setPortfolioValuation] = useState<PortfolioValuation | null>(null);
   const [recurringInvestments, setRecurringInvestments] = useState<RecurringInvestment[]>([]);
+  const [includeCashInFIRE, setIncludeCashInFIRE] = useState<boolean>(true); // New state for cash/CD inclusion
+  
+  // Calculate portfolio value for FIRE calculations (with optional cash/CD exclusion)
+  const getPortfolioValueForFIRE = () => {
+    if (!portfolioValuation) return 0;
+    
+    if (includeCashInFIRE) {
+      return portfolioValuation.totalValueInBaseCurrency;
+    } else {
+      // Exclude Cash and CD assets from FIRE calculations
+      const investmentAssetsValue = portfolioValuation.assets
+        .filter(assetVal => assetVal.asset.asset_type !== 'Cash' && assetVal.asset.asset_type !== 'CD')
+        .reduce((total, assetVal) => total + assetVal.totalValueInBaseCurrency, 0);
+      
+      console.log('💰 Portfolio value for FIRE calculations:', {
+        totalValue: portfolioValuation.totalValueInBaseCurrency,
+        investmentAssetsValue,
+        includeCashInFIRE,
+        excludedAssets: portfolioValuation.assets.filter(assetVal => 
+          assetVal.asset.asset_type === 'Cash' || assetVal.asset.asset_type === 'CD'
+        ).map(assetVal => ({
+          symbol: assetVal.asset.ticker_symbol,
+          type: assetVal.asset.asset_type,
+          value: assetVal.totalValueInBaseCurrency
+        }))
+      });
+      
+      return investmentAssetsValue;
+    }
+  };
   
   // Dialog state
   const [openDialog, setOpenDialog] = useState(false);
@@ -143,13 +173,17 @@ const Goals: React.FC = () => {
     if (portfolioValuation && fireProfile) {
       calculateFIREResults();
     }
-  }, [portfolioValuation, fireProfile, parameters, baristaMonthlyContribution]);
+  }, [portfolioValuation, fireProfile, parameters, baristaMonthlyContribution, includeCashInFIRE]); // Added includeCashInFIRE dependency
 
   const calculateFIREResults = () => {
     if (!portfolioValuation || !fireProfile) return;
 
+    const portfolioValueForFIRE = getPortfolioValueForFIRE(); // Use filtered value
+
     console.log('🔥 calculateFIREResults called with:', {
       portfolioValuation: portfolioValuation,
+      portfolioValueForFIRE: portfolioValueForFIRE,
+      includeCashInFIRE: includeCashInFIRE,
       fireProfile: fireProfile
     });
 
@@ -175,9 +209,9 @@ const Goals: React.FC = () => {
       retirementAge: fireProfile.target_retirement_age,
       rate: fireProfile.expected_return_pre_retirement || 0.07,
       pmtMonthly: monthlyRecurringTotal,
-      principal: portfolioValuation.totalValueInBaseCurrency, // Same as Dashboard
+      principal: portfolioValueForFIRE, // Use filtered value instead of total
       pmtMonthlyBarista: baristaMonthlyContribution,
-      portfolioValueFromValuation: portfolioValuation.totalValueInBaseCurrency
+      portfolioValueFromValuation: portfolioValueForFIRE // Use filtered value
     });
 
     const input: CoastFireInput = {
@@ -186,7 +220,7 @@ const Goals: React.FC = () => {
       retirementAge: fireProfile.target_retirement_age,
       rate: fireProfile.expected_return_pre_retirement || 0.07,
       pmtMonthly: monthlyRecurringTotal, // 🔧 FIXED: Same calculation as Recurring page
-      principal: portfolioValuation.totalValueInBaseCurrency, // 🔧 FIXED: Same as Dashboard
+      principal: portfolioValueForFIRE, // Use filtered value instead of total
       pmtMonthlyBarista: baristaMonthlyContribution
     };
 
@@ -292,7 +326,7 @@ const Goals: React.FC = () => {
             fireNumber: profileResponse.fire_profile.annual_expenses, // Using as FIRE number
             rate: Math.round((profileResponse.fire_profile.expected_return_pre_retirement || 0.07) * 100 * 10) / 10, // Convert to percentage and round to 1 decimal
             withdrawalRate: Math.round((profileResponse.fire_profile.safe_withdrawal_rate || 0.04) * 100 * 10) / 10, // Convert to percentage and round to 1 decimal
-            principal: portfolioValuation?.totalValueInBaseCurrency || 0
+            principal: getPortfolioValueForFIRE() // Use filtered value
           }));
           
           console.log('✅ FIRE profile loaded successfully');
@@ -413,7 +447,11 @@ const Goals: React.FC = () => {
   }
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box sx={{ 
+      p: 3,
+      maxWidth: '100%', // Ensure container doesn't exceed viewport
+      mx: 'auto' // Center the container
+    }}>
       {/* Header */}
       <Box sx={{ mb: 4 }}>
         <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 1 }}>
@@ -460,35 +498,44 @@ const Goals: React.FC = () => {
         </Tabs>
       </Box>
 
-      {/* Tab Content */}
-      {activeTab === 0 && (
-        <DashboardTab 
-          fireResults={fireResults}
-          fireProfile={fireProfile}
-          portfolioValuation={portfolioValuation}
-          formatCurrency={formatCurrency}
-          onOpenSettings={() => setOpenDialog(true)}
-        />
-      )}
+      {/* Tab Content Container with consistent width */}
+      <Box sx={{ 
+        width: '100%',
+        overflow: 'hidden' // Prevent horizontal scroll
+      }}>
+        {/* Tab Content */}
+        {activeTab === 0 && (
+          <DashboardTab 
+            fireResults={fireResults}
+            fireProfile={fireProfile}
+            portfolioValuation={portfolioValuation}
+            formatCurrency={formatCurrency}
+            onOpenSettings={() => setOpenDialog(true)}
+            includeCashInFIRE={includeCashInFIRE}
+            onToggleIncludeCash={setIncludeCashInFIRE}
+            getPortfolioValueForFIRE={getPortfolioValueForFIRE}
+          />
+        )}
 
-      {activeTab === 1 && (
-        <WhatIfSimulatorTab 
-          parameters={parameters}
-          setParameters={setParameters}
-          baristaMonthlyContribution={baristaMonthlyContribution}
-          setBaristaMonthlyContribution={setBaristaMonthlyContribution}
-          formatCurrency={formatCurrency}
-          onParametersChange={syncParametersToProfile}
-        />
-      )}
+        {activeTab === 1 && (
+          <WhatIfSimulatorTab 
+            parameters={parameters}
+            setParameters={setParameters}
+            baristaMonthlyContribution={baristaMonthlyContribution}
+            setBaristaMonthlyContribution={setBaristaMonthlyContribution}
+            formatCurrency={formatCurrency}
+            onParametersChange={syncParametersToProfile}
+          />
+        )}
 
-      {activeTab === 2 && (
-        <SettingsTab 
-          fireProfile={fireProfile}
-          onOpenDialog={() => setOpenDialog(true)}
-          formatCurrency={formatCurrency}
-        />
-      )}
+        {activeTab === 2 && (
+          <SettingsTab 
+            fireProfile={fireProfile}
+            onOpenDialog={() => setOpenDialog(true)}
+            formatCurrency={formatCurrency}
+          />
+        )}
+      </Box>
 
       {/* FIRE Profile Dialog */}
       <FIREProfileDialog
