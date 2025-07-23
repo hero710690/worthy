@@ -142,7 +142,15 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
       }}>
         <Grid container spacing={3} sx={{ 
           width: '100%',
-          margin: 0
+          margin: 0,
+          // Ensure equal width distribution on wider screens
+          '@media (min-width: 900px)': {
+            display: 'flex',
+            '& > .MuiGrid-item': {
+              flex: '1 1 0px', // Equal flex basis for true equal width
+              maxWidth: 'none' // Override MUI's default maxWidth
+            }
+          }
         }}>
           {/* Traditional FIRE */}
           <Grid item xs={12} md={4} sx={{ 
