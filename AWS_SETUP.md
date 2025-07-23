@@ -63,7 +63,7 @@ The `WorthyAppPolicy` includes permissions for:
 docker run --name worthy-postgres \
   -e POSTGRES_DB=worthy \
   -e POSTGRES_USER=worthy_admin \
-  -e POSTGRES_PASSWORD=REDACTED_DB_PASSWORD \
+  -e POSTGRES_PASSWORD=***REMOVED*** \
   -p 5432:5432 -d postgres:15
 ```
 
@@ -75,7 +75,7 @@ aws rds create-db-instance \
     --engine postgres \
     --engine-version 15.4 \
     --master-username worthy_admin \
-    --master-user-password 'REDACTED_DB_PASSWORD' \
+    --master-user-password 'YOUR_SECURE_PASSWORD' \
     --allocated-storage 20 \
     --storage-type gp2 \
     --db-name worthy \

@@ -16,7 +16,10 @@ import {
   Button,
   LinearProgress,
   Alert,
-  Paper
+  Paper,
+  Switch,
+  FormControlLabel,
+  Tooltip
 } from '@mui/material';
 import {
   GpsFixed,
@@ -32,6 +35,9 @@ interface DashboardTabProps {
   portfolioValuation: any;
   formatCurrency: (amount: number) => string;
   onOpenSettings: () => void;
+  includeCashInFIRE: boolean;
+  onToggleIncludeCash: (include: boolean) => void;
+  getPortfolioValueForFIRE: () => number;
 }
 
 export const DashboardTab: React.FC<DashboardTabProps> = ({
@@ -39,7 +45,10 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
   fireProfile,
   portfolioValuation,
   formatCurrency,
-  onOpenSettings
+  onOpenSettings,
+  includeCashInFIRE,
+  onToggleIncludeCash,
+  getPortfolioValueForFIRE
 }) => {
   // 🔍 DEBUG: Log portfolio valuation
   console.log('📊 DashboardTab received portfolioValuation:', portfolioValuation);
@@ -75,14 +84,90 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
         🔥 Your FIRE Progress
       </Typography>
       
-      <Grid container spacing={3}>
-        {/* Traditional FIRE */}
-        <Grid item xs={12} md={4}>
-          <Card elevation={2} sx={{ 
-            border: '2px solid', 
-            borderColor: fireResults?.traditional.achieved ? 'success.main' : 'primary.main',
-            height: '100%'
+      {/* Portfolio Calculation Toggle - Prominent Position */}
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        mb: 3,
+        p: 2,
+        bgcolor: 'background.paper',
+        borderRadius: 2,
+        border: '1px solid',
+        borderColor: 'divider'
+      }}>
+        <Stack alignItems="center" spacing={1}>
+          <Tooltip title={includeCashInFIRE ? "Cash and CD assets are included in FIRE calculations" : "Cash and CD assets are excluded from FIRE calculations"}>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={includeCashInFIRE}
+                  onChange={(e) => onToggleIncludeCash(e.target.checked)}
+                  size="medium"
+                  color="primary"
+                />
+              }
+              label={
+                <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+                  Include Cash & CD in FIRE Calculations
+                </Typography>
+              }
+              sx={{ margin: 0 }}
+            />
+          </Tooltip>
+          
+          {portfolioValuation && (
+            <Box sx={{ textAlign: 'center' }}>
+              <Typography variant="body2" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
+                Portfolio for FIRE: {formatCurrency(getPortfolioValueForFIRE())}
+              </Typography>
+              {!includeCashInFIRE && (
+                <Typography variant="caption" sx={{ 
+                  color: 'text.secondary',
+                  display: 'block'
+                }}>
+                  Total Portfolio: {formatCurrency(portfolioValuation.totalValueInBaseCurrency)} 
+                  (Excluded: {formatCurrency(portfolioValuation.totalValueInBaseCurrency - getPortfolioValueForFIRE())})
+                </Typography>
+              )}
+            </Box>
+          )}
+        </Stack>
+      </Box>
+      
+      {/* FIRE Cards Container - Aligned with toggle container above */}
+      <Box sx={{ 
+        width: '100%',
+        mx: 0,
+        px: 0
+      }}>
+        <Grid container spacing={3} sx={{ 
+          width: '100%',
+          margin: 0,
+          // Remove default Grid spacing adjustments to align with container
+          '& > .MuiGrid-item': {
+            paddingLeft: '12px', // Half of spacing={3}
+            paddingTop: '12px'
+          },
+          // First item aligns with left edge
+          '& > .MuiGrid-item:first-of-type': {
+            paddingLeft: 0
+          },
+          // Last item aligns with right edge  
+          '& > .MuiGrid-item:last-of-type': {
+            paddingRight: 0
+          }
+        }}>
+          {/* Traditional FIRE */}
+          <Grid item xs={12} md={4} sx={{ 
+            display: 'flex'
           }}>
+            <Card elevation={2} sx={{ 
+              border: '2px solid', 
+              borderColor: fireResults?.traditional.achieved ? 'success.main' : 'primary.main',
+              height: '100%',
+              width: '100%',
+              flex: 1
+            }}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                 <GpsFixed sx={{ color: 'primary.main', mr: 1 }} />
@@ -151,7 +236,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
                 <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
                   <Typography variant="caption">Current Portfolio:</Typography>
                   <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                    {portfolioValuation ? formatCurrency(portfolioValuation.totalValueInBaseCurrency) : '$0.00'}
+                    {formatCurrency(getPortfolioValueForFIRE())}
                   </Typography>
                 </Box>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -166,11 +251,15 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
         </Grid>
 
         {/* Coast FIRE */}
-        <Grid item xs={12} md={4}>
+        <Grid item xs={12} md={4} sx={{ 
+          display: 'flex'
+        }}>
           <Card elevation={2} sx={{ 
             border: '2px solid', 
             borderColor: fireResults?.coast.alreadyCoastFire ? 'success.main' : 'success.light',
-            height: '100%'
+            height: '100%',
+            width: '100%',
+            flex: 1
           }}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
@@ -227,11 +316,15 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
         </Grid>
 
         {/* Barista FIRE */}
-        <Grid item xs={12} md={4}>
+        <Grid item xs={12} md={4} sx={{ 
+          display: 'flex'
+        }}>
           <Card elevation={2} sx={{ 
             border: '2px solid', 
             borderColor: fireResults?.barista.alreadyCoastFire ? 'success.main' : 'warning.main',
-            height: '100%'
+            height: '100%',
+            width: '100%',
+            flex: 1
           }}>
             <CardContent>
               <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
@@ -292,7 +385,9 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
             </CardContent>
           </Card>
         </Grid>
-      </Grid>
+        </Grid>
+      </Box>
+      {/* End of FIRE Cards Container */}
 
       {/* Summary */}
       {fireResults && (
@@ -303,7 +398,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
           <Grid container spacing={2}>
             <Grid item xs={12} sm={6}>
               <Typography variant="body2">
-                <strong>Current Portfolio:</strong> {portfolioValuation ? formatCurrency(portfolioValuation.totalValueInBaseCurrency) : '$0.00'}
+                <strong>Current Portfolio:</strong> {formatCurrency(getPortfolioValueForFIRE())}
               </Typography>
             </Grid>
             <Grid item xs={12} sm={6}>

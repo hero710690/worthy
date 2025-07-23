@@ -2089,6 +2089,8 @@ def handle_delete_transaction(transaction_id, user_id):
                 logger.info(f"Deleted asset {asset_id} - was the only transaction (initialization)")
             
             rollback_applied = True
+            
+        elif transaction['transaction_type'] == 'Dividend':
             # Rollback Dividend transactions - find and reset corresponding dividend record
             logger.info(f"Rolling back dividend transaction {transaction_id}")
             
@@ -2124,11 +2126,10 @@ def handle_delete_transaction(transaction_id, user_id):
                     (dividend_record['dividend_id'],)
                 )
                 logger.info(f"Reset dividend {dividend_record['dividend_id']} to pending status")
-                rollback_applied = True
             else:
                 logger.warning(f"No matching dividend record found for transaction {transaction_id}")
-                # Still apply rollback flag since we attempted the rollback
-                rollback_applied = True
+            
+            rollback_applied = True
         
         # Delete the transaction
         execute_update(
