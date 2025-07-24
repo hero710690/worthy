@@ -105,13 +105,14 @@ const Goals: React.FC = () => {
   const [baristaMonthlyContribution, setBaristaMonthlyContribution] = useState(2000);
 
   // 🆕 NEW: Parameters for What-If simulator (moved from Coast FIRE Calculator tab)
+  // Note: principal will be updated to actual portfolio value when data loads
   const [parameters, setParameters] = useState({
     currentAge: 35,
     retireAge: 67,
     pmtMonthly: 2500,
     rate: 7, // Percentage
     fireNumber: 2000000,
-    principal: 0,
+    principal: 0, // Will be updated to actual portfolio value when loaded
     pmtMonthlyBarista: 2000,
     calcMode: "coast" as "coast" | "barista",
     withdrawalRate: 4.0 // 🔧 ADDED: Default withdrawal rate to prevent crashes
@@ -174,6 +175,19 @@ const Goals: React.FC = () => {
       calculateFIREResults();
     }
   }, [portfolioValuation, fireProfile, parameters, baristaMonthlyContribution, includeCashInFIRE]); // Added includeCashInFIRE dependency
+
+  // 🆕 NEW: Update parameters when portfolio valuation changes to use actual portfolio value
+  useEffect(() => {
+    if (portfolioValuation) {
+      const portfolioValueForFIRE = getPortfolioValueForFIRE();
+      console.log('📊 Updating parameters with portfolio value:', portfolioValueForFIRE);
+      
+      setParameters(prev => ({
+        ...prev,
+        principal: portfolioValueForFIRE
+      }));
+    }
+  }, [portfolioValuation, includeCashInFIRE]); // Update when portfolio or cash inclusion changes
 
   const calculateFIREResults = () => {
     if (!portfolioValuation || !fireProfile) return;

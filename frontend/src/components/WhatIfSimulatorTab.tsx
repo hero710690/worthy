@@ -231,10 +231,10 @@ export const WhatIfSimulatorTab: React.FC<WhatIfSimulatorTabProps> = ({
 
             <Divider sx={{ my: { xs: 1.5, md: 2 } }} />
 
-            {/* Initial Principal */}
+            {/* Current Portfolio Value (Initial Principal) */}
             <Box sx={{ mb: { xs: 2, md: 3 } }}>
               <Typography variant="body2" sx={{ mb: 1 }}>
-                Initial Principal: {formatCurrency(parameters.principal)}
+                Current Portfolio Value: {formatCurrency(parameters.principal)}
               </Typography>
               <Slider
                 value={parameters.principal}
@@ -258,6 +258,7 @@ export const WhatIfSimulatorTab: React.FC<WhatIfSimulatorTabProps> = ({
                 InputProps={{
                   startAdornment: <Typography sx={{ mr: 1 }}>$</Typography>
                 }}
+                helperText="Based on your actual portfolio holdings"
               />
             </Box>
 
