@@ -1044,10 +1044,10 @@ export const FIREChart: React.FC<FIREChartProps> = ({ parameters, formatCurrency
                         <circle
                           cx={cx}
                           cy={cy}
-                          r={8}
+                          r={5}
                           fill={theme.palette.success.main}
                           stroke={theme.palette.success.dark}
-                          strokeWidth={2}
+                          strokeWidth={1.5}
                         />
                       );
                     }
