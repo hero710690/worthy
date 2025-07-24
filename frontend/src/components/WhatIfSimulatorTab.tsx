@@ -258,7 +258,6 @@ export const WhatIfSimulatorTab: React.FC<WhatIfSimulatorTabProps> = ({
                 InputProps={{
                   startAdornment: <Typography sx={{ mr: 1 }}>$</Typography>
                 }}
-                helperText="Based on your actual portfolio holdings"
               />
             </Box>
 

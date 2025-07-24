@@ -112,7 +112,7 @@ const Goals: React.FC = () => {
     pmtMonthly: 2500,
     rate: 7, // Percentage
     fireNumber: 2000000,
-    principal: 0, // Will be updated to actual portfolio value when loaded
+    principal: 1000000, // Default to $1M, will be updated to actual portfolio value when loaded
     pmtMonthlyBarista: 2000,
     calcMode: "coast" as "coast" | "barista",
     withdrawalRate: 4.0 // 🔧 ADDED: Default withdrawal rate to prevent crashes
