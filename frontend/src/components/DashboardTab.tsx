@@ -134,38 +134,34 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
         </Stack>
       </Box>
       
-      {/* FIRE Cards Container - Equal width cards */}
+      {/* FIRE Cards Container - Force horizontal layout with equal width */}
       <Box sx={{ 
         width: '100%',
         mx: 0,
-        px: 0
+        px: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 3
       }}>
-        <Grid container spacing={3} sx={{ 
+        {/* Horizontal Cards Layout */}
+        <Box sx={{
+          display: 'flex',
+          gap: 3,
           width: '100%',
-          margin: 0,
-          // Ensure equal width distribution on wider screens
-          '@media (min-width: 900px)': {
-            display: 'flex',
-            '& > .MuiGrid-item': {
-              flex: '1 1 0px', // Equal flex basis for true equal width
-              maxWidth: 'none' // Override MUI's default maxWidth
-            }
+          flexWrap: { xs: 'wrap', md: 'nowrap' },
+          '& > *': {
+            flex: { xs: '1 1 100%', md: '1 1 0px' }, // Full width on mobile, equal width on desktop
+            minWidth: 0
           }
         }}>
           {/* Traditional FIRE */}
-          <Grid item xs={12} md={4} sx={{ 
+          <Card elevation={2} sx={{ 
+            border: '2px solid', 
+            borderColor: fireResults?.traditional.achieved ? 'success.main' : 'primary.main',
             display: 'flex',
-            width: '100%'
+            flexDirection: 'column',
+            minHeight: '400px'
           }}>
-            <Card elevation={2} sx={{ 
-              border: '2px solid', 
-              borderColor: fireResults?.traditional.achieved ? 'success.main' : 'primary.main',
-              height: '100%',
-              width: '100%',
-              flex: 1,
-              display: 'flex',
-              flexDirection: 'column'
-            }}>
             <CardContent sx={{ 
               flex: 1,
               display: 'flex',
@@ -251,21 +247,14 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
               </Stack>
             </CardContent>
           </Card>
-        </Grid>
 
-        {/* Coast FIRE */}
-        <Grid item xs={12} md={4} sx={{ 
-          display: 'flex',
-          width: '100%'
-        }}>
+          {/* Coast FIRE */}
           <Card elevation={2} sx={{ 
             border: '2px solid', 
             borderColor: fireResults?.coast.alreadyCoastFire ? 'success.main' : 'success.light',
-            height: '100%',
-            width: '100%',
-            flex: 1,
             display: 'flex',
-            flexDirection: 'column'
+            flexDirection: 'column',
+            minHeight: '400px'
           }}>
             <CardContent sx={{ 
               flex: 1,
@@ -324,21 +313,14 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
               )}
             </CardContent>
           </Card>
-        </Grid>
 
-        {/* Barista FIRE */}
-        <Grid item xs={12} md={4} sx={{ 
-          display: 'flex',
-          width: '100%'
-        }}>
+          {/* Barista FIRE */}
           <Card elevation={2} sx={{ 
             border: '2px solid', 
             borderColor: fireResults?.barista.alreadyCoastFire ? 'success.main' : 'warning.main',
-            height: '100%',
-            width: '100%',
-            flex: 1,
             display: 'flex',
-            flexDirection: 'column'
+            flexDirection: 'column',
+            minHeight: '400px'
           }}>
             <CardContent sx={{ 
               flex: 1,
@@ -403,8 +385,7 @@ export const DashboardTab: React.FC<DashboardTabProps> = ({
               )}
             </CardContent>
           </Card>
-        </Grid>
-        </Grid>
+        </Box>
       </Box>
       {/* End of FIRE Cards Container */}
 
