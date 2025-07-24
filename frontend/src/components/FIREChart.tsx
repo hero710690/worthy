@@ -945,6 +945,25 @@ export const FIREChart: React.FC<FIREChartProps> = ({ parameters, formatCurrency
                 );
                 
                 if (traditionalFireAchievementPoint) {
+                  // Smart positioning to avoid overlap with other lines
+                  const achievementAge = traditionalFireAchievementPoint.age;
+                  const coastAge = coastFireAge;
+                  const baristaAge = baristaFireAge;
+                  
+                  // Check if achievement age is close to other switch ages
+                  const isCloseToCoast = Math.abs(achievementAge - coastAge) < 3;
+                  const isCloseToBarista = Math.abs(achievementAge - baristaAge) < 3;
+                  
+                  // Choose position based on proximity to other lines
+                  let labelPosition = "insideBottomRight";
+                  if (isCloseToCoast && isCloseToBarista) {
+                    labelPosition = "top"; // Use top if close to both
+                  } else if (isCloseToCoast) {
+                    labelPosition = "insideBottomRight"; // Use bottom right if close to coast
+                  } else if (isCloseToBarista) {
+                    labelPosition = "insideTopRight"; // Use top right if close to barista
+                  }
+                  
                   return (
                     <ReferenceLine 
                       x={traditionalFireAchievementPoint.age} 
@@ -952,10 +971,11 @@ export const FIREChart: React.FC<FIREChartProps> = ({ parameters, formatCurrency
                       strokeDasharray="2 2"
                       strokeWidth={3}
                       label={{ 
-                        value: `🎉 Traditional FIRE Achieved (Age ${traditionalFireAchievementPoint.age.toFixed(1)})`, 
-                        position: "insideTopRight",
+                        value: `🎉 FIRE Achieved (${traditionalFireAchievementPoint.age.toFixed(1)})`, 
+                        position: labelPosition as any,
+                        offset: 10,
                         style: {
-                          fontSize: 12,
+                          fontSize: 11,
                           fontWeight: 'bold',
                           fill: theme.palette.success.main
                         }
@@ -973,10 +993,11 @@ export const FIREChart: React.FC<FIREChartProps> = ({ parameters, formatCurrency
                 strokeDasharray="3 3"
                 strokeWidth={2}
                 label={{ 
-                  value: `🏖️ Coast Switch (Age ${coastFireAge.toFixed(0)})`, 
+                  value: `🏖️ Coast Switch (${coastFireAge.toFixed(0)})`, 
                   position: "insideTopLeft",
+                  offset: 5,
                   style: {
-                    fontSize: 12,
+                    fontSize: 11,
                     fontWeight: 'bold',
                     fill: theme.palette.info.main
                   }
@@ -991,10 +1012,11 @@ export const FIREChart: React.FC<FIREChartProps> = ({ parameters, formatCurrency
                   strokeDasharray="3 3"
                   strokeWidth={2}
                   label={{ 
-                    value: `☕ Barista Switch (Age ${baristaFireAge.toFixed(0)})`, 
+                    value: `☕ Barista Switch (${baristaFireAge.toFixed(0)})`, 
                     position: "insideBottomLeft",
+                    offset: 5,
                     style: {
-                      fontSize: 12,
+                      fontSize: 11,
                       fontWeight: 'bold',
                       fill: theme.palette.warning.main
                     }
