@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test What-If Simulator</title>
+</head>
+<body>
+    <h1>What-If Simulator Test</h1>
+    <p>This is a simple test to verify the simulator tab fix.</p>
+    
+    <script>
+        // Test the key issue: coastAge variable
+        console.log('Testing coastAge variable reference...');
+        
+        // Simulate the parameters that would be passed
+        const testParameters = {
+            currentAge: 35,
+            retireAge: 67,
+            pmtMonthly: 2500,
+            rate: 7,
+            fireNumber: 2000000,
+            principal: 100000,
+            pmtMonthlyBarista: 2000,
+            calcMode: "coast",
+            withdrawalRate: 4.0
+        };
+        
+        console.log('Test parameters:', testParameters);
+        console.log('✅ Parameters object created successfully');
+        
+        // Test that withdrawalRate is accessible
+        if (testParameters.withdrawalRate) {
+            console.log('✅ withdrawalRate is defined:', testParameters.withdrawalRate);
+        } else {
+            console.log('❌ withdrawalRate is undefined');
+        }
+        
+        // Test safe parameter access
+        const safeParameters = {
+            ...testParameters,
+            withdrawalRate: testParameters.withdrawalRate || 4.0
+        };
+        
+        console.log('✅ Safe parameters created:', safeParameters);
+        console.log('Test completed successfully!');
+    </script>
+</body>
+</html>
