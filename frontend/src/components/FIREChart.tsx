@@ -911,9 +911,10 @@ export const FIREChart: React.FC<FIREChartProps> = ({ parameters, formatCurrency
                 strokeWidth={2}
                 label={{ 
                   value: `🎯 FIRE Target (${formatCurrency(parameters.fireNumber)})`, 
-                  position: "right",
+                  position: "topRight",
+                  offset: 5,
                   style: { 
-                    fontSize: 12, 
+                    fontSize: 11, 
                     fontWeight: 'bold',
                     fill: theme.palette.error.main
                   }
@@ -927,10 +928,11 @@ export const FIREChart: React.FC<FIREChartProps> = ({ parameters, formatCurrency
                 strokeDasharray="3 3"
                 strokeWidth={2}
                 label={{ 
-                  value: `🏁 Retirement (Age ${parameters.retireAge})`, 
-                  position: "top",
+                  value: `🏁 Retirement (${parameters.retireAge})`, 
+                  position: "topLeft",
+                  offset: 5,
                   style: { 
-                    fontSize: 12, 
+                    fontSize: 11, 
                     fontWeight: 'bold',
                     fill: theme.palette.warning.main
                   }
@@ -949,19 +951,27 @@ export const FIREChart: React.FC<FIREChartProps> = ({ parameters, formatCurrency
                   const achievementAge = traditionalFireAchievementPoint.age;
                   const coastAge = coastFireAge;
                   const baristaAge = baristaFireAge;
+                  const retireAge = parameters.retireAge;
                   
-                  // Check if achievement age is close to other switch ages
-                  const isCloseToCoast = Math.abs(achievementAge - coastAge) < 3;
-                  const isCloseToBarista = Math.abs(achievementAge - baristaAge) < 3;
+                  // Check proximity to other important ages
+                  const isCloseToCoast = Math.abs(achievementAge - coastAge) < 4;
+                  const isCloseToBarista = Math.abs(achievementAge - baristaAge) < 4;
+                  const isCloseToRetirement = Math.abs(achievementAge - retireAge) < 4;
                   
-                  // Choose position based on proximity to other lines
-                  let labelPosition = "insideBottomRight";
-                  if (isCloseToCoast && isCloseToBarista) {
-                    labelPosition = "top"; // Use top if close to both
-                  } else if (isCloseToCoast) {
-                    labelPosition = "insideBottomRight"; // Use bottom right if close to coast
-                  } else if (isCloseToBarista) {
-                    labelPosition = "insideTopRight"; // Use top right if close to barista
+                  // Always position to the right, but adjust vertical position to avoid overlap
+                  let labelPosition = "right";
+                  let yOffset = 0;
+                  
+                  // Adjust vertical offset based on proximity to other lines
+                  if (isCloseToCoast || isCloseToBarista || isCloseToRetirement) {
+                    // If close to other lines, offset vertically
+                    if (isCloseToCoast && coastAge < achievementAge) {
+                      yOffset = -20; // Move up if coast line is to the left
+                    } else if (isCloseToBarista && baristaAge < achievementAge) {
+                      yOffset = 20; // Move down if barista line is to the left
+                    } else if (isCloseToRetirement && retireAge > achievementAge) {
+                      yOffset = -15; // Move up if retirement line is to the right
+                    }
                   }
                   
                   return (
@@ -973,11 +983,12 @@ export const FIREChart: React.FC<FIREChartProps> = ({ parameters, formatCurrency
                       label={{ 
                         value: `🎉 FIRE Achieved (${traditionalFireAchievementPoint.age.toFixed(1)})`, 
                         position: labelPosition as any,
-                        offset: 10,
+                        offset: 15,
                         style: {
                           fontSize: 11,
                           fontWeight: 'bold',
-                          fill: theme.palette.success.main
+                          fill: theme.palette.success.main,
+                          transform: yOffset !== 0 ? `translateY(${yOffset}px)` : undefined
                         }
                       }}
                     />
