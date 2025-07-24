@@ -911,8 +911,8 @@ export const FIREChart: React.FC<FIREChartProps> = ({ parameters, formatCurrency
                 strokeWidth={2}
                 label={{ 
                   value: `🎯 FIRE Target (${formatCurrency(parameters.fireNumber)})`, 
-                  position: "topRight",
-                  offset: 5,
+                  position: "left",
+                  offset: 10,
                   style: { 
                     fontSize: 11, 
                     fontWeight: 'bold',
@@ -958,19 +958,28 @@ export const FIREChart: React.FC<FIREChartProps> = ({ parameters, formatCurrency
                   const isCloseToBarista = Math.abs(achievementAge - baristaAge) < 4;
                   const isCloseToRetirement = Math.abs(achievementAge - retireAge) < 4;
                   
-                  // Always position to the right, but adjust vertical position to avoid overlap
+                  // Check if achievement happens near the FIRE target value (potential overlap with horizontal line)
+                  const achievementValue = traditionalFireAchievementPoint.traditional;
+                  const fireTargetValue = parameters.fireNumber;
+                  const isNearFireTarget = Math.abs(achievementValue - fireTargetValue) < (fireTargetValue * 0.1); // Within 10% of target
+                  
+                  // Position to the right, but adjust both horizontal and vertical position to avoid overlaps
                   let labelPosition = "right";
                   let yOffset = 0;
                   
-                  // Adjust vertical offset based on proximity to other lines
+                  // If near FIRE target line, move the text down to avoid overlap with horizontal target line
+                  if (isNearFireTarget) {
+                    yOffset = 25; // Move down to clear the horizontal FIRE target line
+                  }
+                  
+                  // Additional adjustments based on proximity to vertical lines
                   if (isCloseToCoast || isCloseToBarista || isCloseToRetirement) {
-                    // If close to other lines, offset vertically
                     if (isCloseToCoast && coastAge < achievementAge) {
-                      yOffset = -20; // Move up if coast line is to the left
+                      yOffset = Math.max(yOffset, -20); // Move up if coast line is to the left, but not if already moved down for target
                     } else if (isCloseToBarista && baristaAge < achievementAge) {
-                      yOffset = 20; // Move down if barista line is to the left
+                      yOffset = Math.max(yOffset, 20); // Move down if barista line is to the left
                     } else if (isCloseToRetirement && retireAge > achievementAge) {
-                      yOffset = -15; // Move up if retirement line is to the right
+                      yOffset = Math.min(yOffset, -15); // Move up if retirement line is to the right, but not if already moved down for target
                     }
                   }
                   
