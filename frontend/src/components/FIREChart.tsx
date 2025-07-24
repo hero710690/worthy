@@ -937,6 +937,35 @@ export const FIREChart: React.FC<FIREChartProps> = ({ parameters, formatCurrency
                 }}
               />
               
+              {/* Traditional FIRE Achievement Line - Shows when portfolio reaches FIRE target */}
+              {(() => {
+                // Find the age when Traditional FIRE is achieved
+                const traditionalFireAchievementPoint = chartData.find(point => 
+                  point.traditional >= parameters.fireNumber
+                );
+                
+                if (traditionalFireAchievementPoint) {
+                  return (
+                    <ReferenceLine 
+                      x={traditionalFireAchievementPoint.age} 
+                      stroke={theme.palette.success.main}
+                      strokeDasharray="2 2"
+                      strokeWidth={3}
+                      label={{ 
+                        value: `🎉 Traditional FIRE Achieved (Age ${traditionalFireAchievementPoint.age.toFixed(1)})`, 
+                        position: "insideTopRight",
+                        style: {
+                          fontSize: 12,
+                          fontWeight: 'bold',
+                          fill: theme.palette.success.main
+                        }
+                      }}
+                    />
+                  );
+                }
+                return null;
+              })()}
+              
               {/* Coast FIRE Switch Point Line */}
               <ReferenceLine 
                 x={coastFireAge} 
@@ -973,14 +1002,36 @@ export const FIREChart: React.FC<FIREChartProps> = ({ parameters, formatCurrency
                 />
               )}
               
-              {/* Traditional FIRE Line */}
+              {/* Traditional FIRE Line with Achievement Marker */}
               <Line
                 type="monotone"
                 dataKey="traditional"
                 stroke={theme.palette.primary.main}
                 strokeWidth={3}
                 name="🎯 Traditional FIRE"
-                dot={false}
+                dot={(props: any) => {
+                  // Add a special dot when Traditional FIRE is achieved
+                  const { cx, cy, payload } = props;
+                  if (payload && payload.traditional >= parameters.fireNumber) {
+                    const isFirstAchievement = chartData.findIndex(point => 
+                      point.traditional >= parameters.fireNumber
+                    ) === chartData.findIndex(point => point.age === payload.age);
+                    
+                    if (isFirstAchievement) {
+                      return (
+                        <circle
+                          cx={cx}
+                          cy={cy}
+                          r={8}
+                          fill={theme.palette.success.main}
+                          stroke={theme.palette.success.dark}
+                          strokeWidth={2}
+                        />
+                      );
+                    }
+                  }
+                  return null;
+                }}
                 activeDot={{ r: 6 }}
                 connectNulls={false}
               />
@@ -1084,6 +1135,19 @@ export const FIREChart: React.FC<FIREChartProps> = ({ parameters, formatCurrency
           </Typography>
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
             • <strong>🎯 Traditional FIRE:</strong> Full contributions until FIRE achievement or retirement, then {parameters.withdrawalRate}% annual withdrawals
+            {(() => {
+              const traditionalFireAchievementPoint = chartData.find(point => 
+                point.traditional >= parameters.fireNumber
+              );
+              if (traditionalFireAchievementPoint) {
+                return (
+                  <span style={{ color: theme.palette.success.main, fontWeight: 'bold' }}>
+                    {' '}(🎉 Achieved at age {traditionalFireAchievementPoint.age.toFixed(1)})
+                  </span>
+                );
+              }
+              return null;
+            })()}
           </Typography>
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
             • <strong>🏖️ Coast FIRE:</strong> Stop contributions at age {coastFireAge.toFixed(0)}, coast with growth only until retirement, then withdraw
