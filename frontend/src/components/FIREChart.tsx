@@ -929,7 +929,7 @@ export const FIREChart: React.FC<FIREChartProps> = ({ parameters, formatCurrency
                 strokeWidth={2}
                 label={{ 
                   value: `🏁 Retirement (${parameters.retireAge})`, 
-                  position: "topLeft",
+                  position: "top",
                   offset: 5,
                   style: { 
                     fontSize: 11, 
