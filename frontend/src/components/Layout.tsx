@@ -12,6 +12,11 @@ import {
   Stack,
   Avatar,
   Paper,
+  useTheme,
+  useMediaQuery,
+  AppBar,
+  Toolbar,
+  Fab,
 } from '@mui/material';
 import {
   Dashboard as DashboardIcon,
@@ -28,11 +33,14 @@ import {
   Schedule,
   Help,
   Logout,
+  Close,
+  Add,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 
 const drawerWidth = 280;
+const mobileDrawerWidth = 280;
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -43,10 +51,23 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
   const location = useLocation();
   const { user, logout } = useAuthStore();
   const [mobileOpen, setMobileOpen] = useState(false);
+  
+  // Mobile responsiveness
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const isTablet = useMediaQuery(theme.breakpoints.down('lg'));
 
   const handleLogout = () => {
     logout();
     navigate('/login');
+  };
+
+  const handleDrawerToggle = () => {
+    setMobileOpen(!mobileOpen);
+  };
+
+  const handleDrawerClose = () => {
+    setMobileOpen(false);
   };
 
   const handleDrawerToggle = () => {

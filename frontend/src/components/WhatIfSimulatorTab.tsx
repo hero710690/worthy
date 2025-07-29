@@ -272,12 +272,12 @@ export const WhatIfSimulatorTab: React.FC<WhatIfSimulatorTabProps> = ({
                 value={parameters.fireNumber}
                 onChange={(_, value) => updateParameter('fireNumber', value as number)}
                 min={1000000}
-                max={30000000}
+                max={60000000}
                 step={100000}
                 marks={[
                   { value: 10000000, label: '$10M' },
-                  { value: 15000000, label: '$15M' },
-                  { value: 30000000, label: '$30M' }
+                  { value: 30000000, label: '$30M' },
+                  { value: 60000000, label: '$60M' }
                 ]}
               />
               <TextField

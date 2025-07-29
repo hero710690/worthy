@@ -1,22 +1,41 @@
+import React, { Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
-import { CssBaseline } from '@mui/material';
-import { Login } from './components/auth/Login';
-import { Register } from './components/auth/Register';
-import { Dashboard } from './components/Dashboard';
-import { AssetsList } from './components/assets/AssetsList';
-import { TransactionHistory } from './components/transactions/TransactionHistory';
-import { Portfolio } from './components/Portfolio';
-import { Goals } from './components/Goals';
-import { Analytics } from './components/Analytics';
-import { UserProfile } from './components/UserProfile';
-import { RecurringInvestments } from './components/RecurringInvestments';
-import { Dividends } from './components/Dividends';
-import { Layout } from './components/Layout';
+import { CssBaseline, CircularProgress, Box, useMediaQuery } from '@mui/material';
+import { ResponsiveLayout } from './components/ResponsiveLayout';
 import { ProtectedRoute } from './components/ProtectedRoute';
+import { PerformanceMonitor } from './components/PerformanceMonitor';
 import { useAuth } from './hooks/useAuth';
 
-// Create Material-UI theme
+// Lazy load components for better performance
+const Login = React.lazy(() => import('./components/auth/Login').then(module => ({ default: module.Login })));
+const Register = React.lazy(() => import('./components/auth/Register').then(module => ({ default: module.Register })));
+const Dashboard = React.lazy(() => import('./components/Dashboard').then(module => ({ default: module.Dashboard })));
+const AssetsList = React.lazy(() => import('./components/assets/AssetsList').then(module => ({ default: module.AssetsList })));
+const TransactionHistory = React.lazy(() => import('./components/transactions/TransactionHistory').then(module => ({ default: module.TransactionHistory })));
+const Portfolio = React.lazy(() => import('./components/Portfolio').then(module => ({ default: module.Portfolio })));
+const Goals = React.lazy(() => import('./components/Goals').then(module => ({ default: module.Goals })));
+const Analytics = React.lazy(() => import('./components/Analytics').then(module => ({ default: module.Analytics })));
+const UserProfile = React.lazy(() => import('./components/UserProfile').then(module => ({ default: module.UserProfile })));
+const RecurringInvestments = React.lazy(() => import('./components/RecurringInvestments').then(module => ({ default: module.RecurringInvestments })));
+const Dividends = React.lazy(() => import('./components/Dividends').then(module => ({ default: module.Dividends })));
+
+// Loading component
+const LoadingSpinner = () => (
+  <Box 
+    display="flex" 
+    justifyContent="center" 
+    alignItems="center" 
+    minHeight="200px"
+    flexDirection="column"
+    gap={2}
+  >
+    <CircularProgress size={40} />
+    <div style={{ fontSize: '14px', color: '#666' }}>Loading...</div>
+  </Box>
+);
+
+// Create Material-UI theme with mobile optimizations
 const theme = createTheme({
   palette: {
     primary: {
@@ -39,6 +58,17 @@ const theme = createTheme({
     h6: {
       fontWeight: 600,
     },
+    // Mobile-optimized typography
+    h5: {
+      '@media (max-width:600px)': {
+        fontSize: '1.25rem',
+      },
+    },
+    body1: {
+      '@media (max-width:600px)': {
+        fontSize: '0.9rem',
+      },
+    },
   },
   shape: {
     borderRadius: 12,
@@ -49,6 +79,12 @@ const theme = createTheme({
         root: {
           textTransform: 'none',
           fontWeight: 600,
+          // Better touch targets on mobile
+          minHeight: 44,
+          '@media (max-width:600px)': {
+            minHeight: 48,
+            fontSize: '0.9rem',
+          },
         },
       },
     },
@@ -56,6 +92,42 @@ const theme = createTheme({
       styleOverrides: {
         root: {
           boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
+          // Better mobile spacing
+          '@media (max-width:600px)': {
+            borderRadius: 8,
+          },
+        },
+      },
+    },
+    MuiIconButton: {
+      styleOverrides: {
+        root: {
+          // Better touch targets
+          '@media (max-width:600px)': {
+            padding: 12,
+          },
+        },
+      },
+    },
+    MuiListItemButton: {
+      styleOverrides: {
+        root: {
+          // Better touch targets for navigation
+          '@media (max-width:600px)': {
+            minHeight: 56,
+          },
+        },
+      },
+    },
+    // Improve form inputs on mobile
+    MuiTextField: {
+      styleOverrides: {
+        root: {
+          '@media (max-width:600px)': {
+            '& .MuiInputBase-root': {
+              fontSize: '16px', // Prevents zoom on iOS
+            },
+          },
         },
       },
     },
@@ -70,7 +142,8 @@ function App() {
     <ThemeProvider theme={theme}>
       <CssBaseline />
       <Router>
-        <Routes>
+        <Suspense fallback={<LoadingSpinner />}>
+          <Routes>
           {/* Public routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
@@ -80,9 +153,9 @@ function App() {
             path="/dashboard"
             element={
               <ProtectedRoute>
-                <Layout>
+                <ResponsiveLayout>
                   <Dashboard />
-                </Layout>
+                </ResponsiveLayout>
               </ProtectedRoute>
             }
           />
@@ -91,9 +164,9 @@ function App() {
             path="/assets"
             element={
               <ProtectedRoute>
-                <Layout>
+                <ResponsiveLayout>
                   <AssetsList />
-                </Layout>
+                </ResponsiveLayout>
               </ProtectedRoute>
             }
           />
@@ -102,9 +175,9 @@ function App() {
             path="/transactions"
             element={
               <ProtectedRoute>
-                <Layout>
+                <ResponsiveLayout>
                   <TransactionHistory />
-                </Layout>
+                </ResponsiveLayout>
               </ProtectedRoute>
             }
           />
@@ -113,9 +186,9 @@ function App() {
             path="/portfolio"
             element={
               <ProtectedRoute>
-                <Layout>
+                <ResponsiveLayout>
                   <Portfolio />
-                </Layout>
+                </ResponsiveLayout>
               </ProtectedRoute>
             }
           />
@@ -124,9 +197,9 @@ function App() {
             path="/goals"
             element={
               <ProtectedRoute>
-                <Layout>
+                <ResponsiveLayout>
                   <Goals />
-                </Layout>
+                </ResponsiveLayout>
               </ProtectedRoute>
             }
           />
@@ -135,9 +208,9 @@ function App() {
             path="/recurring"
             element={
               <ProtectedRoute>
-                <Layout>
+                <ResponsiveLayout>
                   <RecurringInvestments />
-                </Layout>
+                </ResponsiveLayout>
               </ProtectedRoute>
             }
           />
@@ -146,9 +219,9 @@ function App() {
             path="/dividends"
             element={
               <ProtectedRoute>
-                <Layout>
+                <ResponsiveLayout>
                   <Dividends />
-                </Layout>
+                </ResponsiveLayout>
               </ProtectedRoute>
             }
           />
@@ -157,9 +230,9 @@ function App() {
             path="/analytics"
             element={
               <ProtectedRoute>
-                <Layout>
+                <ResponsiveLayout>
                   <Analytics />
-                </Layout>
+                </ResponsiveLayout>
               </ProtectedRoute>
             }
           />
@@ -168,9 +241,9 @@ function App() {
             path="/profile"
             element={
               <ProtectedRoute>
-                <Layout>
+                <ResponsiveLayout>
                   <UserProfile />
-                </Layout>
+                </ResponsiveLayout>
               </ProtectedRoute>
             }
           />
@@ -180,8 +253,10 @@ function App() {
           
           {/* Catch all route */}
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
+          </Routes>
+        </Suspense>
       </Router>
+      <PerformanceMonitor />
     </ThemeProvider>
   );
 }
