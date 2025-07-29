@@ -12,10 +12,10 @@ import {
   Chip,
   Divider,
 } from '@mui/material';
-import { 
-  Assessment, 
-  TrendingUp, 
-  TrendingDown, 
+import {
+  Assessment,
+  TrendingUp,
+  TrendingDown,
   TrendingFlat,
   Refresh,
 } from '@mui/icons-material';
@@ -40,12 +40,12 @@ export const Analytics: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      
+
       console.log('🔄 Fetching asset data for analytics...');
       const response = await assetAPI.getAssets();
       console.log('✅ Assets fetched:', response.assets.length, 'assets');
       setAssets(response.assets);
-      
+
       setError(null);
     } catch (error: any) {
       console.error('❌ Failed to fetch asset data:', error);
@@ -77,8 +77,11 @@ export const Analytics: React.FC = () => {
         setPortfolioReturns(null);
         return;
       }
-      
+
       console.log('🔄 Calculating portfolio returns...');
+      // Clear cache to ensure we get fresh calculations with the bug fixes
+      returnsCalculationService.clearCache();
+
       const baseCurrency = user?.base_currency || 'USD';
       const returns = await returnsCalculationService.calculatePortfolioReturns(assets, baseCurrency);
       console.log('✅ Portfolio returns calculated:', returns);
@@ -95,7 +98,7 @@ export const Analytics: React.FC = () => {
       fetchAssetData(),
       fetchPortfolioChanges(),
     ]);
-    
+
     // Calculate returns after assets are loaded
     if (assets.length > 0) {
       await fetchPortfolioReturns();
@@ -122,10 +125,10 @@ export const Analytics: React.FC = () => {
 
     try {
       setUpdatingFIREProfile(true);
-      
+
       // Get current FIRE profile
       const profileResponse = await fireApi.getFIREProfile();
-      
+
       if (!profileResponse.fire_profile) {
         alert('Please set up your FIRE profile first in the Goals page before using calculated returns.');
         return;
@@ -133,7 +136,7 @@ export const Analytics: React.FC = () => {
 
       const currentProfile = profileResponse.fire_profile;
       const calculatedReturn = portfolioReturns.portfolioAnnualizedReturnPercent / 100; // Convert to decimal
-      
+
       // Update the profile with calculated return
       const updatedProfile = {
         annual_expenses: currentProfile.annual_expenses,
@@ -150,9 +153,9 @@ export const Analytics: React.FC = () => {
       };
 
       await fireApi.createOrUpdateFIREProfile(updatedProfile);
-      
+
       alert(`✅ FIRE profile updated! Expected return set to ${portfolioReturns.portfolioAnnualizedReturnPercent.toFixed(2)}% based on your portfolio performance.`);
-      
+
     } catch (error: any) {
       console.error('❌ Failed to update FIRE profile:', error);
       alert('Failed to update FIRE profile. Please try again.');
@@ -196,10 +199,10 @@ export const Analytics: React.FC = () => {
 
   if (loading) {
     return (
-      <Box sx={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
+      <Box sx={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
         minHeight: '60vh',
         flexDirection: 'column',
         gap: 2,
@@ -236,18 +239,18 @@ export const Analytics: React.FC = () => {
             Advanced performance metrics and investment analysis
           </Typography>
         </Box>
-        
+
         <Alert severity="info" sx={{ mb: 3 }}>
           <Typography variant="h6" sx={{ mb: 1 }}>
             No Assets Found
           </Typography>
           <Typography variant="body1">
-            You need to add assets to your portfolio before you can view analytics. 
-            Start by adding your first investment asset to see detailed performance metrics, 
+            You need to add assets to your portfolio before you can view analytics.
+            Start by adding your first investment asset to see detailed performance metrics,
             returns analysis, and portfolio insights.
           </Typography>
         </Alert>
-        
+
         <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200' }}>
           <CardContent sx={{ p: 4, textAlign: 'center' }}>
             <Assessment sx={{ fontSize: 80, color: 'primary.main', mb: 2 }} />
@@ -257,9 +260,9 @@ export const Analytics: React.FC = () => {
             <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
               Add your first asset to unlock powerful analytics features.
             </Typography>
-            <Button 
-              variant="contained" 
-              size="large" 
+            <Button
+              variant="contained"
+              size="large"
               href="/portfolio"
               sx={{ borderRadius: 2, px: 4 }}
             >
@@ -304,7 +307,7 @@ export const Analytics: React.FC = () => {
             <Typography variant="h6" sx={{ mb: 3, fontWeight: 'bold' }}>
               Portfolio Value Changes
             </Typography>
-            
+
             {/* Current Portfolio Value */}
             <Box sx={{ mb: 4, p: 3, bgcolor: 'primary.50', borderRadius: 2 }}>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
@@ -319,12 +322,12 @@ export const Analytics: React.FC = () => {
             <Grid container spacing={3}>
               {Object.entries(portfolioChanges.value_changes).map(([period, change]) => {
                 const trend = getTrendDisplay(change.percentage_change);
-                
+
                 return (
                   <Grid item xs={12} sm={6} md={3} key={period}>
-                    <Card sx={{ 
-                      borderRadius: 2, 
-                      border: '1px solid', 
+                    <Card sx={{
+                      borderRadius: 2,
+                      border: '1px solid',
                       borderColor: 'grey.100',
                       height: '100%',
                     }}>
@@ -345,9 +348,9 @@ export const Analytics: React.FC = () => {
                             <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
                               Change
                             </Typography>
-                            <Typography 
-                              variant="h6" 
-                              sx={{ 
+                            <Typography
+                              variant="h6"
+                              sx={{
                                 fontWeight: 'bold',
                                 color: trend.color,
                               }}
@@ -365,8 +368,8 @@ export const Analytics: React.FC = () => {
                               label={`${trend.sign}${Math.abs(change.percentage_change).toFixed(2)}%`}
                               size="small"
                               sx={{
-                                bgcolor: trend.color === 'success.main' ? 'success.50' : 
-                                        trend.color === 'error.main' ? 'error.50' : 'grey.100',
+                                bgcolor: trend.color === 'success.main' ? 'success.50' :
+                                  trend.color === 'error.main' ? 'error.50' : 'grey.100',
                                 color: trend.color,
                                 fontWeight: 'bold',
                               }}
@@ -391,8 +394,8 @@ export const Analytics: React.FC = () => {
             {/* Performance Notes */}
             <Alert severity="info" sx={{ mt: 3 }}>
               <Typography variant="body2">
-                <strong>Performance Calculation:</strong> Returns are calculated using time-weighted methodology, 
-                excluding cash assets from performance calculations. Values are converted to your base currency 
+                <strong>Performance Calculation:</strong> Returns are calculated using time-weighted methodology,
+                excluding cash assets from performance calculations. Values are converted to your base currency
                 ({portfolioChanges.base_currency}) using current exchange rates.
               </Typography>
             </Alert>
@@ -407,7 +410,7 @@ export const Analytics: React.FC = () => {
             <Typography variant="h6" sx={{ mb: 3, fontWeight: 'bold' }}>
               📊 Estimated Annual Return Rate
             </Typography>
-            
+
             {/* Main Return Display */}
             <Box sx={{ mb: 4, p: 3, bgcolor: 'success.50', borderRadius: 2, textAlign: 'center' }}>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
@@ -462,12 +465,12 @@ export const Analytics: React.FC = () => {
                     label={portfolioReturns.advancedMetrics.performanceGrade}
                     size="medium"
                     sx={{
-                      bgcolor: portfolioReturns.portfolioAnnualizedReturnPercent >= 10 ? 'success.50' : 
-                              portfolioReturns.portfolioAnnualizedReturnPercent >= 7 ? 'info.50' : 
-                              portfolioReturns.portfolioAnnualizedReturnPercent >= 0 ? 'warning.50' : 'error.50',
-                      color: portfolioReturns.portfolioAnnualizedReturnPercent >= 10 ? 'success.main' : 
-                             portfolioReturns.portfolioAnnualizedReturnPercent >= 7 ? 'info.main' : 
-                             portfolioReturns.portfolioAnnualizedReturnPercent >= 0 ? 'warning.main' : 'error.main',
+                      bgcolor: portfolioReturns.portfolioAnnualizedReturnPercent >= 10 ? 'success.50' :
+                        portfolioReturns.portfolioAnnualizedReturnPercent >= 7 ? 'info.50' :
+                          portfolioReturns.portfolioAnnualizedReturnPercent >= 0 ? 'warning.50' : 'error.50',
+                      color: portfolioReturns.portfolioAnnualizedReturnPercent >= 10 ? 'success.main' :
+                        portfolioReturns.portfolioAnnualizedReturnPercent >= 7 ? 'info.main' :
+                          portfolioReturns.portfolioAnnualizedReturnPercent >= 0 ? 'warning.main' : 'error.main',
                       fontWeight: 'bold',
                     }}
                   />
@@ -502,8 +505,8 @@ export const Analytics: React.FC = () => {
             {/* Calculation Notes */}
             <Alert severity="info" sx={{ mt: 3 }}>
               <Typography variant="body2">
-                <strong>How it's calculated:</strong> This annualized return rate (CAGR) is based on your actual investment transactions and current portfolio value. 
-                It represents the compound annual growth rate of your investments, excluding cash positions. 
+                <strong>How it's calculated:</strong> This annualized return rate (CAGR) is based on your actual investment transactions and current portfolio value.
+                It represents the compound annual growth rate of your investments, excluding cash positions.
                 This rate can be used as your "Expected Return" in FIRE calculations for more personalized projections.
               </Typography>
             </Alert>
@@ -520,26 +523,26 @@ export const Analytics: React.FC = () => {
           <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
             You have {assets.length} asset{assets.length !== 1 ? 's' : ''} in your portfolio.
           </Typography>
-          
+
           {!portfolioChanges && (
             <Alert severity="warning" sx={{ mt: 3, mb: 3 }}>
               <Typography variant="body1">
-                <strong>Performance data unavailable</strong><br/>
-                Portfolio performance tracking requires transaction history. 
+                <strong>Performance data unavailable</strong><br />
+                Portfolio performance tracking requires transaction history.
                 Make sure you have recorded some transactions to see performance metrics.
               </Typography>
             </Alert>
           )}
-          
+
           <Alert severity="info" sx={{ mt: 3 }}>
             <Typography variant="body1">
-              🚧 <strong>More Analytics Coming Soon!</strong><br/>
+              🚧 <strong>More Analytics Coming Soon!</strong><br />
               We're working on additional analytics features including:
-              <br/>• Detailed annualized returns calculation (XIRR/CAGR)
-              <br/>• Asset allocation analysis and rebalancing suggestions
-              <br/>• Risk metrics and correlation analysis
-              <br/>• Interactive charts and historical performance visualization
-              <br/>• Portfolio export and reporting functionality
+              <br />• Detailed annualized returns calculation (XIRR/CAGR)
+              <br />• Asset allocation analysis and rebalancing suggestions
+              <br />• Risk metrics and correlation analysis
+              <br />• Interactive charts and historical performance visualization
+              <br />• Portfolio export and reporting functionality
             </Typography>
           </Alert>
         </CardContent>

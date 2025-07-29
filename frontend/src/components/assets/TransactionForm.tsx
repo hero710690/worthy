@@ -22,6 +22,7 @@ import {
 } from '@mui/icons-material';
 import { assetAPI } from '../../services/assetApi';
 import type { CreateTransactionRequest, Asset } from '../../types/assets';
+import { ButtonLoadingSpinner } from '../common/LoadingSpinner';
 
 interface TransactionFormProps {
   open: boolean;
@@ -344,7 +345,7 @@ export const TransactionForm: React.FC<TransactionFormProps> = ({
               },
             }}
           >
-            {loading ? 'Adding...' : 'Add Transaction'}
+            {loading ? <ButtonLoadingSpinner message="Adding..." /> : 'Add Transaction'}
           </Button>
         </DialogActions>
       </form>

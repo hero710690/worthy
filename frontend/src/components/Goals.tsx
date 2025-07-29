@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -339,7 +339,7 @@ const Goals: React.FC = () => {
             retireAge: profileResponse.fire_profile.target_retirement_age,
             fireNumber: profileResponse.fire_profile.annual_expenses, // Using as FIRE number
             rate: Math.round((profileResponse.fire_profile.expected_return_pre_retirement || 0.07) * 100 * 10) / 10, // Convert to percentage and round to 1 decimal
-            withdrawalRate: Math.round((profileResponse.fire_profile.safe_withdrawal_rate || 0.04) * 100 * 10) / 10, // Convert to percentage and round to 1 decimal
+            withdrawalRate: 4.0, // 🔧 ALWAYS default to 4% for what-if simulator, regardless of saved profile
             principal: getPortfolioValueForFIRE() // Use filtered value
           }));
           

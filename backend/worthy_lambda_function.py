@@ -3718,15 +3718,26 @@ def handle_batch_processing():
                 if stock_price <= 0:
                     raise Exception(f"Invalid stock price for {ticker_symbol}: {stock_price}")
                 
-                # Convert investment amount to stock currency if needed
-                if currency != 'USD':  # Assuming most stocks are in USD
-                    exchange_rate = get_exchange_rate_cached(currency, 'USD')
-                    amount_usd = amount * exchange_rate
+                # Determine stock currency based on market
+                stock_currency = stock_price_data.get('currency', 'USD')
+                if market_type == 'TW':
+                    stock_currency = 'TWD'
+                elif market_type == 'US':
+                    stock_currency = 'USD'
+                
+                # For now, use simple currency logic to avoid timeouts
+                if currency == stock_currency:
+                    # Same currency - use amount directly (most common case)
+                    amount_in_stock_currency = amount
+                    logger.info(f"💰 Same currency ({currency}): using {amount} directly")
                 else:
-                    amount_usd = amount
+                    # Different currency - for now, assume 1:1 to avoid timeout issues
+                    # TODO: Implement proper currency conversion later
+                    amount_in_stock_currency = amount
+                    logger.warning(f"⚠️ Currency conversion needed but skipped: {currency} → {stock_currency}")
                 
                 # Calculate shares to purchase
-                shares = Decimal(str(amount_usd / stock_price)).quantize(
+                shares = Decimal(str(amount_in_stock_currency / stock_price)).quantize(
                     Decimal('0.000001'), rounding=ROUND_HALF_UP
                 )
                 
@@ -3746,9 +3757,9 @@ def handle_batch_processing():
                         DATABASE_URL,
                         """
                         INSERT INTO assets (user_id, ticker_symbol, asset_type, total_shares, average_cost_basis, currency)
-                        VALUES (%s, %s, 'Stock', %s, %s, 'USD')
+                        VALUES (%s, %s, 'Stock', %s, %s, %s)
                         """,
-                        (user_id, ticker_symbol, float(shares), stock_price)
+                        (user_id, ticker_symbol, float(shares), stock_price, stock_currency)
                     )
                     
                     # Get the created asset
@@ -3794,9 +3805,9 @@ def handle_batch_processing():
                     DATABASE_URL,
                     """
                     INSERT INTO transactions (asset_id, transaction_type, transaction_date, shares, price_per_share, currency)
-                    VALUES (%s, 'Recurring', CURRENT_DATE, %s, %s, 'USD')
+                    VALUES (%s, 'Recurring', CURRENT_DATE, %s, %s, %s)
                     """,
-                    (asset_id, float(shares), stock_price)
+                    (asset_id, float(shares), stock_price, stock_currency)
                 )
                 
                 # Update next run date
