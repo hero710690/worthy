@@ -411,7 +411,7 @@ export const Analytics: React.FC = () => {
               📊 Estimated Annual Return Rate
             </Typography>
 
-            {/* Main Return Display */}
+            {/* Main Return Display with Enhanced Information */}
             <Box sx={{ mb: 4, p: 3, bgcolor: 'success.50', borderRadius: 2, textAlign: 'center' }}>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                 Based on Your Portfolio Performance
@@ -419,9 +419,22 @@ export const Analytics: React.FC = () => {
               <Typography variant="h3" sx={{ fontWeight: 'bold', color: 'success.main', mb: 1 }}>
                 {portfolioReturns.portfolioAnnualizedReturnPercent.toFixed(2)}%
               </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Annualized Return (CAGR) over {portfolioReturns.weightedAverageHoldingPeriod.toFixed(1)} years
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                {portfolioReturns.weightedAverageHoldingPeriod < 1 
+                  ? `Actual Return over ${(portfolioReturns.weightedAverageHoldingPeriod * 365.25).toFixed(0)} days`
+                  : `Annualized Return (CAGR) over ${portfolioReturns.weightedAverageHoldingPeriod.toFixed(1)} years`
+                }
               </Typography>
+              
+              {/* Performance Context */}
+              {portfolioReturns.weightedAverageHoldingPeriod < 0.25 && (
+                <Alert severity="info" sx={{ mt: 2, textAlign: 'left' }}>
+                  <Typography variant="body2">
+                    <strong>Short-term Performance:</strong> This return is based on a short holding period. 
+                    Long-term performance may differ significantly.
+                  </Typography>
+                </Alert>
+              )}
             </Box>
 
             {/* Performance Details */}
@@ -514,11 +527,212 @@ export const Analytics: React.FC = () => {
         </Card>
       )}
 
+      {/* Individual Asset Performance */}
+      {portfolioReturns && portfolioReturns.assets.length > 0 && (
+        <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', mb: 4 }}>
+          <CardContent sx={{ p: 4 }}>
+            <Typography variant="h6" sx={{ mb: 3, fontWeight: 'bold' }}>
+              📈 Individual Asset Performance
+            </Typography>
+            
+            <Box sx={{ overflowX: 'auto' }}>
+              <Grid container spacing={2}>
+                {portfolioReturns.assets
+                  .sort((a, b) => b.annualizedReturnPercent - a.annualizedReturnPercent)
+                  .map((assetReturn, index) => (
+                    <Grid item xs={12} sm={6} md={4} key={assetReturn.asset.asset_id}>
+                      <Card sx={{ 
+                        borderRadius: 2, 
+                        border: '1px solid', 
+                        borderColor: 'grey.100',
+                        height: '100%',
+                        background: index === 0 ? 'success.50' : 
+                                   index === portfolioReturns.assets.length - 1 ? 'error.50' : 'grey.50'
+                      }}>
+                        <CardContent sx={{ p: 3 }}>
+                          <Stack spacing={2}>
+                            {/* Asset Header */}
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                              <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                                {assetReturn.asset.ticker_symbol}
+                              </Typography>
+                              <Chip 
+                                label={assetReturn.asset.asset_type} 
+                                size="small" 
+                                variant="outlined"
+                              />
+                            </Box>
+
+                            {/* Performance Metrics */}
+                            <Box>
+                              <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                                {assetReturn.holdingPeriodYears < 1 ? 'Actual Return' : 'Annualized Return'}
+                              </Typography>
+                              <Typography variant="h5" sx={{ 
+                                fontWeight: 'bold',
+                                color: assetReturn.annualizedReturnPercent >= 0 ? 'success.main' : 'error.main'
+                              }}>
+                                {assetReturn.annualizedReturnPercent >= 0 ? '+' : ''}{assetReturn.annualizedReturnPercent.toFixed(2)}%
+                              </Typography>
+                            </Box>
+
+                            {/* Total Return */}
+                            <Box>
+                              <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                                Total Return
+                              </Typography>
+                              <Typography variant="body1" sx={{ fontWeight: 'medium' }}>
+                                {formatCurrency(assetReturn.totalReturn, user?.base_currency)}
+                              </Typography>
+                            </Box>
+
+                            {/* Holding Period */}
+                            <Box>
+                              <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                                Holding Period
+                              </Typography>
+                              <Typography variant="body2">
+                                {assetReturn.holdingPeriodYears < 1 
+                                  ? `${(assetReturn.holdingPeriodYears * 365.25).toFixed(0)} days`
+                                  : `${assetReturn.holdingPeriodYears.toFixed(1)} years`
+                                }
+                              </Typography>
+                            </Box>
+
+                            {/* Current Value */}
+                            <Divider />
+                            <Box>
+                              <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+                                Current Value
+                              </Typography>
+                              <Typography variant="body1" sx={{ fontWeight: 'medium' }}>
+                                {formatCurrency(assetReturn.currentValue, user?.base_currency)}
+                              </Typography>
+                            </Box>
+                          </Stack>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  ))}
+              </Grid>
+            </Box>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Asset Allocation Analysis */}
+      {portfolioReturns && (
+        <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', mb: 4 }}>
+          <CardContent sx={{ p: 4 }}>
+            <Typography variant="h6" sx={{ mb: 3, fontWeight: 'bold' }}>
+              🥧 Asset Allocation Analysis
+            </Typography>
+            
+            <Grid container spacing={3}>
+              {/* By Asset Type */}
+              <Grid item xs={12} md={6}>
+                <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 'bold' }}>
+                  By Asset Type
+                </Typography>
+                {(() => {
+                  const typeAllocation = portfolioReturns.assets.reduce((acc, asset) => {
+                    const type = asset.asset.asset_type;
+                    if (!acc[type]) {
+                      acc[type] = { value: 0, count: 0 };
+                    }
+                    acc[type].value += asset.currentValue;
+                    acc[type].count += 1;
+                    return acc;
+                  }, {} as Record<string, { value: number; count: number }>);
+
+                  const totalValue = Object.values(typeAllocation).reduce((sum, item) => sum + item.value, 0);
+
+                  return Object.entries(typeAllocation)
+                    .sort(([,a], [,b]) => b.value - a.value)
+                    .map(([type, data]) => (
+                      <Box key={type} sx={{ mb: 2 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                          <Typography variant="body2">{type}</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                            {((data.value / totalValue) * 100).toFixed(1)}%
+                          </Typography>
+                        </Box>
+                        <Box sx={{ 
+                          height: 8, 
+                          bgcolor: 'grey.200', 
+                          borderRadius: 1,
+                          overflow: 'hidden'
+                        }}>
+                          <Box sx={{ 
+                            height: '100%', 
+                            bgcolor: 'primary.main',
+                            width: `${(data.value / totalValue) * 100}%`,
+                            transition: 'width 0.3s ease'
+                          }} />
+                        </Box>
+                        <Typography variant="caption" color="text.secondary">
+                          {formatCurrency(data.value, user?.base_currency)} • {data.count} asset{data.count !== 1 ? 's' : ''}
+                        </Typography>
+                      </Box>
+                    ));
+                })()}
+              </Grid>
+
+              {/* Performance Distribution */}
+              <Grid item xs={12} md={6}>
+                <Typography variant="subtitle1" sx={{ mb: 2, fontWeight: 'bold' }}>
+                  Performance Distribution
+                </Typography>
+                {(() => {
+                  const performanceBuckets = {
+                    'Excellent (>20%)': portfolioReturns.assets.filter(a => a.annualizedReturnPercent > 20).length,
+                    'Good (10-20%)': portfolioReturns.assets.filter(a => a.annualizedReturnPercent >= 10 && a.annualizedReturnPercent <= 20).length,
+                    'Average (0-10%)': portfolioReturns.assets.filter(a => a.annualizedReturnPercent >= 0 && a.annualizedReturnPercent < 10).length,
+                    'Poor (<0%)': portfolioReturns.assets.filter(a => a.annualizedReturnPercent < 0).length,
+                  };
+
+                  const totalAssets = portfolioReturns.assets.length;
+
+                  return Object.entries(performanceBuckets).map(([bucket, count]) => (
+                    <Box key={bucket} sx={{ mb: 2 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                        <Typography variant="body2">{bucket}</Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                          {count} asset{count !== 1 ? 's' : ''}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ 
+                        height: 8, 
+                        bgcolor: 'grey.200', 
+                        borderRadius: 1,
+                        overflow: 'hidden'
+                      }}>
+                        <Box sx={{ 
+                          height: '100%', 
+                          bgcolor: bucket.includes('Excellent') ? 'success.main' :
+                                   bucket.includes('Good') ? 'info.main' :
+                                   bucket.includes('Average') ? 'warning.main' : 'error.main',
+                          width: `${(count / totalAssets) * 100}%`,
+                          transition: 'width 0.3s ease'
+                        }} />
+                      </Box>
+                      <Typography variant="caption" color="text.secondary">
+                        {((count / totalAssets) * 100).toFixed(1)}% of portfolio
+                      </Typography>
+                    </Box>
+                  ));
+                })()}
+              </Grid>
+            </Grid>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Portfolio Summary */}
       <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200' }}>
         <CardContent sx={{ p: 4 }}>
           <Typography variant="h6" sx={{ mb: 2 }}>
-            Portfolio Summary
+            📊 Portfolio Summary
           </Typography>
           <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
             You have {assets.length} asset{assets.length !== 1 ? 's' : ''} in your portfolio.
@@ -534,17 +748,51 @@ export const Analytics: React.FC = () => {
             </Alert>
           )}
 
-          <Alert severity="info" sx={{ mt: 3 }}>
-            <Typography variant="body1">
-              🚧 <strong>More Analytics Coming Soon!</strong><br />
-              We're working on additional analytics features including:
-              <br />• Detailed annualized returns calculation (XIRR/CAGR)
-              <br />• Asset allocation analysis and rebalancing suggestions
-              <br />• Risk metrics and correlation analysis
-              <br />• Interactive charts and historical performance visualization
-              <br />• Portfolio export and reporting functionality
-            </Typography>
-          </Alert>
+          {/* Quick Stats */}
+          {portfolioReturns && (
+            <Grid container spacing={3} sx={{ mt: 2 }}>
+              <Grid item xs={6} sm={3}>
+                <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'primary.50', borderRadius: 2 }}>
+                  <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
+                    {portfolioReturns.assets.filter(a => a.annualizedReturnPercent > 0).length}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Profitable Assets
+                  </Typography>
+                </Box>
+              </Grid>
+              <Grid item xs={6} sm={3}>
+                <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'success.50', borderRadius: 2 }}>
+                  <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'success.main' }}>
+                    {portfolioReturns.advancedMetrics.bestPerformer}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Best Performer
+                  </Typography>
+                </Box>
+              </Grid>
+              <Grid item xs={6} sm={3}>
+                <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'info.50', borderRadius: 2 }}>
+                  <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'info.main' }}>
+                    {formatCurrency(portfolioReturns.totalDividendsReceived, user?.base_currency)}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Total Dividends
+                  </Typography>
+                </Box>
+              </Grid>
+              <Grid item xs={6} sm={3}>
+                <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'warning.50', borderRadius: 2 }}>
+                  <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'warning.main' }}>
+                    {portfolioReturns.advancedMetrics.dividendYield.toFixed(2)}%
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Dividend Yield
+                  </Typography>
+                </Box>
+              </Grid>
+            </Grid>
+          )}
         </CardContent>
       </Card>
     </Box>
