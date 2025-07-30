@@ -2300,6 +2300,25 @@ def create_recurring_investments_table():
         except Exception as constraint_error:
             logger.warning(f"Constraint update warning: {str(constraint_error)}")
         
+        # Add unique constraint to prevent duplicate recurring investments (including start_date)
+        try:
+            execute_update(
+                DATABASE_URL,
+                """
+                DROP INDEX IF EXISTS recurring_investments_unique_active
+                """
+            )
+            execute_update(
+                DATABASE_URL,
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS recurring_investments_unique_active 
+                ON recurring_investments (user_id, ticker_symbol, amount, currency, frequency, start_date) 
+                WHERE is_active = true
+                """
+            )
+        except Exception as constraint_error:
+            logger.warning(f"Unique constraint warning: {str(constraint_error)}")
+        
         logger.info("✅ RecurringInvestments table created/verified")
     except Exception as e:
         logger.error(f"❌ Failed to create recurring_investments table: {str(e)}")
@@ -3299,6 +3318,24 @@ def handle_create_recurring_investment(body, user_id):
         if frequency not in valid_frequencies:
             return create_error_response(400, f"Invalid frequency. Must be one of: {', '.join(valid_frequencies)}")
         
+        # Check for existing duplicate recurring investment (same ticker, amount, frequency, and start date)
+        existing_recurring = execute_query(
+            DATABASE_URL,
+            """
+            SELECT recurring_id FROM recurring_investments 
+            WHERE user_id = %s AND ticker_symbol = %s AND amount = %s 
+            AND currency = %s AND frequency = %s AND start_date = %s AND is_active = true
+            """,
+            (user_id, ticker_symbol, amount, currency, frequency, start_date)
+        )
+        
+        if existing_recurring:
+            return create_error_response(409, {
+                "error": "Duplicate recurring investment",
+                "message": f"A recurring investment for {ticker_symbol} with ${amount} {currency} {frequency} starting on {start_date} already exists",
+                "existing_recurring_id": existing_recurring[0]['recurring_id']
+            })
+        
         # Calculate next run date based on frequency
         from datetime import datetime, timedelta
         start_dt = datetime.strptime(start_date, '%Y-%m-%d').date()
@@ -3501,7 +3538,7 @@ def handle_delete_recurring_investment(recurring_id, user_id):
         logger.error(f"Delete recurring investment error: {str(e)}")
         return create_error_response(500, "Failed to delete recurring investment plan")
 
-def handle_batch_processing():
+def handle_batch_processing(body=None):
     """Handle recurring investments batch processing with multi-market support"""
     from datetime import datetime, timedelta, date
     from decimal import Decimal, ROUND_HALF_UP
@@ -3510,36 +3547,18 @@ def handle_batch_processing():
     
     logger.info("🚀 Starting recurring investments batch processing")
     
-    # Market holidays for 2025
-    US_MARKET_HOLIDAYS_2025 = [
-        date(2025, 1, 1),   # New Year's Day
-        date(2025, 1, 20),  # Martin Luther King Jr. Day
-        date(2025, 2, 17),  # Presidents' Day
-        date(2025, 4, 18),  # Good Friday
-        date(2025, 5, 26),  # Memorial Day
-        date(2025, 6, 19),  # Juneteenth
-        date(2025, 7, 4),   # Independence Day
-        date(2025, 9, 1),   # Labor Day
-        date(2025, 11, 27), # Thanksgiving
-        date(2025, 12, 25), # Christmas
-    ]
+    # Get trigger date from payload or use today as fallback
+    trigger_date = date.today()
+    if body and isinstance(body, dict):
+        trigger_date_str = body.get('trigger_date')
+        if trigger_date_str:
+            try:
+                trigger_date = datetime.strptime(trigger_date_str, '%Y-%m-%d').date()
+                logger.info(f"Using trigger date from payload: {trigger_date}")
+            except ValueError:
+                logger.warning(f"Invalid trigger_date format: {trigger_date_str}, using today")
     
-    # Taiwan market holidays for 2025 (TSE - Taiwan Stock Exchange)
-    TW_MARKET_HOLIDAYS_2025 = [
-        date(2025, 1, 1),   # New Year's Day
-        date(2025, 1, 27),  # Chinese New Year Eve
-        date(2025, 1, 28),  # Chinese New Year
-        date(2025, 1, 29),  # Chinese New Year
-        date(2025, 1, 30),  # Chinese New Year
-        date(2025, 1, 31),  # Chinese New Year
-        date(2025, 2, 28),  # Peace Memorial Day
-        date(2025, 4, 4),   # Children's Day
-        date(2025, 4, 5),   # Tomb Sweeping Day
-        date(2025, 5, 1),   # Labor Day
-        date(2025, 6, 10),  # Dragon Boat Festival
-        date(2025, 9, 17),  # Mid-Autumn Festival
-        date(2025, 10, 10), # National Day
-    ]
+    logger.info(f"Processing investments for date: {trigger_date}")
     
     def get_market_type_from_ticker(ticker_symbol):
         """Determine market type from ticker symbol"""
@@ -3551,50 +3570,6 @@ def handle_batch_processing():
         
         # Default to US market for other tickers
         return 'US'
-    
-    def is_market_open_today(market_type='US'):
-        """Check if the specified market is open today"""
-        # Get current time in market timezone
-        if market_type == 'TW':
-            tz = pytz.timezone('Asia/Taipei')
-            holidays = TW_MARKET_HOLIDAYS_2025
-            market_name = "Taiwan"
-        else:
-            tz = pytz.timezone('US/Eastern')
-            holidays = US_MARKET_HOLIDAYS_2025
-            market_name = "US"
-        
-        # Get today's date in market timezone
-        now = datetime.now(tz)
-        today = now.date()
-        
-        # Check if it's a weekend
-        if today.weekday() >= 5:  # Saturday = 5, Sunday = 6
-            logger.info(f"{market_name} market closed: Weekend ({today})")
-            return False
-        
-        # Check if it's a holiday
-        if today in holidays:
-            logger.info(f"{market_name} market closed: Holiday ({today})")
-            return False
-        
-        # Check market hours
-        current_time = now.time()
-        if market_type == 'TW':
-            # Taiwan market: 9:00 AM - 1:30 PM Taiwan time
-            market_open = datetime.strptime('09:00', '%H:%M').time()
-            market_close = datetime.strptime('13:30', '%H:%M').time()
-        else:
-            # US market: 9:30 AM - 4:00 PM Eastern time
-            market_open = datetime.strptime('09:30', '%H:%M').time()
-            market_close = datetime.strptime('16:00', '%H:%M').time()
-        
-        if current_time < market_open or current_time > market_close:
-            logger.info(f"{market_name} market closed: Outside trading hours ({current_time})")
-            return False
-        
-        logger.info(f"{market_name} market is open ({today} {current_time})")
-        return True
     
     def calculate_next_run_date(current_date, frequency):
         """Calculate next run date based on frequency"""
@@ -3624,9 +3599,7 @@ def handle_batch_processing():
     skipped_count = 0
     
     try:
-        # Get investments due for processing
-        today = date.today()
-        
+        # Get investments due for processing using trigger date
         investments = execute_query(
             DATABASE_URL,
             """
@@ -3637,7 +3610,7 @@ def handle_batch_processing():
             AND ri.next_run_date <= %s
             ORDER BY ri.next_run_date ASC
             """,
-            (today,)
+            (trigger_date,)
         )
         
         logger.info(f"📋 Found {len(investments)} recurring investments due for execution")
@@ -3652,54 +3625,11 @@ def handle_batch_processing():
                 'skipped': 0
             })
         
-        # Group investments by market type
-        us_investments = []
-        tw_investments = []
-        
-        for investment in investments:
-            ticker_symbol = investment['ticker_symbol']
-            market_type = get_market_type_from_ticker(ticker_symbol)
-            
-            if market_type == 'TW':
-                tw_investments.append(investment)
-            else:
-                us_investments.append(investment)
-        
-        logger.info(f"📊 Market breakdown: {len(us_investments)} US investments, {len(tw_investments)} Taiwan investments")
-        
-        # Check market status for each market type
-        us_market_open = is_market_open_today('US') if us_investments else True
-        tw_market_open = is_market_open_today('TW') if tw_investments else True
-        
-        # Filter investments based on market status
-        processable_investments = []
-        
-        if us_market_open:
-            processable_investments.extend(us_investments)
-            logger.info(f"🇺🇸 US market is open - processing {len(us_investments)} investments")
-        else:
-            logger.info(f"🇺🇸 US market is closed - skipping {len(us_investments)} investments")
-            skipped_count += len(us_investments)
-        
-        if tw_market_open:
-            processable_investments.extend(tw_investments)
-            logger.info(f"🇹🇼 Taiwan market is open - processing {len(tw_investments)} investments")
-        else:
-            logger.info(f"🇹🇼 Taiwan market is closed - skipping {len(tw_investments)} investments")
-            skipped_count += len(tw_investments)
-        
-        if not processable_investments:
-            logger.info("📴 All relevant markets are closed today, skipping batch processing")
-            return create_response(200, {
-                'status': 'skipped',
-                'reason': 'all_markets_closed',
-                'processed': 0,
-                'failed': 0,
-                'skipped': len(investments)
-            })
+        # Process all investments due today (EventBridge handles market timing)
+        logger.info(f"📊 Processing {len(investments)} investments due for {trigger_date}")
         
         # Process each investment
-        for investment in processable_investments:
+        for investment in investments:
             try:
                 ticker_symbol = investment['ticker_symbol']
                 amount = float(investment['amount'])
@@ -3810,12 +3740,8 @@ def handle_batch_processing():
                     (asset_id, float(shares), stock_price, stock_currency)
                 )
                 
-                # Update next run date
-                next_run_date = calculate_next_run_date(date.today(), investment['frequency'])
-                
-                # Skip weekends and holidays for next run date
-                while not is_market_open_today():
-                    next_run_date = next_run_date + timedelta(days=1)
+                # Update next run date (EventBridge handles market timing)
+                next_run_date = calculate_next_run_date(trigger_date, investment['frequency'])
                 
                 execute_update(
                     DATABASE_URL,
@@ -7376,7 +7302,8 @@ def lambda_handler(event, context):
         
         elif path == '/batch/recurring-investments' and http_method == 'POST':
             # Batch processing for recurring investments - no authentication required (internal)
-            return handle_batch_processing()
+            body = json.loads(event.get('body', '{}')) if event.get('body') else {}
+            return handle_batch_processing(body)
         
         else:
             return create_error_response(404, f"Endpoint not found: {path}")

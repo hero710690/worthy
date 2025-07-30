@@ -131,10 +131,24 @@ class ReturnsCalculationService {
         // Calculate total capital contributions (actual money invested) in base currency
         let totalCapitalContributions = 0;
         
+        // Debug: Log all transaction types to understand the data structure
+        const transactionTypes = [...new Set(transactions.map(t => t.transaction_type))];
+        console.log(`🔍 Transaction types for ${asset.ticker_symbol}:`, transactionTypes);
+        
         // Process each transaction to calculate total capital invested
         for (const transaction of transactions) {
-          // Only count actual purchases (LumpSum and Recurring), not dividends or other types
-          if (transaction.transaction_type === 'LumpSum' || transaction.transaction_type === 'Recurring') {
+          console.log(`📝 Transaction for ${asset.ticker_symbol}:`, {
+            type: transaction.transaction_type,
+            shares: transaction.shares,
+            price: transaction.price_per_share,
+            date: transaction.transaction_date || transaction.date
+          });
+          
+          // Count all purchase transactions (exclude only dividends and other income types)
+          // Include common purchase types: LumpSum, Recurring, Buy, Purchase, etc.
+          const isPurchaseTransaction = !['Dividend', 'Interest', 'Split', 'Spin-off', 'Distribution'].includes(transaction.transaction_type);
+          
+          if (isPurchaseTransaction && transaction.shares > 0 && transaction.price_per_share > 0) {
             let transactionValue = transaction.shares * transaction.price_per_share;
             
             // Convert to base currency if needed
@@ -144,17 +158,32 @@ class ReturnsCalculationService {
             }
             
             totalCapitalContributions += transactionValue;
+            console.log(`💰 Added ${transactionValue} to capital contributions for ${asset.ticker_symbol}`);
           }
         }
         
         // Use total capital contributions as the "initial investment" for CAGR calculation
-        const initialInvestmentInBaseCurrency = totalCapitalContributions;
+        // If no capital contributions found, fallback to asset cost basis method
+        let initialInvestmentInBaseCurrency = totalCapitalContributions;
+        
+        if (totalCapitalContributions === 0) {
+          // Fallback to asset cost basis method
+          const assetCostBasis = asset.total_shares * asset.average_cost_basis;
+          if (asset.currency !== baseCurrency) {
+            const rate = await exchangeRateService.getExchangeRate(asset.currency, baseCurrency);
+            initialInvestmentInBaseCurrency = assetCostBasis * rate;
+          } else {
+            initialInvestmentInBaseCurrency = assetCostBasis;
+          }
+          console.log(`🔄 Using fallback cost basis method for ${asset.ticker_symbol}: ${initialInvestmentInBaseCurrency}`);
+        }
         
         console.log(`💰 Capital Analysis for ${asset.ticker_symbol}:`, {
           totalCapitalContributions,
           assetCostBasisMethod: asset.total_shares * asset.average_cost_basis,
+          finalInitialInvestment: initialInvestmentInBaseCurrency,
           transactionCount: transactions.length,
-          purchaseTransactions: transactions.filter(t => t.transaction_type === 'LumpSum' || t.transaction_type === 'Recurring').length
+          purchaseTransactions: transactions.filter(t => !['Dividend', 'Interest', 'Split', 'Spin-off', 'Distribution'].includes(t.transaction_type)).length
         });
 
         // Get current value from valuation service (already in base currency)
@@ -185,32 +214,32 @@ class ReturnsCalculationService {
         });
         
         if (initialInvestmentInBaseCurrency > 0) {
-          // For very short holding periods (less than 90 days), don't annualize
-          if (holdingPeriodDays < 90) {
-            // Just show the actual return without annualizing
-            annualizedReturnPercent = totalReturnPercent;
-            console.log(`⏰ Very short holding period for ${asset.ticker_symbol}: ${holdingPeriodDays.toFixed(1)} days, showing actual return: ${annualizedReturnPercent.toFixed(2)}%`);
+          // For very short holding periods (less than 180 days / 6 months), don't annualize at all
+          if (holdingPeriodDays < 180) {
+            // Just show the actual return without any annualization
+            annualizedReturnPercent = Math.max(-95, Math.min(100, totalReturnPercent)); // Cap actual returns too
+            console.log(`⏰ Very short holding period for ${asset.ticker_symbol}: ${holdingPeriodDays.toFixed(1)} days, showing capped actual return: ${annualizedReturnPercent.toFixed(2)}%`);
           } 
-          // For short periods (90 days to 1 year), use conservative annualization
-          else if (holdingPeriodYears < 1.0) {
-            // Use simple linear annualization for periods under 1 year
-            annualizedReturnPercent = totalReturnPercent * (365.25 / holdingPeriodDays);
-            // Cap at reasonable limits for short periods
-            annualizedReturnPercent = Math.max(-95, Math.min(200, annualizedReturnPercent));
-            console.log(`📅 Short period annualization for ${asset.ticker_symbol}: ${holdingPeriodDays.toFixed(1)} days, annualized: ${annualizedReturnPercent.toFixed(2)}%`);
+          // For short periods (6 months to 2 years), use very conservative annualization
+          else if (holdingPeriodYears < 2.0) {
+            // Use simple linear annualization but with much stricter caps
+            const simpleAnnualized = totalReturnPercent * (365.25 / holdingPeriodDays);
+            // Much more conservative caps for short periods
+            annualizedReturnPercent = Math.max(-50, Math.min(50, simpleAnnualized));
+            console.log(`📅 Conservative short period annualization for ${asset.ticker_symbol}: ${holdingPeriodDays.toFixed(1)} days, annualized: ${annualizedReturnPercent.toFixed(2)}%`);
           }
-          // For longer periods (1+ years), use proper CAGR
+          // For longer periods (2+ years), use proper CAGR with conservative limits
           else {
             const ratio = currentValueInBaseCurrency / initialInvestmentInBaseCurrency;
             
-            if (ratio > 0 && ratio < 100) { // Cap extreme ratios
+            if (ratio > 0 && ratio < 10) { // Much stricter ratio limits
               try {
                 const cagr = Math.pow(ratio, 1 / holdingPeriodYears) - 1;
                 const uncappedCAGR = cagr * 100;
-                // Cap CAGR at reasonable limits
-                annualizedReturnPercent = Math.max(-95, Math.min(500, uncappedCAGR));
+                // Much more conservative CAGR limits
+                annualizedReturnPercent = Math.max(-50, Math.min(100, uncappedCAGR));
                 
-                console.log(`📈 CAGR Calculation for ${asset.ticker_symbol}:`, {
+                console.log(`📈 Conservative CAGR Calculation for ${asset.ticker_symbol}:`, {
                   uncappedCAGR: uncappedCAGR.toFixed(2) + '%',
                   cappedCAGR: annualizedReturnPercent.toFixed(2) + '%',
                   formula: `(${currentValueInBaseCurrency.toFixed(2)} / ${initialInvestmentInBaseCurrency.toFixed(2)})^(1/${holdingPeriodYears.toFixed(2)}) - 1`
@@ -219,13 +248,13 @@ class ReturnsCalculationService {
                 console.warn(`CAGR calculation error for ${asset.ticker_symbol}:`, error);
                 annualizedReturnPercent = 0;
               }
-            } else if (ratio >= 100) {
-              // For extreme gains, cap at 500% annually
-              annualizedReturnPercent = 500;
-              console.log(`🚀 Extreme gain detected for ${asset.ticker_symbol}: ratio=${ratio.toFixed(2)}, capped at 500%`);
+            } else if (ratio >= 10) {
+              // For extreme gains, cap at much lower level
+              annualizedReturnPercent = 100;
+              console.log(`🚀 Extreme gain detected for ${asset.ticker_symbol}: ratio=${ratio.toFixed(2)}, capped at 100%`);
             } else {
               // For zero or negative ratios
-              annualizedReturnPercent = Math.max(-95, Math.min(0, totalReturnPercent));
+              annualizedReturnPercent = Math.max(-50, Math.min(0, totalReturnPercent));
               console.log(`⚠️ Zero/negative ratio for ${asset.ticker_symbol}: ${annualizedReturnPercent.toFixed(2)}%`);
             }
           }
@@ -297,32 +326,32 @@ class ReturnsCalculationService {
     const portfolioHoldingPeriodDays = weightedAverageHoldingPeriod * 365.25;
     
     if (totalInitialInvestment > 0) {
-      // For very short holding periods (less than 90 days), don't annualize
-      if (portfolioHoldingPeriodDays < 90) {
-        // Just show the actual return without annualizing
-        portfolioAnnualizedReturnPercent = portfolioTotalReturnPercent;
-        console.log(`⏰ Very short portfolio holding period: ${portfolioHoldingPeriodDays.toFixed(1)} days, showing actual return: ${portfolioAnnualizedReturnPercent.toFixed(2)}%`);
+      // For very short holding periods (less than 180 days / 6 months), don't annualize
+      if (portfolioHoldingPeriodDays < 180) {
+        // Just show the actual return without any annualization
+        portfolioAnnualizedReturnPercent = Math.max(-95, Math.min(100, portfolioTotalReturnPercent)); // Cap actual returns
+        console.log(`⏰ Very short portfolio holding period: ${portfolioHoldingPeriodDays.toFixed(1)} days, showing capped actual return: ${portfolioAnnualizedReturnPercent.toFixed(2)}%`);
       } 
-      // For short periods (90 days to 1 year), use conservative annualization
-      else if (weightedAverageHoldingPeriod < 1.0) {
-        // Use simple linear annualization for periods under 1 year
-        portfolioAnnualizedReturnPercent = portfolioTotalReturnPercent * (365.25 / portfolioHoldingPeriodDays);
-        // Cap at reasonable limits for short periods
-        portfolioAnnualizedReturnPercent = Math.max(-95, Math.min(200, portfolioAnnualizedReturnPercent));
-        console.log(`📅 Short portfolio period annualization: ${portfolioHoldingPeriodDays.toFixed(1)} days, annualized: ${portfolioAnnualizedReturnPercent.toFixed(2)}%`);
+      // For short periods (6 months to 2 years), use very conservative annualization
+      else if (weightedAverageHoldingPeriod < 2.0) {
+        // Use simple linear annualization but with much stricter caps
+        const simpleAnnualized = portfolioTotalReturnPercent * (365.25 / portfolioHoldingPeriodDays);
+        // Much more conservative caps for short periods
+        portfolioAnnualizedReturnPercent = Math.max(-50, Math.min(50, simpleAnnualized));
+        console.log(`📅 Conservative short portfolio period annualization: ${portfolioHoldingPeriodDays.toFixed(1)} days, annualized: ${portfolioAnnualizedReturnPercent.toFixed(2)}%`);
       }
-      // For longer periods (1+ years), use proper CAGR
+      // For longer periods (2+ years), use proper CAGR with conservative limits
       else {
         const ratio = totalCurrentValue / totalInitialInvestment;
         
-        if (ratio > 0 && ratio < 100) { // Cap extreme ratios
+        if (ratio > 0 && ratio < 10) { // Much stricter ratio limits
           try {
             const cagr = Math.pow(ratio, 1 / weightedAverageHoldingPeriod) - 1;
             const uncappedCAGR = cagr * 100;
-            // Cap CAGR at reasonable limits
-            portfolioAnnualizedReturnPercent = Math.max(-95, Math.min(500, uncappedCAGR));
+            // Much more conservative CAGR limits
+            portfolioAnnualizedReturnPercent = Math.max(-50, Math.min(100, uncappedCAGR));
             
-            console.log(`📈 Portfolio CAGR Calculation:`, {
+            console.log(`📈 Conservative Portfolio CAGR Calculation:`, {
               uncappedCAGR: uncappedCAGR.toFixed(2) + '%',
               cappedCAGR: portfolioAnnualizedReturnPercent.toFixed(2) + '%',
               formula: `(${totalCurrentValue.toFixed(2)} / ${totalInitialInvestment.toFixed(2)})^(1/${weightedAverageHoldingPeriod.toFixed(2)}) - 1`
@@ -331,13 +360,13 @@ class ReturnsCalculationService {
             console.warn('Portfolio CAGR calculation error:', error);
             portfolioAnnualizedReturnPercent = 0;
           }
-        } else if (ratio >= 100) {
-          // For extreme gains, cap at 500% annually
-          portfolioAnnualizedReturnPercent = 500;
-          console.log(`🚀 Extreme portfolio gain detected: ratio=${ratio.toFixed(2)}, capped at 500%`);
+        } else if (ratio >= 10) {
+          // For extreme gains, cap at much lower level
+          portfolioAnnualizedReturnPercent = 100;
+          console.log(`🚀 Extreme portfolio gain detected: ratio=${ratio.toFixed(2)}, capped at 100%`);
         } else {
           // For zero or negative ratios
-          portfolioAnnualizedReturnPercent = Math.max(-95, Math.min(0, portfolioTotalReturnPercent));
+          portfolioAnnualizedReturnPercent = Math.max(-50, Math.min(0, portfolioTotalReturnPercent));
           console.log(`⚠️ Zero/negative portfolio ratio: ${portfolioAnnualizedReturnPercent.toFixed(2)}%`);
         }
       }
