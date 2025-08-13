@@ -195,8 +195,9 @@ class ReturnsCalculationService {
           ? (totalReturn / initialInvestmentInBaseCurrency) * 100
           : 0;
 
-        // Calculate holding period in years
-        const firstTransactionDate = new Date(transactions[0].date || transactions[0].transaction_date || asset.created_at);
+        // Calculate holding period in years - use asset initialization date for Individual Asset Performance
+        const assetInitializationDate = new Date(asset.created_at);
+        const firstTransactionDate = assetInitializationDate;
         const now = new Date();
         const holdingPeriodDays = Math.max(1, (now.getTime() - firstTransactionDate.getTime()) / (1000 * 60 * 60 * 24));
         const holdingPeriodYears = holdingPeriodDays / 365.25;

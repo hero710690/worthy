@@ -77,23 +77,23 @@ export const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({ children }) 
 
   const menuItems = [
     { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard', mobileShow: true },
-    { text: 'Assets', icon: <TrendingUp />, path: '/assets', mobileShow: false },
-    { text: 'Transactions', icon: <Receipt />, path: '/transactions', mobileShow: false },
+    { text: 'Assets', icon: <TrendingUp />, path: '/assets', mobileShow: true },
+    { text: 'Transactions', icon: <Receipt />, path: '/transactions', mobileShow: true },
     { text: 'Portfolio', icon: <Assessment />, path: '/portfolio', mobileShow: true },
-    { text: 'Recurring', icon: <Schedule />, path: '/recurring', mobileShow: false },
-    { text: 'Dividends', icon: <Paid />, path: '/dividends', mobileShow: false },
+    { text: 'Recurring', icon: <Schedule />, path: '/recurring', mobileShow: true },
+    { text: 'Dividends', icon: <Paid />, path: '/dividends', mobileShow: true },
     { text: 'Goals', icon: <GpsFixed />, path: '/goals', mobileShow: true },
     { text: 'Analytics', icon: <Analytics />, path: '/analytics', mobileShow: true },
-    { text: 'Settings', icon: <Settings />, path: '/profile', mobileShow: false },
+    { text: 'Settings', icon: <Settings />, path: '/profile', mobileShow: true },
   ];
 
   // Bottom navigation items for mobile (most important screens)
   const bottomNavItems = [
     { label: 'Dashboard', icon: <Home />, path: '/dashboard' },
+    { label: 'Assets', icon: <TrendingUp />, path: '/assets' },
     { label: 'Portfolio', icon: <AccountBalance />, path: '/portfolio' },
-    { label: 'Goals', icon: <GpsFixed />, path: '/goals' },
     { label: 'Analytics', icon: <Timeline />, path: '/analytics' },
-    { label: 'Profile', icon: <Person />, path: '/profile' },
+    { label: 'More', icon: <Menu />, path: '/more' }, // This will open the drawer for other features
   ];
 
   const renderUserProfile = () => (
@@ -415,7 +415,11 @@ export const ResponsiveLayout: React.FC<ResponsiveLayoutProps> = ({ children }) 
         <BottomNavigation
           value={location.pathname}
           onChange={(event, newValue) => {
-            navigate(newValue);
+            if (newValue === '/more') {
+              handleDrawerToggle();
+            } else {
+              navigate(newValue);
+            }
           }}
           sx={{
             position: 'fixed',

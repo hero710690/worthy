@@ -18,6 +18,9 @@ import {
   CircularProgress,
   IconButton,
   Tooltip,
+  useTheme,
+  useMediaQuery,
+  Divider,
 } from '@mui/material';
 import {
   Add,
@@ -41,6 +44,9 @@ export const Transactions: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showTransactionForm, setShowTransactionForm] = useState(false);
+  
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   const fetchData = async () => {
     try {
@@ -179,9 +185,15 @@ export const Transactions: React.FC = () => {
   return (
     <Box sx={{ p: { xs: 2, md: 3 } }}>
       {/* Header */}
-      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
+      <Stack 
+        direction={{ xs: 'column', md: 'row' }} 
+        justifyContent="space-between" 
+        alignItems={{ xs: 'stretch', md: 'center' }} 
+        spacing={{ xs: 2, md: 0 }}
+        sx={{ mb: 3 }}
+      >
         <Box>
-          <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 1 }}>
+          <Typography variant={isMobile ? "h5" : "h4"} sx={{ fontWeight: 'bold', mb: 1 }}>
             Transaction History
           </Typography>
           <Typography variant="body1" color="text.secondary">
@@ -192,15 +204,18 @@ export const Transactions: React.FC = () => {
           variant="contained"
           startIcon={<Add />}
           onClick={() => setShowTransactionForm(true)}
+          size={isMobile ? "large" : "medium"}
+          fullWidth={isMobile}
           sx={{
             borderRadius: 2,
             px: 3,
-            py: 1.5,
+            py: isMobile ? 2 : 1.5,
             textTransform: 'none',
-            fontWeight: 'bold'
+            fontWeight: 'bold',
+            minHeight: isMobile ? 56 : 'auto'
           }}
         >
-          Record Transaction
+          {isMobile ? "Add New Transaction" : "Record Transaction"}
         </Button>
       </Stack>
 
@@ -362,7 +377,108 @@ export const Transactions: React.FC = () => {
                 Record Transaction
               </Button>
             </Box>
+          ) : isMobile ? (
+            // Mobile Card Layout
+            <Box sx={{ p: 2 }}>
+              <Stack spacing={2}>
+                {transactions.map((transaction, index) => (
+                  <Card 
+                    key={`${transaction.id || index}`}
+                    sx={{ 
+                      borderRadius: 2,
+                      border: '1px solid',
+                      borderColor: 'grey.200',
+                      '&:hover': {
+                        borderColor: 'primary.main',
+                        boxShadow: 1
+                      }
+                    }}
+                  >
+                    <CardContent sx={{ p: 2 }}>
+                      {/* Header Row */}
+                      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" sx={{ mb: 2 }}>
+                        <Box>
+                          <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 0.5 }}>
+                            {transaction.asset_ticker}
+                          </Typography>
+                          <Stack direction="row" spacing={1} alignItems="center">
+                            <Chip
+                              label={transaction.asset_type}
+                              size="small"
+                              variant="outlined"
+                              sx={{ fontSize: '0.7rem', height: 20 }}
+                            />
+                            <Chip
+                              icon={getTransactionTypeIcon(transaction.transaction_type)}
+                              label={transaction.transaction_type}
+                              color={getTransactionTypeColor(transaction.transaction_type) as any}
+                              size="small"
+                              variant="outlined"
+                            />
+                          </Stack>
+                        </Box>
+                        <Stack direction="row" spacing={0.5}>
+                          <IconButton size="small" color="primary">
+                            <Edit fontSize="small" />
+                          </IconButton>
+                          <IconButton size="small" color="error">
+                            <Delete fontSize="small" />
+                          </IconButton>
+                        </Stack>
+                      </Stack>
+
+                      <Divider sx={{ my: 1.5 }} />
+
+                      {/* Transaction Details */}
+                      <Stack spacing={1.5}>
+                        <Stack direction="row" justifyContent="space-between">
+                          <Typography variant="body2" color="text.secondary">
+                            Date
+                          </Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+                            {formatDate(transaction.date)}
+                          </Typography>
+                        </Stack>
+
+                        <Stack direction="row" justifyContent="space-between">
+                          <Typography variant="body2" color="text.secondary">
+                            Shares
+                          </Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+                            {transaction.shares.toLocaleString(undefined, {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 6
+                            })}
+                          </Typography>
+                        </Stack>
+
+                        <Stack direction="row" justifyContent="space-between">
+                          <Typography variant="body2" color="text.secondary">
+                            Price per Share
+                          </Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+                            {formatCurrency(transaction.price_per_share, transaction.currency)}
+                          </Typography>
+                        </Stack>
+
+                        <Divider />
+
+                        <Stack direction="row" justifyContent="space-between">
+                          <Typography variant="body1" sx={{ fontWeight: 'bold' }}>
+                            Total Amount
+                          </Typography>
+                          <Typography variant="body1" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
+                            {formatCurrency(transaction.shares * transaction.price_per_share, transaction.currency)}
+                          </Typography>
+                        </Stack>
+                      </Stack>
+                    </CardContent>
+                  </Card>
+                ))}
+              </Stack>
+            </Box>
           ) : (
+            // Desktop Table Layout
             <TableContainer>
               <Table>
                 <TableHead>
