@@ -3131,11 +3131,13 @@ def get_fallback_dividend_data(ticker_symbol):
         'NVDA': {'dividend_per_share': 0.04, 'frequency': 'quarterly'},
         'SPY': {'dividend_per_share': 1.35, 'frequency': 'quarterly'},
         'VTI': {'dividend_per_share': 0.85, 'frequency': 'quarterly'},
+        'VT': {'dividend_per_share': 0.55, 'frequency': 'quarterly'},  # ✅ ADDED: Vanguard Total World Stock ETF
         'QQQ': {'dividend_per_share': 0.65, 'frequency': 'quarterly'},
         'VOO': {'dividend_per_share': 1.40, 'frequency': 'quarterly'},
         'VEA': {'dividend_per_share': 0.85, 'frequency': 'quarterly'},
         'VWO': {'dividend_per_share': 0.75, 'frequency': 'quarterly'},
         'BND': {'dividend_per_share': 0.18, 'frequency': 'monthly'},
+        'BNDW': {'dividend_per_share': 0.18, 'frequency': 'monthly'},  # ✅ IMPROVED: Updated dividend amount
         'VXUS': {'dividend_per_share': 0.80, 'frequency': 'quarterly'},
         'SCHD': {'dividend_per_share': 0.70, 'frequency': 'quarterly'},
         'JEPI': {'dividend_per_share': 0.45, 'frequency': 'monthly'},
@@ -3173,19 +3175,19 @@ def handle_auto_detect_dividends(user_id):
     try:
         logger.info(f"🔍 Starting dividend auto-detection for user {user_id}")
         
-        # Get user's stock and ETF assets
+        # Get user's stock, ETF, and bond assets (bonds can have dividend distributions)
         assets = execute_query(
             DATABASE_URL,
             """
             SELECT * FROM assets 
-            WHERE user_id = %s AND asset_type IN ('Stock', 'ETF')
+            WHERE user_id = %s AND asset_type IN ('Stock', 'ETF', 'Bond')
             ORDER BY ticker_symbol
             """,
             (user_id,)
         )
         
         if not assets:
-            logger.info("No stock or ETF assets found for dividend detection")
+            logger.info("No stock, ETF, or bond assets found for dividend detection")
             return create_response(200, {
                 "detected": 0,
                 "message": "No stock or ETF assets found for dividend detection"
@@ -3205,33 +3207,60 @@ def handle_auto_detect_dividends(user_id):
             logger.info(f"🔍 Checking dividends for {ticker} ({total_shares} shares)")
             
             # Skip if we already have recent dividends for this asset
-            existing_dividends = execute_query(
-                DATABASE_URL,
-                """
-                SELECT COUNT(*) as count FROM dividends 
-                WHERE asset_id = %s AND ex_dividend_date >= CURRENT_DATE - INTERVAL '90 days'
-                """,
-                (asset_id,)
-            )
+            # Use different time windows based on expected dividend frequency
+            fallback_data = get_fallback_dividend_data(ticker)
+            if fallback_data and fallback_data.get('frequency') == 'monthly':
+                # For monthly dividends, only check last 25 days to allow new monthly dividends
+                existing_dividends = execute_query(
+                    DATABASE_URL,
+                    """
+                    SELECT COUNT(*) as count FROM dividends 
+                    WHERE asset_id = %s AND ex_dividend_date >= CURRENT_DATE - INTERVAL '25 days'
+                    """,
+                    (asset_id,)
+                )
+                check_period = "25 days"
+            else:
+                # For quarterly/annual dividends, check last 90 days
+                existing_dividends = execute_query(
+                    DATABASE_URL,
+                    """
+                    SELECT COUNT(*) as count FROM dividends 
+                    WHERE asset_id = %s AND ex_dividend_date >= CURRENT_DATE - INTERVAL '90 days'
+                    """,
+                    (asset_id,)
+                )
+                check_period = "90 days"
             
             if existing_dividends and existing_dividends[0]['count'] > 0:
-                logger.info(f"⏭️ Skipping {ticker} - recent dividends already exist")
+                logger.info(f"⏭️ Skipping {ticker} - recent dividends already exist (checked last {check_period})")
                 skipped_count += 1
                 continue
             
             # Try to fetch real dividend data from APIs
             dividend_data = None
+            api_error_details = None
             
             try:
+                logger.info(f"🌐 Attempting API fetch for {ticker}")
                 dividend_data = fetch_dividend_data_from_apis(ticker)
+                if dividend_data:
+                    logger.info(f"✅ API fetch successful for {ticker}: ${dividend_data.get('dividend_per_share', 0)} from {dividend_data.get('source', 'unknown')}")
+                else:
+                    logger.info(f"⚠️ API fetch returned no data for {ticker}")
             except Exception as e:
-                logger.warning(f"API fetch failed for {ticker}: {str(e)}")
-                api_errors.append(f"{ticker}: {str(e)}")
+                api_error_details = str(e)
+                logger.warning(f"❌ API fetch failed for {ticker}: {api_error_details}")
+                api_errors.append(f"{ticker}: {api_error_details}")
             
             # If API fetch failed, try fallback data
             if not dividend_data:
                 logger.info(f"🔄 Trying fallback data for {ticker}")
                 dividend_data = get_fallback_dividend_data(ticker)
+                if dividend_data:
+                    logger.info(f"✅ Fallback data found for {ticker}: ${dividend_data.get('dividend_per_share', 0)}")
+                else:
+                    logger.info(f"❌ No fallback data available for {ticker}")
             
             # If we have dividend data, create the record
             if dividend_data and dividend_data.get('dividend_per_share', 0) > 0:

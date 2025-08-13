@@ -64,7 +64,7 @@ if [ ! -d "node_modules" ]; then
     echo "✅ Dependencies installed"
 fi
 
-# Build the application
+# Build the application with optimizations
 echo "🔨 Building application..."
 npm run build
 
@@ -74,6 +74,22 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "✅ Build completed successfully"
+
+# Add mobile-optimized meta tags if not already present
+echo "📱 Ensuring mobile optimization..."
+if ! grep -q "mobile-web-app-capable" dist/index.html; then
+    echo "Adding mobile meta tags..."
+    sed -i.bak '/<head>/a\
+    <meta name="mobile-web-app-capable" content="yes">\
+    <meta name="apple-mobile-web-app-capable" content="yes">\
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">\
+    <meta name="apple-mobile-web-app-title" content="Worthy">\
+    <link rel="apple-touch-icon" href="/vite.svg">' dist/index.html
+    rm -f dist/index.html.bak
+    echo "✅ Mobile meta tags added"
+else
+    echo "✅ Mobile optimization already present"
+fi
 
 # Check if dist directory exists
 if [ ! -d "dist" ]; then
