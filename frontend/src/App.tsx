@@ -10,6 +10,8 @@ import { useAuth } from './hooks/useAuth';
 // Lazy load components for better performance
 const Login = React.lazy(() => import('./components/auth/Login').then(module => ({ default: module.Login })));
 const Register = React.lazy(() => import('./components/auth/Register').then(module => ({ default: module.Register })));
+const ForgotPassword = React.lazy(() => import('./components/auth/ForgotPassword').then(module => ({ default: module.ForgotPassword })));
+const ResetPassword = React.lazy(() => import('./components/auth/ResetPassword').then(module => ({ default: module.ResetPassword })));
 const Dashboard = React.lazy(() => import('./components/Dashboard').then(module => ({ default: module.Dashboard })));
 const AssetsList = React.lazy(() => import('./components/assets/AssetsList').then(module => ({ default: module.AssetsList })));
 const TransactionHistory = React.lazy(() => import('./components/transactions/TransactionHistory').then(module => ({ default: module.TransactionHistory })));
@@ -147,6 +149,8 @@ function App() {
           {/* Public routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           
           {/* Protected routes */}
           <Route

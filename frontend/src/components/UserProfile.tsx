@@ -55,7 +55,7 @@ export const UserProfile: React.FC = () => {
     name: user?.name || '',
     email: user?.email || '',
     base_currency: user?.base_currency || 'USD',
-    birth_year: user?.birth_year || new Date().getFullYear() - 30,
+    birth_date: user?.birth_date || '',
   });
 
   const handleInputChange = (field: string, value: string | number) => {
@@ -75,7 +75,7 @@ export const UserProfile: React.FC = () => {
         name: formData.name,
         email: formData.email,
         base_currency: formData.base_currency,
-        birth_year: formData.birth_year
+        birth_date: formData.birth_date
       });
       
       setSuccess(true);
@@ -120,10 +120,10 @@ export const UserProfile: React.FC = () => {
       field: 'base_currency'
     },
     {
-      label: 'Birth Year',
-      value: user?.birth_year?.toString() || 'Not set',
+      label: 'Birth Date',
+      value: user?.birth_date ? new Date(user.birth_date).toLocaleDateString() : 'Not set',
       icon: <CalendarToday color="primary" />,
-      field: 'birth_year'
+      field: 'birth_date'
     },
   ];
 
@@ -369,14 +369,16 @@ export const UserProfile: React.FC = () => {
                       <Grid item xs={12} sm={6}>
                         <TextField
                           fullWidth
-                          label="Birth Year"
-                          value={formData.birth_year}
-                          onChange={(e) => handleInputChange('birth_year', parseInt(e.target.value))}
+                          label="Birth Date"
+                          value={formData.birth_date}
+                          onChange={(e) => handleInputChange('birth_date', e.target.value)}
                           variant="outlined"
-                          type="number"
+                          type="date"
+                          InputLabelProps={{
+                            shrink: true,
+                          }}
                           inputProps={{
-                            min: 1900,
-                            max: new Date().getFullYear()
+                            max: new Date().toISOString().split('T')[0],
                           }}
                           InputProps={{
                             startAdornment: <CalendarToday sx={{ mr: 1, color: 'text.secondary' }} />

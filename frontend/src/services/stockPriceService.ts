@@ -195,9 +195,16 @@ export class StockPriceService {
 
       const url = `${this.baseUrl}?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${this.apiKey}`;
       
+      const isMobile = /Mobi|Android/i.test(navigator.userAgent);
       console.log(`📡 Fetching stock price for ${symbol} from Alpha Vantage...`);
+      console.log('Is Mobile:', isMobile);
       
-      const response = await fetch(url, {
+      // Add timeout for mobile support
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Request timeout after 8 seconds')), 8000);
+      });
+      
+      const fetchPromise = fetch(url, {
         method: 'GET',
         headers: {
           'Accept': 'application/json',
@@ -205,8 +212,10 @@ export class StockPriceService {
         }
       });
 
+      const response = await Promise.race([fetchPromise, timeoutPromise]) as Response;
+
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        throw new Error(`HTTP error! status: ${response.status}, statusText: ${response.statusText}`);
       }
 
       const data: AlphaVantageResponse = await response.json();
@@ -275,7 +284,20 @@ export class StockPriceService {
       return price;
 
     } catch (error) {
-      console.error(`❌ Failed to fetch stock price for ${symbol}:`, error);
+      const isMobile = /Mobi|Android/i.test(navigator.userAgent);
+      console.error(`❌ Stock price API failed for ${symbol}:`, error);
+      console.error('📱 Stock price mobile debug:', {
+        symbol,
+        isMobile,
+        userAgent: navigator.userAgent,
+        errorType: error.name,
+        errorMessage: error.message,
+        networkOnline: navigator.onLine,
+        connectionType: (navigator as any).connection?.effectiveType || 'unknown',
+        apiUrl: `${this.baseUrl}?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${this.apiKey}`,
+        dailyLimitReached: this.dailyLimitReached,
+        isUsingRealPrices: this.isUsingRealPrices
+      });
       
       // Return mock data if available
       const mockPrice = MOCK_STOCK_PRICES[symbol];
@@ -358,6 +380,8 @@ export class StockPriceService {
    * Check if we should show "Live" or "Mock" status
    */
   public isShowingLivePrices(): boolean {
+    const isMobile = /Mobi|Android/i.test(navigator.userAgent);
+    console.log(`📱 Stock prices - Mobile: ${isMobile}, Real prices: ${this.isUsingRealPrices}, Daily limit: ${this.dailyLimitReached}`);
     return this.isUsingRealPrices && !this.dailyLimitReached;
   }
 

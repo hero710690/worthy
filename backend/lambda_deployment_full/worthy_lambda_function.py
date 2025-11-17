@@ -13,7 +13,7 @@ import jwt
 import requests
 import pytz
 import math
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from dateutil.relativedelta import relativedelta
 from email_validator import validate_email, EmailNotValidError
 
@@ -89,13 +89,20 @@ def update_user_profile(user_id, profile_data):
             update_fields.append("base_currency = %s")
             params.append(profile_data['base_currency'])
         
-        if 'birth_year' in profile_data:
-            current_year = datetime.now().year
-            if not isinstance(profile_data['birth_year'], int) or profile_data['birth_year'] < 1900 or profile_data['birth_year'] > current_year:
-                return {"success": False, "message": "Invalid birth year"}
+        if 'birth_date' in profile_data:
+            try:
+                # Validate date format and range
+                birth_date = datetime.strptime(profile_data['birth_date'], '%Y-%m-%d').date()
+                today = datetime.now().date()
+                age = today.year - birth_date.year - ((today.month, today.day) < (birth_date.month, birth_date.day))
+                
+                if birth_date > today or age < 13 or age > 120:
+                    return {"success": False, "message": "Invalid birth date"}
+            except ValueError:
+                return {"success": False, "message": "Invalid birth date format. Use YYYY-MM-DD"}
             
-            update_fields.append("birth_year = %s")
-            params.append(profile_data['birth_year'])
+            update_fields.append("birth_date = %s")
+            params.append(profile_data['birth_date'])
         
         if not update_fields:
             return {"success": False, "message": "No fields to update"}
@@ -113,13 +120,17 @@ def update_user_profile(user_id, profile_data):
         # Get updated user data
         updated_user = execute_query(
             DATABASE_URL,
-            "SELECT user_id, name, email, base_currency, birth_year, created_at FROM users WHERE user_id = %s",
+            "SELECT user_id, name, email, base_currency, birth_date, created_at FROM users WHERE user_id = %s",
             (user_id,)
         )[0]
         
         # Convert datetime to string for JSON serialization
         if updated_user.get('created_at'):
             updated_user['created_at'] = updated_user['created_at'].isoformat()
+        
+        # Convert date to string for JSON serialization
+        if updated_user.get('birth_date'):
+            updated_user['birth_date'] = updated_user['birth_date'].isoformat()
         
         return {
             "success": True,
@@ -2373,6 +2384,24 @@ def create_fire_profile_table():
     except Exception as e:
         logger.error(f"❌ Failed to create/migrate fire_profile table: {str(e)}")
 
+def create_password_reset_tokens_table():
+    """Create password reset tokens table for forgot password functionality"""
+    try:
+        execute_update(
+            DATABASE_URL,
+            """
+            CREATE TABLE IF NOT EXISTS password_reset_tokens (
+                user_id INTEGER PRIMARY KEY REFERENCES users(user_id) ON DELETE CASCADE,
+                token VARCHAR(255) NOT NULL UNIQUE,
+                expires_at TIMESTAMP NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        logger.info("✅ Password reset tokens table created/verified successfully")
+    except Exception as e:
+        logger.error(f"❌ Failed to create password reset tokens table: {str(e)}")
+
 def create_dividends_table():
     """Create dividends table for Milestone 4 dividend tracking"""
     try:
@@ -3206,36 +3235,55 @@ def handle_auto_detect_dividends(user_id):
             
             logger.info(f"🔍 Checking dividends for {ticker} ({total_shares} shares)")
             
-            # Skip if we already have recent dividends for this asset
-            # Use different time windows based on expected dividend frequency
+            # Smart dividend detection: only skip if we already have a dividend for the current period
+            # This allows multiple pending dividends while preventing duplicates for the same period
             fallback_data = get_fallback_dividend_data(ticker)
+            
+            # Determine expected dividend frequency and current period
             if fallback_data and fallback_data.get('frequency') == 'monthly':
-                # For monthly dividends, only check last 25 days to allow new monthly dividends
+                frequency = 'monthly'
+                # For monthly dividends, check if we already have a dividend for the current month
+                current_month_start = date.today().replace(day=1)
                 existing_dividends = execute_query(
                     DATABASE_URL,
                     """
                     SELECT COUNT(*) as count FROM dividends 
-                    WHERE asset_id = %s AND ex_dividend_date >= CURRENT_DATE - INTERVAL '25 days'
+                    WHERE asset_id = %s 
+                      AND ex_dividend_date >= %s 
+                      AND ex_dividend_date < %s + INTERVAL '1 month'
                     """,
-                    (asset_id,)
+                    (asset_id, current_month_start, current_month_start)
                 )
-                check_period = "25 days"
+                check_period = f"current month ({current_month_start.strftime('%Y-%m')})"
             else:
-                # For quarterly/annual dividends, check last 90 days
+                frequency = 'quarterly'
+                # For quarterly dividends, check if we already have a dividend for the current quarter
+                current_year = date.today().year
+                current_month = date.today().month
+                current_quarter = ((current_month - 1) // 3) + 1
+                quarter_start_month = (current_quarter - 1) * 3 + 1
+                quarter_start = date(current_year, quarter_start_month, 1)
+                
                 existing_dividends = execute_query(
                     DATABASE_URL,
                     """
                     SELECT COUNT(*) as count FROM dividends 
-                    WHERE asset_id = %s AND ex_dividend_date >= CURRENT_DATE - INTERVAL '90 days'
+                    WHERE asset_id = %s 
+                      AND ex_dividend_date >= %s 
+                      AND ex_dividend_date < %s + INTERVAL '3 months'
                     """,
-                    (asset_id,)
+                    (asset_id, quarter_start, quarter_start)
                 )
-                check_period = "90 days"
+                check_period = f"current quarter (Q{current_quarter} {current_year})"
+            
+            logger.info(f"🔍 Checking {ticker} for {frequency} dividends in {check_period}")
             
             if existing_dividends and existing_dividends[0]['count'] > 0:
-                logger.info(f"⏭️ Skipping {ticker} - recent dividends already exist (checked last {check_period})")
+                logger.info(f"⏭️ Skipping {ticker} - dividend already exists for {check_period}")
                 skipped_count += 1
                 continue
+            
+            logger.info(f"✅ {ticker} - no dividend found for {check_period}, proceeding with detection")
             
             # Try to fetch real dividend data from APIs
             dividend_data = None
@@ -3272,7 +3320,6 @@ def handle_auto_detect_dividends(user_id):
                 pay_date = dividend_data.get('payment_date')
                 
                 if not ex_date:
-                    from datetime import date, timedelta
                     ex_date = date.today() - timedelta(days=30)
                     pay_date = date.today() - timedelta(days=15)
                 
@@ -5417,12 +5464,30 @@ def calculate_fire_progress(user_id):
         # Get user info for age calculation and base currency
         user = execute_query(
             DATABASE_URL,
-            "SELECT birth_year, base_currency FROM users WHERE user_id = %s",
+            "SELECT birth_date, base_currency FROM users WHERE user_id = %s",
             (user_id,)
         )[0]
         
-        current_year = datetime.now().year
-        current_age = current_year - user['birth_year']
+        # Calculate precise age from birth_date
+        if user['birth_date']:
+            today = datetime.now().date()
+            birth_date = user['birth_date']
+            current_age = today.year - birth_date.year - ((today.month, today.day) < (birth_date.month, birth_date.day))
+            # Add fractional part for months
+            if today.month >= birth_date.month:
+                months_diff = today.month - birth_date.month
+                if today.day < birth_date.day:
+                    months_diff -= 1
+            else:
+                months_diff = 12 + today.month - birth_date.month
+                if today.day < birth_date.day:
+                    months_diff -= 1
+            current_age += months_diff / 12.0
+        else:
+            # Fallback to birth_year if birth_date is not available
+            current_year = datetime.now().year
+            current_age = current_year - (user.get('birth_year', current_year - 30))
+        
         base_currency = user['base_currency']
         
         # Get current portfolio value with real-time prices
@@ -6008,7 +6073,7 @@ def handle_register(body):
         email = body.get('email', '').strip().lower()
         password = body.get('password', '')
         base_currency = body.get('base_currency', 'USD')
-        birth_year = body.get('birth_year')
+        birth_date = body.get('birth_date')
         
         if not name or not email or not password:
             return create_error_response(400, "Name, email and password are required")
@@ -6044,16 +6109,16 @@ def handle_register(body):
         execute_update(
             DATABASE_URL,
             """
-            INSERT INTO users (name, email, password_hash, base_currency, birth_year)
+            INSERT INTO users (name, email, password_hash, base_currency, birth_date)
             VALUES (%s, %s, %s, %s, %s)
             """,
-            (name, email, password_hash, base_currency, birth_year)
+            (name, email, password_hash, base_currency, birth_date)
         )
         
         # Get created user
         user = execute_query(
             DATABASE_URL,
-            "SELECT user_id, name, email, base_currency, birth_year, created_at FROM users WHERE email = %s",
+            "SELECT user_id, name, email, base_currency, birth_date, created_at FROM users WHERE email = %s",
             (email,)
         )[0]
         
@@ -6067,7 +6132,7 @@ def handle_register(body):
                 "name": user['name'],
                 "email": user['email'],
                 "base_currency": user['base_currency'],
-                "birth_year": user['birth_year'],
+                "birth_date": user['birth_date'].isoformat() if user['birth_date'] else None,
                 "created_at": user['created_at'].isoformat()
             },
             "token": token
@@ -6089,7 +6154,7 @@ def handle_login(body):
         # Get user from database
         users = execute_query(
             DATABASE_URL,
-            "SELECT user_id, name, email, password_hash, base_currency, birth_year FROM users WHERE email = %s",
+            "SELECT user_id, name, email, password_hash, base_currency, birth_date FROM users WHERE email = %s",
             (email,)
         )
         
@@ -6112,7 +6177,7 @@ def handle_login(body):
                 "name": user['name'],
                 "email": user['email'],
                 "base_currency": user['base_currency'],
-                "birth_year": user['birth_year']
+                "birth_date": user['birth_date'].isoformat() if user['birth_date'] else None
             },
             "token": token
         })
@@ -6124,6 +6189,130 @@ def handle_login(body):
 def handle_logout(headers):
     """Handle user logout"""
     return create_response(200, {"message": "Logout successful"})
+
+def handle_forgot_password(body):
+    """Handle forgot password request"""
+    try:
+        email = body.get('email', '').strip().lower()
+        
+        if not email:
+            return create_error_response(400, "Email is required")
+        
+        # Validate email format
+        try:
+            validate_email(email)
+        except EmailNotValidError:
+            return create_error_response(400, "Invalid email format")
+        
+        # Check if user exists
+        user = execute_query(
+            DATABASE_URL,
+            "SELECT user_id, name, email FROM users WHERE email = %s",
+            (email,)
+        )
+        
+        if not user:
+            # For security, don't reveal if email exists or not
+            return create_response(200, {
+                "message": "If an account with that email exists, we've sent a password reset link."
+            })
+        
+        user = user[0]
+        
+        # Generate reset token (valid for 1 hour)
+        import secrets
+        reset_token = secrets.token_urlsafe(32)
+        expires_at = datetime.utcnow() + timedelta(hours=1)
+        
+        # Store reset token in database
+        execute_update(
+            DATABASE_URL,
+            """
+            INSERT INTO password_reset_tokens (user_id, token, expires_at, created_at)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (user_id) 
+            DO UPDATE SET token = %s, expires_at = %s, created_at = %s
+            """,
+            (user['user_id'], reset_token, expires_at, datetime.utcnow(),
+             reset_token, expires_at, datetime.utcnow())
+        )
+        
+        # In a real application, you would send an email here
+        # For now, we'll just log the reset link
+        reset_link = f"https://ds8jn7fwox3fb.cloudfront.net/reset-password?token={reset_token}"
+        logger.info(f"Password reset link for {email}: {reset_link}")
+        
+        # TODO: Implement actual email sending
+        # send_password_reset_email(user['email'], user['name'], reset_link)
+        
+        return create_response(200, {
+            "message": "If an account with that email exists, we've sent a password reset link.",
+            "reset_link": reset_link  # Remove this in production
+        })
+        
+    except Exception as e:
+        logger.error(f"Forgot password error: {str(e)}")
+        return create_error_response(500, "Failed to process password reset request")
+
+def handle_reset_password(body):
+    """Handle password reset with token"""
+    try:
+        token = body.get('token', '').strip()
+        new_password = body.get('password', '').strip()
+        
+        if not token:
+            return create_error_response(400, "Reset token is required")
+        
+        if not new_password:
+            return create_error_response(400, "New password is required")
+        
+        if len(new_password) < 6:
+            return create_error_response(400, "Password must be at least 6 characters long")
+        
+        # Find valid reset token
+        reset_record = execute_query(
+            DATABASE_URL,
+            """
+            SELECT prt.user_id, prt.expires_at, u.email, u.name
+            FROM password_reset_tokens prt
+            JOIN users u ON prt.user_id = u.user_id
+            WHERE prt.token = %s AND prt.expires_at > %s
+            """,
+            (token, datetime.utcnow())
+        )
+        
+        if not reset_record:
+            return create_error_response(400, "Invalid or expired reset token")
+        
+        reset_record = reset_record[0]
+        user_id = reset_record['user_id']
+        
+        # Hash the new password using the same method as registration
+        password_hash = hash_password(new_password)
+        
+        # Update user password
+        execute_update(
+            DATABASE_URL,
+            "UPDATE users SET password_hash = %s WHERE user_id = %s",
+            (password_hash, user_id)
+        )
+        
+        # Delete the used reset token
+        execute_update(
+            DATABASE_URL,
+            "DELETE FROM password_reset_tokens WHERE user_id = %s",
+            (user_id,)
+        )
+        
+        logger.info(f"Password reset successful for user {user_id}")
+        
+        return create_response(200, {
+            "message": "Password reset successful. You can now sign in with your new password."
+        })
+        
+    except Exception as e:
+        logger.error(f"Reset password error: {str(e)}")
+        return create_error_response(500, "Failed to reset password")
 
 def handle_refresh_token(headers):
     """Handle token refresh"""
@@ -6317,6 +6506,29 @@ def handle_get_multiple_stock_prices(symbols):
         return create_error_response(500, "Failed to fetch stock prices")
 
 # Main Lambda handler
+def run_migration():
+    """Run database migration to add birth_date column"""
+    try:
+        # Add birth_date column if it doesn't exist
+        execute_update(
+            DATABASE_URL,
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS birth_date DATE;"
+        )
+        
+        # Migrate existing birth_year data to birth_date (set to January 1st of that year)
+        execute_update(
+            DATABASE_URL,
+            """
+            UPDATE users 
+            SET birth_date = MAKE_DATE(birth_year, 1, 1) 
+            WHERE birth_year IS NOT NULL AND birth_date IS NULL;
+            """
+        )
+        
+        return {"success": True, "message": "Migration completed successfully"}
+    except Exception as e:
+        return {"success": False, "message": f"Migration failed: {str(e)}"}
+
 def lambda_handler(event, context):
     """Main Lambda handler for Worthy API"""
     try:
@@ -6325,6 +6537,9 @@ def lambda_handler(event, context):
         
         # Ensure CD columns exist (run once per cold start)
         ensure_cd_columns_exist()
+        
+        # Ensure password reset tokens table exists
+        create_password_reset_tokens_table()
         
         # Extract HTTP method and path
         http_method = event.get('httpMethod', '').upper()
@@ -6547,7 +6762,7 @@ def lambda_handler(event, context):
                 try:
                     user = execute_query(
                         DATABASE_URL,
-                        "SELECT user_id, name, email, base_currency, birth_year, created_at FROM users WHERE user_id = %s",
+                        "SELECT user_id, name, email, base_currency, birth_date, created_at FROM users WHERE user_id = %s",
                         (user_id,)
                     )[0]
                     
@@ -6587,6 +6802,12 @@ def lambda_handler(event, context):
             
             elif http_method == 'GET' and path == '/auth/verify':
                 return handle_verify_token(request_headers)
+            
+            elif http_method == 'POST' and path == '/auth/forgot-password':
+                return handle_forgot_password(body)
+            
+            elif http_method == 'POST' and path == '/auth/reset-password':
+                return handle_reset_password(body)
             
             else:
                 return create_error_response(404, f"Auth endpoint not found: {path}")

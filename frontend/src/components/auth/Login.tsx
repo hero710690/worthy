@@ -184,6 +184,20 @@ export const Login: React.FC = () => {
                       }}
                     />
 
+                    <Box sx={{ textAlign: 'right', mb: 1 }}>
+                      <Link 
+                        to="/forgot-password" 
+                        style={{ 
+                          color: '#667eea', 
+                          textDecoration: 'none', 
+                          fontSize: '0.9rem',
+                          fontWeight: 500
+                        }}
+                      >
+                        Forgot Password?
+                      </Link>
+                    </Box>
+
                     <Button
                       type="submit"
                       fullWidth
@@ -469,6 +483,26 @@ export const Login: React.FC = () => {
                     }}
                   />
 
+                  <Box sx={{ textAlign: 'right', mb: 2 }}>
+                    <Link 
+                      to="/forgot-password" 
+                      style={{ 
+                        color: '#667eea', 
+                        textDecoration: 'none', 
+                        fontSize: '1rem',
+                        fontWeight: 500
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.textDecoration = 'underline';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.textDecoration = 'none';
+                      }}
+                    >
+                      Forgot Password?
+                    </Link>
+                  </Box>
+
                   <Button
                     type="submit"
                     fullWidth
@@ -476,7 +510,7 @@ export const Login: React.FC = () => {
                     size="large"
                     disabled={isLoading}
                     sx={{
-                      mt: 3,
+                      mt: 1,
                       py: 2.5,
                       borderRadius: 2,
                       fontSize: '1.2rem',
