@@ -31,13 +31,35 @@ export class ExchangeRateService {
   private lastUpdated: Date = new Date();
   private isUsingRealRates: boolean = false;
   private apiBaseUrl: string = 'https://api.exchangerate-api.com/v4/latest';
+  private fallbackApiUrl: string = 'https://api.fxratesapi.com/latest'; // Fallback API
   private cacheDuration: number = 60 * 60 * 1000; // 1 hour cache
 
   private constructor() {
-    // Try to fetch real rates on initialization
-    this.fetchLatestRates().catch(error => {
-      console.warn('Failed to fetch initial exchange rates, using fallback rates:', error);
-    });
+    // Try to fetch real rates on initialization with retry for mobile
+    this.initializeRates();
+  }
+
+  private async initializeRates(): Promise<void> {
+    const isMobile = /Mobi|Android/i.test(navigator.userAgent);
+    const maxRetries = isMobile ? 3 : 1;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`🔄 Attempting to fetch exchange rates (attempt ${attempt}/${maxRetries})`);
+        await this.fetchLatestRates();
+        console.log('✅ Exchange rates initialized successfully');
+        return;
+      } catch (error) {
+        console.warn(`❌ Attempt ${attempt} failed:`, error.message);
+        if (attempt < maxRetries) {
+          const delay = attempt * 2000; // 2s, 4s delays
+          console.log(`⏳ Retrying in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+        }
+      }
+    }
+    
+    console.warn('⚠️ All attempts failed, using fallback rates');
   }
 
   public static getInstance(): ExchangeRateService {
@@ -119,6 +141,8 @@ export class ExchangeRateService {
    * @returns True if using real rates from API
    */
   public isUsingRealApiRates(): boolean {
+    const isMobile = /Mobi|Android/i.test(navigator.userAgent);
+    console.log(`📱 Mobile device: ${isMobile}, Using real rates: ${this.isUsingRealRates}`);
     return this.isUsingRealRates;
   }
 
@@ -189,58 +213,90 @@ export class ExchangeRateService {
   }
 
   /**
-   * Fetch latest exchange rates from ExchangeRate-API (free tier)
-   * Implements caching and error handling
+   * Fetch latest exchange rates with fallback APIs for mobile support
    */
   public async fetchLatestRates(baseCurrency: string = 'USD'): Promise<void> {
-    try {
-      console.log('Fetching latest exchange rates from ExchangeRate-API...');
-      
-      const response = await fetch(`${this.apiBaseUrl}/${baseCurrency}`, {
-        method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'Worthy-Portfolio-App/1.0'
+    const isMobile = /Mobi|Android/i.test(navigator.userAgent);
+    console.log('Fetching latest exchange rates...');
+    console.log('User Agent:', navigator.userAgent);
+    console.log('Is Mobile:', isMobile);
+    
+    // Try primary API first, then fallback
+    const apiUrls = [
+      `${this.apiBaseUrl}/${baseCurrency}`,
+      `${this.fallbackApiUrl}?base=${baseCurrency}`
+    ];
+    
+    for (let i = 0; i < apiUrls.length; i++) {
+      try {
+        console.log(`🔄 Trying API ${i + 1}/${apiUrls.length}: ${apiUrls[i]}`);
+        
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Request timeout after 8 seconds')), 8000);
+        });
+        
+        const fetchPromise = fetch(apiUrls[i], {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            'User-Agent': 'Worthy-Portfolio-App/1.0'
+          }
+        });
+
+        const response = await Promise.race([fetchPromise, timeoutPromise]) as Response;
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}, statusText: ${response.statusText}`);
         }
-      });
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const data: ExchangeRateApiResponse = await response.json();
+
+        if (data.base && data.rates) {
+          // Update rates with real API data
+          this.rates = {
+            [baseCurrency]: 1.0,
+            ...data.rates
+          };
+          
+          this.lastUpdated = new Date(data.date || new Date());
+          this.isUsingRealRates = true;
+          
+          console.log('✅ Successfully updated exchange rates from API', i + 1);
+          console.log(`📊 Loaded ${Object.keys(this.rates).length} currency rates`);
+          console.log(`💱 Sample rates: USD/TWD=${this.rates.TWD}, USD/EUR=${this.rates.EUR}`);
+          return; // Success, exit function
+        } else {
+          throw new Error('Invalid API response format');
+        }
+
+      } catch (error) {
+        console.error(`❌ API ${i + 1} failed:`, error.message);
+        console.error('📱 Mobile debug info:', {
+          isMobile,
+          userAgent: navigator.userAgent,
+          apiUrl: apiUrls[i],
+          errorType: error.name,
+          errorMessage: error.message,
+          networkOnline: navigator.onLine,
+          connectionType: (navigator as any).connection?.effectiveType || 'unknown'
+        });
       }
-
-      const data: ExchangeRateApiResponse = await response.json();
-
-      if (data.base && data.rates) {
-        // Update rates with real API data
-        this.rates = {
-          [baseCurrency]: 1.0, // Base currency
-          ...data.rates
-        };
-        
-        this.lastUpdated = new Date(data.date || new Date());
-        this.isUsingRealRates = true;
-        
-        console.log('✅ Successfully updated exchange rates from ExchangeRate-API');
-        console.log(`📊 Loaded ${Object.keys(this.rates).length} currency rates`);
-        console.log(`🕒 Last updated: ${this.lastUpdated.toISOString()}`);
-        console.log(`📡 Base currency: ${baseCurrency}`);
-        console.log(`💱 Sample rates: USD/TWD=${this.rates.TWD}, USD/EUR=${this.rates.EUR}`);
-      } else {
-        throw new Error('Invalid API response format');
-      }
-
-    } catch (error) {
-      console.error('❌ Failed to fetch exchange rates from API:', error);
-      
-      // Fall back to mock rates if API fails
-      if (Object.keys(this.rates).length === 0) {
-        this.rates = FALLBACK_EXCHANGE_RATES;
-        this.isUsingRealRates = false;
-        console.log('🔄 Using fallback exchange rates');
-      }
-      
-      throw error; // Re-throw for caller to handle
     }
+    
+    // All APIs failed
+    console.error('❌ All exchange rate APIs failed');
+    console.error('📱 Final mobile debug:', {
+      isMobile,
+      userAgent: navigator.userAgent,
+      networkOnline: navigator.onLine,
+      connectionType: (navigator as any).connection?.effectiveType || 'unknown'
+    });
+    
+    this.rates = FALLBACK_EXCHANGE_RATES;
+    this.isUsingRealRates = false;
+    this.lastUpdated = new Date();
+    
+    throw new Error('All exchange rate APIs failed');
   }
 
   /**

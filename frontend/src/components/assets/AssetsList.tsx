@@ -24,6 +24,7 @@ import {
   DialogContent,
   DialogActions,
   DialogContentText,
+  TableSortLabel,
 } from '@mui/material';
 import {
   Add,
@@ -58,6 +59,10 @@ export const AssetsList: React.FC = () => {
   const [portfolioValue, setPortfolioValue] = useState(0);
   const [totalUnrealizedPL, setTotalUnrealizedPL] = useState(0);
   const [apiStatus, setApiStatus] = useState({ exchangeRates: false, stockPrices: false });
+  
+  // Sorting state
+  const [sortBy, setSortBy] = useState<'asset' | 'type' | 'currency' | 'shares' | 'value'>('asset');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
 
   const fetchAssets = async () => {
     try {
@@ -201,6 +206,74 @@ export const AssetsList: React.FC = () => {
     const changePercent = avgCost > 0 ? (change / avgCost) * 100 : 0;
     return { change, changePercent };
   };
+
+  // Sorting functionality
+  const handleSort = (column: 'asset' | 'type' | 'currency' | 'shares' | 'value') => {
+    if (sortBy === column) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(column);
+      setSortOrder('asc');
+    }
+  };
+
+  const sortedAssets = [...assets].sort((a, b) => {
+    let aValue: string | number;
+    let bValue: string | number;
+
+    switch (sortBy) {
+      case 'asset':
+        aValue = a.ticker_symbol.toLowerCase();
+        bValue = b.ticker_symbol.toLowerCase();
+        break;
+      case 'type':
+        aValue = a.asset_type.toLowerCase();
+        bValue = b.asset_type.toLowerCase();
+        break;
+      case 'currency':
+        aValue = a.currency.toLowerCase();
+        bValue = b.currency.toLowerCase();
+        break;
+      case 'shares':
+        aValue = a.total_shares;
+        bValue = b.total_shares;
+        break;
+      case 'value':
+        // Calculate market value for sorting
+        let aMarketValue: number;
+        let bMarketValue: number;
+        
+        if (a.asset_type === 'CD' && a.cd_details) {
+          aMarketValue = a.cd_details.current_value;
+        } else {
+          const aCurrentPrice = currentPrices.get(a.ticker_symbol);
+          aMarketValue = aCurrentPrice ? a.total_shares * aCurrentPrice : a.total_shares * a.average_cost_basis;
+        }
+        
+        if (b.asset_type === 'CD' && b.cd_details) {
+          bMarketValue = b.cd_details.current_value;
+        } else {
+          const bCurrentPrice = currentPrices.get(b.ticker_symbol);
+          bMarketValue = bCurrentPrice ? b.total_shares * bCurrentPrice : b.total_shares * b.average_cost_basis;
+        }
+        
+        aValue = aMarketValue;
+        bValue = bMarketValue;
+        break;
+      default:
+        return 0;
+    }
+
+    if (typeof aValue === 'string' && typeof bValue === 'string') {
+      return sortOrder === 'asc' 
+        ? aValue.localeCompare(bValue)
+        : bValue.localeCompare(aValue);
+    } else {
+      return sortOrder === 'asc' 
+        ? (aValue as number) - (bValue as number)
+        : (bValue as number) - (aValue as number);
+    }
+  });
 
   if (loading) {
     return (
@@ -490,21 +563,51 @@ export const AssetsList: React.FC = () => {
                         fontSize: { xs: '0.875rem', md: '1rem' },
                         py: { xs: 2, md: 2.5 }
                       }}>
-                        Asset
+                        <TableSortLabel
+                          active={sortBy === 'asset'}
+                          direction={sortBy === 'asset' ? sortOrder : 'asc'}
+                          onClick={() => handleSort('asset')}
+                          sx={{ 
+                            fontWeight: 'bold',
+                            fontSize: { xs: '0.875rem', md: '1rem' }
+                          }}
+                        >
+                          Asset
+                        </TableSortLabel>
                       </TableCell>
                       <TableCell sx={{ 
                         fontWeight: 'bold',
                         fontSize: { xs: '0.875rem', md: '1rem' },
                         py: { xs: 2, md: 2.5 }
                       }}>
-                        Type
+                        <TableSortLabel
+                          active={sortBy === 'type'}
+                          direction={sortBy === 'type' ? sortOrder : 'asc'}
+                          onClick={() => handleSort('type')}
+                          sx={{ 
+                            fontWeight: 'bold',
+                            fontSize: { xs: '0.875rem', md: '1rem' }
+                          }}
+                        >
+                          Type
+                        </TableSortLabel>
                       </TableCell>
                       <TableCell sx={{ 
                         fontWeight: 'bold',
                         fontSize: { xs: '0.875rem', md: '1rem' },
                         py: { xs: 2, md: 2.5 }
                       }} align="right">
-                        Shares
+                        <TableSortLabel
+                          active={sortBy === 'shares'}
+                          direction={sortBy === 'shares' ? sortOrder : 'asc'}
+                          onClick={() => handleSort('shares')}
+                          sx={{ 
+                            fontWeight: 'bold',
+                            fontSize: { xs: '0.875rem', md: '1rem' }
+                          }}
+                        >
+                          Shares
+                        </TableSortLabel>
                       </TableCell>
                       <TableCell sx={{ 
                         fontWeight: 'bold',
@@ -525,14 +628,34 @@ export const AssetsList: React.FC = () => {
                         fontSize: { xs: '0.875rem', md: '1rem' },
                         py: { xs: 2, md: 2.5 }
                       }} align="right">
-                        Market Value
+                        <TableSortLabel
+                          active={sortBy === 'value'}
+                          direction={sortBy === 'value' ? sortOrder : 'asc'}
+                          onClick={() => handleSort('value')}
+                          sx={{ 
+                            fontWeight: 'bold',
+                            fontSize: { xs: '0.875rem', md: '1rem' }
+                          }}
+                        >
+                          Market Value
+                        </TableSortLabel>
                       </TableCell>
                       <TableCell sx={{ 
                         fontWeight: 'bold',
                         fontSize: { xs: '0.875rem', md: '1rem' },
                         py: { xs: 2, md: 2.5 }
                       }}>
-                        Currency
+                        <TableSortLabel
+                          active={sortBy === 'currency'}
+                          direction={sortBy === 'currency' ? sortOrder : 'asc'}
+                          onClick={() => handleSort('currency')}
+                          sx={{ 
+                            fontWeight: 'bold',
+                            fontSize: { xs: '0.875rem', md: '1rem' }
+                          }}
+                        >
+                          Currency
+                        </TableSortLabel>
                       </TableCell>
                       <TableCell sx={{ 
                         fontWeight: 'bold',
@@ -544,7 +667,7 @@ export const AssetsList: React.FC = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {assets.map((asset) => {
+                    {sortedAssets.map((asset) => {
                       // Handle CD assets differently - use compound interest calculation
                       let marketValue: number;
                       let currentPrice: number | undefined;

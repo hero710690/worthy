@@ -55,7 +55,7 @@ export const MobileGoals: React.FC<MobileGoalsProps> = ({
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editForm, setEditForm] = useState({
     annual_expenses: 0,
-    safe_withdrawal_rate: 4.0,
+    safe_withdrawal_rate: 3.6,
     expected_annual_return: 7.0,
     target_retirement_age: 65,
     barista_annual_income: 0,

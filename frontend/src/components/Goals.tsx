@@ -28,6 +28,7 @@ import { assetValuationService } from '../services/assetValuationService';
 import { fireApi } from '../services/fireApi';
 import { recurringInvestmentApi } from '../services/recurringInvestmentApi';
 import { exchangeRateService } from '../services/exchangeRateService';
+import { calculatePreciseAge } from '../utils/dateUtils';
 // 🆕 NEW: Import coast-fire-calculator proven algorithms
 import { calculateAllFireTypes, type CoastFireInput } from '../services/coastFireCalculator';
 // Import new tab components
@@ -91,7 +92,7 @@ const Goals: React.FC = () => {
     annual_expenses: 60000,
     target_retirement_age: 65,
     annual_income: 100000,
-    safe_withdrawal_rate: 0.04,
+    safe_withdrawal_rate: 0.036,
     expected_return_pre_retirement: 0.07,
     expected_return_post_retirement: 0.05,
     expected_inflation_rate: 0.025,
@@ -107,7 +108,7 @@ const Goals: React.FC = () => {
   // 🆕 NEW: Parameters for What-If simulator (moved from Coast FIRE Calculator tab)
   // Note: principal will be updated to actual portfolio value when data loads
   const [parameters, setParameters] = useState({
-    currentAge: 35,
+    currentAge: user?.birth_date ? calculatePreciseAge(user.birth_date) : 35,
     retireAge: 67,
     pmtMonthly: 2500,
     rate: 7, // Percentage
@@ -115,7 +116,7 @@ const Goals: React.FC = () => {
     principal: 1000000, // Default to $1M, will be updated to actual portfolio value when loaded
     pmtMonthlyBarista: 2000,
     calcMode: "coast" as "coast" | "barista",
-    withdrawalRate: 4.0 // 🔧 ADDED: Default withdrawal rate to prevent crashes
+    withdrawalRate: 3.6 // 🔧 ADDED: Default withdrawal rate to prevent crashes
   });
 
   // 🆕 NEW: Function to sync important parameter changes back to FIRE profile
@@ -201,8 +202,7 @@ const Goals: React.FC = () => {
       fireProfile: fireProfile
     });
 
-    const currentYear = new Date().getFullYear();
-    const currentAge = currentYear - (user?.birth_year || 1990);
+    const currentAge = user?.birth_date ? calculatePreciseAge(user.birth_date) : 35;
     
     // 🔧 FIXED: Use same calculation logic as RecurringInvestments page
     const monthlyRecurringTotal = recurringInvestments
@@ -327,8 +327,7 @@ const Goals: React.FC = () => {
           });
           
           // Initialize parameters with user data
-          const currentYear = new Date().getFullYear();
-          const userAge = currentYear - (user?.birth_year || 1990);
+          const userAge = user?.birth_date ? calculatePreciseAge(user.birth_date) : 35;
           
           // Set barista monthly contribution from profile
           setBaristaMonthlyContribution(profileResponse.fire_profile.barista_monthly_contribution || 2000);
@@ -339,7 +338,7 @@ const Goals: React.FC = () => {
             retireAge: profileResponse.fire_profile.target_retirement_age,
             fireNumber: profileResponse.fire_profile.annual_expenses, // Using as FIRE number
             rate: Math.round((profileResponse.fire_profile.expected_return_pre_retirement || 0.07) * 100 * 10) / 10, // Convert to percentage and round to 1 decimal
-            withdrawalRate: 4.0, // 🔧 ALWAYS default to 4% for what-if simulator, regardless of saved profile
+            withdrawalRate: 3.6, // 🔧 ALWAYS default to 3.6% for what-if simulator, regardless of saved profile
             principal: getPortfolioValueForFIRE() // Use filtered value
           }));
           
@@ -659,6 +658,24 @@ const FIREProfileDialog: React.FC<{
                   }}
                   inputProps={{ min: 1, max: 20, step: 0.1 }}
                   helperText="Expected annual return on your investments (e.g., 7% for stock market average)"
+                />
+              </Grid>
+              
+              <Grid item xs={12}>
+                <TextField
+                  fullWidth
+                  label="Safe Withdrawal Rate"
+                  type="number"
+                  value={(formData.safe_withdrawal_rate * 100).toFixed(1)}
+                  onChange={(e) => {
+                    const value = Number(e.target.value) / 100; // Convert percentage to decimal
+                    setFormData(prev => ({ ...prev, safe_withdrawal_rate: value }));
+                  }}
+                  InputProps={{
+                    endAdornment: <Typography sx={{ ml: 1 }}>%</Typography>
+                  }}
+                  inputProps={{ min: 1, max: 10, step: 0.1 }}
+                  helperText="Safe withdrawal rate for retirement (e.g., 3.6% for conservative approach)"
                 />
               </Grid>
             </Grid>

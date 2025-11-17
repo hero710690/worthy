@@ -3,7 +3,7 @@ export interface User {
   name: string;
   email: string;
   base_currency: string;
-  birth_year: number;
+  birth_date: string;
   created_at?: string;
 }
 
@@ -23,7 +23,7 @@ export interface RegisterRequest {
   email: string;
   password: string;
   base_currency: string;
-  birth_year: number;
+  birth_date: string;
 }
 
 export interface AuthError {

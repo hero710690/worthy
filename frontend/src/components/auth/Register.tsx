@@ -43,7 +43,7 @@ export const Register: React.FC = () => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [baseCurrency, setBaseCurrency] = useState('USD');
-  const [birthYear, setBirthYear] = useState('');
+  const [birthDate, setBirthDate] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const { register, isLoading, error, clearError } = useAuth();
@@ -65,10 +65,18 @@ export const Register: React.FC = () => {
       return;
     }
 
-    // Validate birth year
-    const year = parseInt(birthYear);
-    if (isNaN(year) || year < 1900 || year > new Date().getFullYear()) {
-      alert('Please enter a valid birth year');
+    // Validate birth date
+    if (!birthDate) {
+      alert('Please enter your birth date');
+      return;
+    }
+    
+    const birthDateObj = new Date(birthDate);
+    const today = new Date();
+    const age = today.getFullYear() - birthDateObj.getFullYear();
+    
+    if (birthDateObj > today || age < 13 || age > 120) {
+      alert('Please enter a valid birth date');
       return;
     }
 
@@ -78,7 +86,7 @@ export const Register: React.FC = () => {
         email,
         password,
         base_currency: baseCurrency,
-        birth_year: year,
+        birth_date: birthDate,
       });
       navigate('/dashboard');
     } catch (error) {
@@ -291,16 +299,18 @@ export const Register: React.FC = () => {
                     <Grid item xs={12} sm={6}>
                       <TextField
                         fullWidth
-                        label="Birth Year"
-                        type="number"
-                        value={birthYear}
-                        onChange={(e) => setBirthYear(e.target.value)}
+                        label="Birth Date"
+                        type="date"
+                        value={birthDate}
+                        onChange={(e) => setBirthDate(e.target.value)}
                         required
                         disabled={isLoading}
                         variant="outlined"
+                        InputLabelProps={{
+                          shrink: true,
+                        }}
                         inputProps={{
-                          min: 1900,
-                          max: new Date().getFullYear(),
+                          max: new Date().toISOString().split('T')[0],
                         }}
                         InputProps={{
                           startAdornment: (

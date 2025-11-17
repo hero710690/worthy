@@ -67,7 +67,7 @@ export const FIREChart: React.FC<FIREChartProps> = ({ parameters, formatCurrency
       const annualRate = rate / 100;
       const annualContribution = pmtMonthly * 12;
       const annualBaristaContribution = pmtMonthlyBarista * 12;
-      const safeWithdrawalRate = (withdrawalRate || 4.0) / 100;
+      const safeWithdrawalRate = (withdrawalRate || 3.6) / 100;
       const annualWithdrawal = fireNumber * safeWithdrawalRate;
       
       console.log('🔥 Enhanced FIRE Chart Parameters:', {
@@ -337,7 +337,7 @@ export const FIREChart: React.FC<FIREChartProps> = ({ parameters, formatCurrency
     const annualRate = rate / 100; // Convert percentage to decimal
     const startAge = currentAge;
     const endAge = 75; // Fixed end age at 75 instead of 85
-    const withdrawalRate = parameters.withdrawalRate || 4.0; // Use provided withdrawal rate or default to 4%
+    const withdrawalRate = parameters.withdrawalRate || 3.6; // Use provided withdrawal rate or default to 3.6%
     const safeWithdrawalRate = withdrawalRate / 100; // Convert percentage to decimal
     const annualWithdrawal = fireNumber * safeWithdrawalRate; // Annual withdrawal amount
     const annualContribution = pmtMonthly * 12;

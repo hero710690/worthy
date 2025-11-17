@@ -500,7 +500,7 @@ export const calculateAllFireTypes = (input: CoastFireInput) => {
     summary: {
       currentPortfolio: input.principal,
       fireTarget: input.fireNumber,
-      yearsToRetirement: input.retirementAge - input.currentAge,
+      yearsToRetirement: Math.round((input.retirementAge - input.currentAge) * 10) / 10,
       monthlyContribution: input.pmtMonthly,
       baristaMonthlyContribution: input.pmtMonthlyBarista,
       fastestFireType: coastFire.isPossible ? 'Coast' : 

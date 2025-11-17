@@ -113,7 +113,7 @@ export const SettingsTab: React.FC<SettingsTabProps> = ({
         </Typography>
         <Stack spacing={1}>
           <Typography variant="body2">
-            • <strong>Traditional FIRE:</strong> Full financial independence with 4% withdrawal rule
+            • <strong>Traditional FIRE:</strong> Full financial independence with 3.6% withdrawal rule
           </Typography>
           <Typography variant="body2">
             • <strong>Coast FIRE:</strong> Save enough now to coast to FIRE without additional contributions

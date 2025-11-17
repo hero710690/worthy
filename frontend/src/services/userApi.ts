@@ -5,7 +5,7 @@ export interface UpdateProfileRequest {
   name?: string;
   email?: string;
   base_currency?: string;
-  birth_year?: number;
+  birth_date?: string;
 }
 
 export interface UpdateProfileResponse {
