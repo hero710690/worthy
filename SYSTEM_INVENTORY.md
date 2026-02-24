@@ -377,10 +377,10 @@ interface Dividend {
 
 ### API Configuration
 ```python
-# Environment Variables
-FINNHUB_API_KEY = "REDACTED_FINNHUB_KEY"
-ALPHA_VANTAGE_API_KEY = "REDACTED_ALPHA_VANTAGE_KEY"
-EXCHANGE_RATE_API_KEY = "REDACTED_EXCHANGE_RATE_KEY"
+# Environment Variables (set via AWS Secrets Manager or Lambda env vars)
+FINNHUB_API_KEY = "<your-finnhub-api-key>"
+ALPHA_VANTAGE_API_KEY = "<your-alpha-vantage-api-key>"
+EXCHANGE_RATE_API_KEY = "<your-exchange-rate-api-key>"
 ```
 
 ---

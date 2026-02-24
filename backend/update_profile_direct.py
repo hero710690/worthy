@@ -9,7 +9,7 @@ import psycopg2.extras
 import json
 
 # Database connection string
-DATABASE_URL = "postgresql://worthy_admin:REDACTED_DB_PASSWORD@worthy-db-dev.ch0ccg6ycp7t.ap-northeast-1.rds.amazonaws.com:5432/worthy"
+DATABASE_URL = "postgresql://<db-user>:<db-password>@<db-host>:5432/worthy"
 
 def execute_query(query, params=None):
     """Execute a database query and return results"""

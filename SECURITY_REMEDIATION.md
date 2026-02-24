@@ -6,7 +6,7 @@
 ## Actions Taken
 
 ### 1. Database Password Change
-- ✅ Changed RDS PostgreSQL master password from `REDACTED_DB_PASSWORD` to `NewSecurePassword2025!`
+- ✅ Changed RDS PostgreSQL master password from `<db-password>` to `NewSecurePassword2025!`
 - ✅ Updated Lambda environment variables with new password
 - ✅ Updated local `.env` file with new password
 - ✅ Verified application functionality with new password

@@ -133,11 +133,11 @@ curl -X POST https://mreda8g340.execute-api.ap-northeast-1.amazonaws.com/develop
 The Lambda function uses these environment variables (pre-configured):
 
 ```bash
-FINNHUB_API_KEY=REDACTED_FINNHUB_KEY
-ALPHA_VANTAGE_API_KEY=REDACTED_ALPHA_VANTAGE_KEY
-DATABASE_URL=postgresql://worthy_admin:REDACTED_DB_PASSWORD@worthy-db-dev.ch0ccg6ycp7t.ap-northeast-1.rds.amazonaws.com:5432/worthy
-JWT_SECRET=REDACTED_JWT_SECRET
-EXCHANGE_RATE_API_KEY=REDACTED_EXCHANGE_RATE_KEY
+FINNHUB_API_KEY=<your-finnhub-api-key>
+ALPHA_VANTAGE_API_KEY=<your-alpha-vantage-api-key>
+DATABASE_URL=<your-database-url>
+JWT_SECRET=<your-jwt-secret>
+EXCHANGE_RATE_API_KEY=<your-exchange-rate-api-key>
 ```
 
 ## 📊 API Endpoints

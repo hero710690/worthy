@@ -7,7 +7,7 @@ import psycopg2
 import os
 
 # Database configuration
-DATABASE_URL = "postgresql://worthy_admin:REDACTED_DB_PASSWORD@worthy-db-dev.ch0ccg6ycp7t.ap-northeast-1.rds.amazonaws.com:5432/worthy"
+DATABASE_URL = "postgresql://<db-user>:<db-password>@<db-host>:5432/worthy"
 
 def add_tax_rate_column():
     """Add tax_rate column to dividends table if it doesn't exist"""

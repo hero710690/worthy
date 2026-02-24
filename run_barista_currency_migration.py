@@ -14,7 +14,7 @@ def run_migration():
     """Run the database migration"""
     
     # Database connection string
-    DATABASE_URL = "postgresql://worthy_admin:REDACTED_DB_PASSWORD@worthy-db-dev.ch0ccg6ycp7t.ap-northeast-1.rds.amazonaws.com:5432/worthy"
+    DATABASE_URL = "postgresql://<db-user>:<db-password>@<db-host>:5432/worthy"
     
     try:
         # Connect to database
@@ -73,7 +73,7 @@ def run_migration():
 def update_existing_profiles():
     """Update existing FIRE profiles to set barista_income_currency to user's base currency"""
     
-    DATABASE_URL = "postgresql://worthy_admin:REDACTED_DB_PASSWORD@worthy-db-dev.ch0ccg6ycp7t.ap-northeast-1.rds.amazonaws.com:5432/worthy"
+    DATABASE_URL = "postgresql://<db-user>:<db-password>@<db-host>:5432/worthy"
     
     try:
         print("🔄 Updating existing FIRE profiles with user's base currency...")

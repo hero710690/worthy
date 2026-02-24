@@ -87,10 +87,10 @@ The batch job runs automatically:
 The batch job uses these environment variables (configured in job definition):
 
 ```bash
-DATABASE_URL=postgresql://worthy_admin:REDACTED_DB_PASSWORD@worthy-db-dev.ch0ccg6ycp7t.ap-northeast-1.rds.amazonaws.com:5432/worthy
-FINNHUB_API_KEY=REDACTED_FINNHUB_KEY
-ALPHA_VANTAGE_API_KEY=REDACTED_ALPHA_VANTAGE_KEY
-EXCHANGE_RATE_API_KEY=REDACTED_EXCHANGE_RATE_KEY
+DATABASE_URL=<your-database-url>
+FINNHUB_API_KEY=<your-finnhub-api-key>
+ALPHA_VANTAGE_API_KEY=<your-alpha-vantage-api-key>
+EXCHANGE_RATE_API_KEY=<your-exchange-rate-api-key>
 ```
 
 ### **Resource Allocation:**

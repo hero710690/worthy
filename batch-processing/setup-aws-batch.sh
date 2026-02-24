@@ -200,19 +200,19 @@ cat > job-definition.json << EOF
         "environment": [
             {
                 "name": "DATABASE_URL",
-                "value": "postgresql://worthy_admin:REDACTED_DB_PASSWORD@worthy-db-dev.ch0ccg6ycp7t.ap-northeast-1.rds.amazonaws.com:5432/worthy"
+                "value": "<your-database-url>"
             },
             {
                 "name": "FINNHUB_API_KEY",
-                "value": "REDACTED_FINNHUB_KEY"
+                "value": "<your-finnhub-api-key>"
             },
             {
                 "name": "ALPHA_VANTAGE_API_KEY",
-                "value": "REDACTED_ALPHA_VANTAGE_KEY"
+                "value": "<your-alpha-vantage-api-key>"
             },
             {
                 "name": "EXCHANGE_RATE_API_KEY",
-                "value": "REDACTED_EXCHANGE_RATE_KEY"
+                "value": "<your-exchange-rate-api-key>"
             }
         ],
         "logConfiguration": {
