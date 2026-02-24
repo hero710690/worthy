@@ -214,7 +214,27 @@ const Goals: React.FC = () => {
           inv.currency, 
           user?.base_currency || 'USD'
         );
-        return sum + convertedAmount;
+        
+        // Convert to monthly equivalent based on frequency
+        let monthlyEquivalent = convertedAmount;
+        switch (inv.frequency.toLowerCase()) {
+          case 'daily':
+            monthlyEquivalent = convertedAmount * 30;
+            break;
+          case 'weekly':
+            monthlyEquivalent = convertedAmount * 4.33;
+            break;
+          case 'monthly':
+            monthlyEquivalent = convertedAmount;
+            break;
+          case 'quarterly':
+            monthlyEquivalent = convertedAmount / 3;
+            break;
+          default:
+            monthlyEquivalent = convertedAmount;
+        }
+        
+        return sum + monthlyEquivalent;
       }, 0);
 
     console.log('🔥 FIRE Calculation Input:', {
@@ -432,7 +452,8 @@ const Goals: React.FC = () => {
         flexDirection: 'column',
         justifyContent: 'center', 
         alignItems: 'center', 
-        minHeight: '60vh',
+        minHeight: '100vh',
+        width: '100%',
         gap: 2
       }}>
         <LinearProgress sx={{ width: '200px' }} />

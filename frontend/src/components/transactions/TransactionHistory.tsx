@@ -78,6 +78,12 @@ export const TransactionHistory: React.FC = () => {
   const [filterType, setFilterType] = useState('all');
   const [filterAssetType, setFilterAssetType] = useState('all');
   
+  // Summary states
+  const [showSummary, setShowSummary] = useState(false);
+  const [summaryStartDate, setSummaryStartDate] = useState('');
+  const [summaryEndDate, setSummaryEndDate] = useState('');
+  const [summaryData, setSummaryData] = useState<{[key: string]: {shares: number, amount: number, currency: string}}>({});
+  
   // Edit/Delete states
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [deletingTransaction, setDeletingTransaction] = useState<Transaction | null>(null);
@@ -146,6 +152,31 @@ export const TransactionHistory: React.FC = () => {
 
     setFilteredTransactions(filtered);
   }, [transactions, searchTerm, filterType, filterAssetType]);
+
+  // Calculate summary when dates change
+  useEffect(() => {
+    if (summaryStartDate && summaryEndDate) {
+      const summary: {[key: string]: {shares: number, amount: number, currency: string}} = {};
+      
+      transactions
+        .filter(txn => {
+          const txnDate = new Date(txn.transaction_date);
+          const start = new Date(summaryStartDate);
+          const end = new Date(summaryEndDate);
+          return txnDate >= start && txnDate <= end;
+        })
+        .forEach(txn => {
+          const key = txn.ticker_symbol;
+          if (!summary[key]) {
+            summary[key] = { shares: 0, amount: 0, currency: txn.currency };
+          }
+          summary[key].shares += txn.shares;
+          summary[key].amount += txn.shares * txn.price_per_share;
+        });
+      
+      setSummaryData(summary);
+    }
+  }, [transactions, summaryStartDate, summaryEndDate]);
 
   const handleEditTransaction = (transaction: Transaction) => {
     console.log('🔧 Edit transaction clicked:', transaction);
@@ -402,6 +433,86 @@ export const TransactionHistory: React.FC = () => {
               </TextField>
             </Grid>
           </Grid>
+        </CardContent>
+      </Card>
+
+      {/* Period Summary Section */}
+      <Card elevation={0} sx={{ mb: 3, border: '1px solid', borderColor: 'grey.200' }}>
+        <CardContent>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+            <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+              Period Summary
+            </Typography>
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={() => setShowSummary(!showSummary)}
+            >
+              {showSummary ? 'Hide' : 'Show'} Summary
+            </Button>
+          </Stack>
+
+          {showSummary && (
+            <>
+              <Grid container spacing={2} sx={{ mb: 3 }}>
+                <Grid item xs={12} md={6}>
+                  <TextField
+                    fullWidth
+                    type="date"
+                    label="Start Date"
+                    value={summaryStartDate}
+                    onChange={(e) => setSummaryStartDate(e.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                  />
+                </Grid>
+                <Grid item xs={12} md={6}>
+                  <TextField
+                    fullWidth
+                    type="date"
+                    label="End Date"
+                    value={summaryEndDate}
+                    onChange={(e) => setSummaryEndDate(e.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                  />
+                </Grid>
+              </Grid>
+
+              {summaryStartDate && summaryEndDate && Object.keys(summaryData).length > 0 && (
+                <TableContainer component={Paper} variant="outlined">
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell><strong>Asset</strong></TableCell>
+                        <TableCell align="right"><strong>Total Shares</strong></TableCell>
+                        <TableCell align="right"><strong>Total Amount</strong></TableCell>
+                        <TableCell align="right"><strong>Avg Price</strong></TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {Object.entries(summaryData).map(([symbol, data]) => (
+                        <TableRow key={symbol}>
+                          <TableCell>{symbol}</TableCell>
+                          <TableCell align="right">{data.shares.toFixed(2)}</TableCell>
+                          <TableCell align="right">
+                            {data.currency} {data.amount.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+                          </TableCell>
+                          <TableCell align="right">
+                            {data.currency} {(data.amount / data.shares).toFixed(2)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              )}
+
+              {summaryStartDate && summaryEndDate && Object.keys(summaryData).length === 0 && (
+                <Alert severity="info">
+                  No transactions found in the selected period.
+                </Alert>
+              )}
+            </>
+          )}
         </CardContent>
       </Card>
 

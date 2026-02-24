@@ -336,7 +336,9 @@ export const Layout: React.FC<LayoutProps> = ({ children }) => {
         sx={{
           flexGrow: 1,
           width: { sm: `calc(100% - ${drawerWidth}px)` },
-          minHeight: '100vh'
+          minHeight: '100vh',
+          display: 'flex',
+          flexDirection: 'column'
         }}
       >
         {children}

@@ -28,7 +28,7 @@ const LoadingSpinner = () => (
     display="flex" 
     justifyContent="center" 
     alignItems="center" 
-    minHeight="200px"
+    minHeight="100vh"
     flexDirection="column"
     gap={2}
   >

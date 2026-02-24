@@ -175,7 +175,8 @@ export const Portfolio: React.FC = () => {
         display: 'flex', 
         justifyContent: 'center', 
         alignItems: 'center', 
-        minHeight: '60vh',
+        minHeight: '100vh',
+        width: '100%',
         flexDirection: 'column',
         gap: 2,
         p: { xs: 2, md: 3 }

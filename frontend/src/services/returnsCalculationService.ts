@@ -269,8 +269,8 @@ class ReturnsCalculationService {
         let totalDividendsForAsset = 0;
 
         for (const divTransaction of dividendTransactions) {
-          let dividendAmount = divTransaction.total_dividend_amount ||
-            (divTransaction.dividend_per_share || 0) * divTransaction.shares;
+          // Dividend amount is stored as shares * price_per_share
+          let dividendAmount = divTransaction.shares * divTransaction.price_per_share;
 
           // Convert dividend to base currency if needed
           if (divTransaction.currency !== baseCurrency) {

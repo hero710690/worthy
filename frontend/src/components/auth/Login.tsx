@@ -49,6 +49,16 @@ export const Login: React.FC = () => {
     }
   };
 
+  const handleDemoLogin = async () => {
+    clearError();
+    try {
+      await login({ email: 'demo@worthy.app', password: 'demo1234' });
+      navigate('/dashboard');
+    } catch (error) {
+      // Error is handled by the store
+    }
+  };
+
   const handleClickShowPassword = () => {
     setShowPassword(!showPassword);
   };
@@ -222,6 +232,29 @@ export const Login: React.FC = () => {
                       ) : (
                         'Sign In'
                       )}
+                    </Button>
+
+                    <Button
+                      fullWidth
+                      variant="outlined"
+                      size="large"
+                      disabled={isLoading}
+                      onClick={handleDemoLogin}
+                      sx={{
+                        py: 1.75,
+                        borderRadius: 2,
+                        fontSize: '1rem',
+                        fontWeight: 600,
+                        textTransform: 'none',
+                        borderColor: '#667eea',
+                        color: '#667eea',
+                        '&:hover': {
+                          borderColor: '#5a6fd8',
+                          backgroundColor: 'rgba(102, 126, 234, 0.04)',
+                        },
+                      }}
+                    >
+                      Try Demo Account
                     </Button>
                   </Stack>
                 </Box>
@@ -536,6 +569,31 @@ export const Login: React.FC = () => {
                     ) : (
                       'Sign In'
                     )}
+                  </Button>
+
+                  <Button
+                    fullWidth
+                    variant="outlined"
+                    size="large"
+                    disabled={isLoading}
+                    onClick={handleDemoLogin}
+                    sx={{
+                      py: 2.5,
+                      borderRadius: 2,
+                      fontSize: '1.1rem',
+                      fontWeight: 600,
+                      textTransform: 'none',
+                      borderColor: '#667eea',
+                      color: '#667eea',
+                      borderWidth: 2,
+                      '&:hover': {
+                        borderColor: '#5a6fd8',
+                        backgroundColor: 'rgba(102, 126, 234, 0.04)',
+                        borderWidth: 2,
+                      },
+                    }}
+                  >
+                    Try Demo Account
                   </Button>
                 </Stack>
               </Box>

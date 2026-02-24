@@ -1583,6 +1583,8 @@ def handle_get_asset_transactions(asset_id, user_id):
 def handle_create_transaction(body, user_id):
     """Handle transaction creation"""
     try:
+        logger.info(f"Creating transaction with body: {body}")
+        
         asset_id = body.get('asset_id')
         transaction_type = body.get('transaction_type', 'LumpSum')
         
@@ -1594,6 +1596,8 @@ def handle_create_transaction(body, user_id):
         price_per_share = body.get('price_per_share', 0)
         currency = body.get('currency', 'USD')
         transaction_date = body.get('transaction_date')
+        
+        logger.info(f"Transaction params: asset_id={asset_id}, type={transaction_type}, shares={shares}, price={price_per_share}, currency={currency}, date={transaction_date}")
         
         if not asset_id:
             return create_error_response(400, "Asset ID is required")
@@ -1648,8 +1652,8 @@ def handle_create_transaction(body, user_id):
             (asset_id, transaction_type, transaction_date, shares, price_per_share, currency)
         )
         
-        # Update asset totals (only for non-dividend transactions)
-        if transaction_type != 'Dividend':
+        # Update asset totals for all transaction types that add shares
+        if transaction_type in ['LumpSum', 'Recurring', 'Initialization', 'Dividend']:
             new_total_shares = float(asset['total_shares']) + shares
             total_cost = (float(asset['total_shares']) * float(asset['average_cost_basis'])) + (shares * price_per_share)
             new_average_cost = total_cost / new_total_shares if new_total_shares > 0 else 0
@@ -1664,7 +1668,7 @@ def handle_create_transaction(body, user_id):
                 (new_total_shares, new_average_cost, asset_id)
             )
         else:
-            # For dividends, just update the timestamp without changing shares or cost basis
+            # For other transaction types, just update the timestamp
             execute_update(
                 DATABASE_URL,
                 """
@@ -1702,7 +1706,11 @@ def handle_create_transaction(body, user_id):
         
     except Exception as e:
         logger.error(f"Create transaction error: {str(e)}")
-        return create_error_response(500, "Failed to create transaction")
+        logger.error(f"Error type: {type(e).__name__}")
+        logger.error(f"Error details: {repr(e)}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return create_error_response(500, f"Failed to create transaction: {str(e)}")
 
 def handle_get_transactions(user_id):
     """Get all transactions for a user"""
@@ -1812,13 +1820,13 @@ def handle_update_transaction(transaction_id, body, user_id):
         if shares_changed or price_changed:
             logger.info(f"Recalculating asset aggregations for asset {asset_id} due to transaction update")
             
-            # Get all transactions for this asset (excluding dividend transactions)
+            # Get all transactions for this asset (including all types that add shares)
             asset_transactions = execute_query(
                 DATABASE_URL,
                 """
                 SELECT shares, price_per_share, transaction_type
                 FROM transactions 
-                WHERE asset_id = %s AND transaction_type != 'Dividend'
+                WHERE asset_id = %s AND transaction_type IN ('LumpSum', 'Recurring', 'Initialization', 'Dividend')
                 ORDER BY transaction_date ASC, created_at ASC
                 """,
                 (asset_id,)
@@ -5112,7 +5120,9 @@ def get_monthly_recurring_total(user_id):
             ticker = investment.get('ticker_symbol', 'N/A')
             
             # Convert to monthly amount based on frequency
-            if frequency == 'weekly':
+            if frequency == 'daily':
+                monthly_amount = amount * 30  # Average days per month
+            elif frequency == 'weekly':
                 monthly_amount = amount * 4.33  # Average weeks per month
             elif frequency == 'bi-weekly':
                 monthly_amount = amount * 2.17  # Average bi-weeks per month

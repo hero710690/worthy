@@ -115,9 +115,28 @@ export const RecurringInvestments: React.FC = () => {
           baseCurrency
         );
         
-        console.log(`Converting ${inv.amount} ${inv.currency} to ${baseCurrency}: ${convertedAmount}`);
+        // Convert to monthly equivalent based on frequency
+        let monthlyEquivalent = convertedAmount;
+        switch (inv.frequency.toLowerCase()) {
+          case 'daily':
+            monthlyEquivalent = convertedAmount * 30;
+            break;
+          case 'weekly':
+            monthlyEquivalent = convertedAmount * 4.33; // Average weeks per month
+            break;
+          case 'monthly':
+            monthlyEquivalent = convertedAmount;
+            break;
+          case 'quarterly':
+            monthlyEquivalent = convertedAmount / 3;
+            break;
+          default:
+            monthlyEquivalent = convertedAmount;
+        }
         
-        return sum + convertedAmount;
+        console.log(`Converting ${inv.amount} ${inv.currency} (${inv.frequency}) to monthly ${baseCurrency}: ${monthlyEquivalent}`);
+        
+        return sum + monthlyEquivalent;
       }, 0);
   };
 
@@ -261,7 +280,8 @@ export const RecurringInvestments: React.FC = () => {
         display: 'flex', 
         justifyContent: 'center', 
         alignItems: 'center', 
-        minHeight: '60vh',
+        minHeight: '100vh',
+        width: '100%',
         flexDirection: 'column',
         gap: 2,
         p: { xs: 2, md: 3 }
