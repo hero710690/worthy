@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'https://mreda8g340.execute-api.ap-northeast-1.amazonaws.com/development';
+import { API_BASE_URL } from './config';
 
 // Portfolio performance types
 export interface PortfolioPerformance {

@@ -37,7 +37,7 @@ Resources:
     Properties:
       DBInstanceIdentifier: !Sub 'worthy-db-${Environment}'
       Engine: postgres
-      EngineVersion: '15.4'
+      EngineVersion: '15.16'
       DBInstanceClass: db.t3.micro
       AllocatedStorage: 20
       StorageType: gp3

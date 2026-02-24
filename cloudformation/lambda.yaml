@@ -32,6 +32,9 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Tags:
+        - Key: Name
+          Value: !Sub 'worthy-lambda-role-${Environment}'
       Policies:
         - PolicyName: SecretsManagerAccess
           PolicyDocument:

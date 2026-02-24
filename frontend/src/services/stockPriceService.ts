@@ -83,7 +83,7 @@ export class StockPriceService {
   private static instance: StockPriceService;
   private priceCache: Map<string, StockPrice> = new Map();
   private isUsingRealPrices: boolean = false;
-  private apiKey: string = 'REDACTED_ALPHA_VANTAGE_KEY'; // Real Alpha Vantage API key
+  private apiKey: string = import.meta.env.VITE_ALPHA_VANTAGE_API_KEY || '';
   private baseUrl: string = 'https://www.alphavantage.co/query';
   private cacheDuration: number = 5 * 60 * 1000; // 5 minutes cache for stock prices
   private rateLimitDelay: number = 12000; // 12 seconds between API calls (5 calls per minute limit)

@@ -1,8 +1,7 @@
 import axios from 'axios';
 import type { AuthResponse, LoginRequest, RegisterRequest } from '../types/auth';
 
-// API base URL - using our deployed backend
-const API_BASE_URL = 'https://mreda8g340.execute-api.ap-northeast-1.amazonaws.com/development';
+import { API_BASE_URL } from './config';
 
 // Create axios instance with default config
 const api = axios.create({

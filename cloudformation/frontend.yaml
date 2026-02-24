@@ -55,9 +55,9 @@ Resources:
         DefaultRootObject: index.html
         Origins:
           - Id: S3Origin
-            DomainName: !GetAtt FrontendBucket.DomainName
-            S3OriginConfig:
-              OriginAccessIdentity: ''
+            DomainName: !Sub 'worthy-frontend-${AWS::AccountId}-${Environment}.s3-website-${AWS::Region}.amazonaws.com'
+            CustomOriginConfig:
+              OriginProtocolPolicy: http-only
         DefaultCacheBehavior:
           TargetOriginId: S3Origin
           ViewerProtocolPolicy: redirect-to-https

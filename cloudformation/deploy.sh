@@ -117,11 +117,12 @@ STACK_NAME="worthy-app-${ENVIRONMENT}"
 
 aws cloudformation create-stack \
     --stack-name $STACK_NAME \
-    --template-body file://cloudformation/main.yaml \
+    --template-url "https://s3.amazonaws.com/${DEPLOYMENT_BUCKET}/cloudformation/main.yaml" \
     --parameters \
         ParameterKey=Environment,ParameterValue=$ENVIRONMENT \
         ParameterKey=DBPassword,ParameterValue=$DB_PASSWORD \
         ParameterKey=DBUsername,ParameterValue=worthy_admin \
+        ParameterKey=DeploymentBucket,ParameterValue=$DEPLOYMENT_BUCKET \
     --capabilities CAPABILITY_NAMED_IAM \
     --region $AWS_REGION \
     $PROFILE_FLAG

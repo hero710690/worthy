@@ -7,7 +7,7 @@ import type {
   YahooDividendData 
 } from '../types/dividends';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://mreda8g340.execute-api.ap-northeast-1.amazonaws.com/development';
+import { API_BASE_URL } from './config';
 
 // Create axios instance with default config
 const apiClient = axios.create({

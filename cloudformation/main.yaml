@@ -22,6 +22,10 @@ Parameters:
     Default: worthy_admin
     Description: Database master username
 
+  DeploymentBucket:
+    Type: String
+    Description: S3 bucket containing CloudFormation templates and Lambda code
+
 Resources:
   # VPC Stack
   VPCStack:
@@ -78,19 +82,6 @@ Resources:
       TemplateURL: !Sub 'https://s3.amazonaws.com/${DeploymentBucket}/cloudformation/frontend.yaml'
       Parameters:
         Environment: !Ref Environment
-
-  # Deployment bucket for CloudFormation templates and Lambda code
-  DeploymentBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Sub 'worthy-deployment-${AWS::AccountId}'
-      VersioningConfiguration:
-        Status: Enabled
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: true
-        BlockPublicPolicy: true
-        IgnorePublicAcls: true
-        RestrictPublicBuckets: true
 
 Outputs:
   FrontendURL:
