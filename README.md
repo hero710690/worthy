@@ -30,6 +30,7 @@ cd backend
 - **Framework**: React.js with TypeScript
 - **UI Library**: Material-UI
 - **State Management**: Zustand
+- **Currency exchange**: since we're have asset in different currency make sure to consider exchange rate before summing them up.
 - **Deployment**: AWS S3 + CloudFront CDN
 
 ### Backend
@@ -38,7 +39,7 @@ cd backend
 - **API**: AWS API Gateway
 - **Caching**: TTL-based caching with cachetools
 - **External APIs**: Finnhub, Alpha Vantage, ExchangeRate-API
-
+- **Currency exchange**: since we're have asset in different currency make sure to consider exchange rate before summing them up.
 ## ✨ Features
 
 ### 🎉 **Milestone 1: Foundation & Authentication** - **COMPLETE**
@@ -48,16 +49,12 @@ cd backend
 - ✅ Responsive Material-UI design
 - ✅ Full-stack deployment on AWS
 
-### ✅ **Milestone 2: Core Data Models & Asset Management** - **90% COMPLETE** ⭐ **ENHANCED!**
+### 🔄 **Milestone 2: Core Data Models & Asset Management** - **85% COMPLETE**
 - ✅ Asset initialization and portfolio tracking
 - ✅ Transaction recording for lump-sum purchases
 - ✅ Professional UI with portfolio overview
 - ✅ Database integration with proper relationships
 - ✅ Complete CRUD operations for assets and transactions (backend)
-- ✅ **🆕 Enhanced Portfolio Analysis**: Added comprehensive tabs for returns analysis
-  - **Portfolio Overview**: Traditional allocation and holdings view
-  - **Annualized Returns**: Time-weighted returns analysis for each asset (excluding cash)
-  - **Total Returns + Interest**: Complete return analysis including dividends and interest
 - ❌ Frontend CRUD interfaces for editing/deleting assets and transactions
 - ❌ Complete transaction history management interface
 
@@ -91,7 +88,7 @@ cd backend
 - ✅ **Database Schema**: Complete dividend table structure defined
 - ✅ **Professional UI**: Summary cards, management tools, and status tracking
 
-## 🎯 **Current Status: Enhanced Portfolio Analysis with Returns Tabs** ⭐ **NEW FEATURE DEPLOYED!**
+## 🎯 **Current Status: Milestone 5 - 100% Complete** ⭐ **ENHANCED DIVIDEND FEATURES!**
 
 ### **✅ Working Features:**
 - **User Management**: Registration, login, profile management
@@ -99,38 +96,26 @@ cd backend
 - **Real-time Data**: Live stock prices, currency conversion, market valuation
 - **Performance**: Intelligent caching reduces API calls by 95%
 - **Dashboard**: Professional FinSet-style interface with real-time metrics
-- **🆕 Enhanced Portfolio Analysis**: Comprehensive returns analysis with three specialized tabs:
-  - **Portfolio Overview**: Traditional allocation view with top holdings and asset/currency breakdowns
-  - **Annualized Returns**: Time-weighted return calculations for each investment asset
-  - **Total Returns + Interest**: Complete return analysis including dividends and interest income
+- **Portfolio Analysis**: Unrealized P&L, asset allocation, performance tracking
 - **🆕 Recurring Investments**: Create, manage, and track recurring investment plans
 - **🆕 FIRE Calculator**: Traditional, Barista, and Coast FIRE progress tracking
 - **🆕 Goal Setting**: Interactive FIRE profile configuration and progress visualization
 - **🆕 Dividend Management**: Complete dividend tracking, processing, and reinvestment system
-- **🆕 Enhanced Goals Dashboard**: Complete FIRE dashboard reconstruction with interactive features
-- **🎉 FIXED BARISTA FIRE**: Proper calculation logic with clear income breakdown
-- **🔧 FIXED CURRENCY CONVERSION**: Proper multi-currency handling in FIRE calculations
 
-### **🔧 Latest Enhancement (July 14, 2025):**
-- **🎯 Enhanced Portfolio Analysis with Returns Tabs**: Added comprehensive returns analysis functionality
-  - **Three Specialized Tabs**: Portfolio Overview, Annualized Returns, and Total Returns + Interest
-  - **Detailed Returns Calculation**: Time-weighted returns, total returns, and dividend/interest tracking
-  - **Professional UI**: Table-based display with sorting and color-coded performance indicators
-  - **Comprehensive Metrics**: Holding periods, initial investments, current values, and return percentages
-  - **Intelligent Data Loading**: Lazy loading of returns data when switching to returns tabs
-  - **Multi-Currency Support**: All returns calculated and displayed in user's base currency
-- **📊 User Impact**: Portfolio page now provides detailed investment performance analysis
-- **🧹 Technical Implementation**: New ReturnsCalculationService with transaction-based calculations
-
-### **🔧 Previous Critical Fix (July 11, 2025):**
-- **🎯 Currency Conversion Issues RESOLVED**: Fixed incorrect currency conversion in FIRE calculations
-  - **Proper Exchange Rates**: Fixed rate direction and validation logic
-  - **No More Double Counting**: Eliminated 2x multiplier errors
-  - **Conservative Error Handling**: Skip invalid conversions rather than use wrong rates
-  - **Enhanced Debugging**: Added comprehensive logging and debug endpoint
-  - **Rate Validation**: Prevent unreasonable exchange rates from causing errors
-- **📊 User Impact**: FIRE calculations now show correct monthly contribution totals
-- **🧹 Technical Debt**: Improved currency conversion reliability across the app
+### **🔧 Recent Enhancements:**
+- **🆕 Portfolio Page Reorganization**: Complete UI/UX redesign with consistent box sizes and spacing
+- **🆕 Enhanced Visual Design**: Gradient summary cards with hover animations and improved typography
+- **🆕 Improved Layout Hierarchy**: Top Holdings featured prominently with better information organization
+- **🆕 Responsive Design**: Optimized layout for mobile, tablet, and desktop with consistent spacing
+- **🆕 Enhanced Dividend Auto-Detection**: Real API integration with Yahoo Finance, Alpha Vantage, and Finnhub
+- **🆕 Multi-API Fallback System**: 99.5%+ reliability with intelligent fallback mechanisms
+- **🆕 Live Market Data**: Actual dividend amounts and real ex-dividend dates
+- **Advanced Dividend System**: Manual entry, auto-detection, and processing options
+- **Dividend Reinvestment**: Automatic share purchases using dividend proceeds
+- **Cash Management**: Add dividends to cash assets for flexible use
+- **Transaction Integration**: All dividend actions create proper transaction records
+- **Professional UI**: New "Dividends" navigation with comprehensive management interface
+- **Multi-currency Support**: Handle dividends in different currencies with proper conversion
 
 ## 📊 **Cache Performance Metrics**
 
@@ -260,8 +245,8 @@ curl https://mreda8g340.execute-api.ap-northeast-1.amazonaws.com/development/cac
 ### **Complete Milestone 4: Recurring Investments & Automation**
 - ✅ Recurring investment plan management (COMPLETE)
 - ✅ FIRE calculator and progress tracking (COMPLETE)
-- ❌ Automated batch processing for recurring investments
-- ❌ Market holiday handling and scheduling
+- ✅ Automated batch processing for recurring investments
+- ✅ Market holiday handling and scheduling
 
 ### **Complete Milestone 5: Advanced Dividend Management**
 - ✅ Complete dividend management UI (COMPLETE)
