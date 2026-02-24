@@ -1,0 +1,89 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Worthy App - Lambda Function'
+
+Parameters:
+  Environment:
+    Type: String
+  VPCId:
+    Type: String
+  PrivateSubnet1:
+    Type: String
+  PrivateSubnet2:
+    Type: String
+  LambdaSecurityGroup:
+    Type: String
+  DatabaseURL:
+    Type: String
+  DeploymentBucket:
+    Type: String
+
+Resources:
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub 'worthy-lambda-role-${Environment}'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: SecretsManagerAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: '*'
+
+  LambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub 'worthy-api-${Environment}'
+      Runtime: python3.11
+      Handler: worthy_lambda_function.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 30
+      MemorySize: 512
+      Code:
+        S3Bucket: !Ref DeploymentBucket
+        S3Key: lambda/worthy-backend.zip
+      Environment:
+        Variables:
+          DATABASE_URL: !Ref DatabaseURL
+          ENVIRONMENT: !Ref Environment
+          JWT_SECRET: '{{resolve:secretsmanager:worthy-jwt-secret:SecretString:secret}}'
+          ALPHA_VANTAGE_API_KEY: '{{resolve:secretsmanager:worthy-api-keys:SecretString:alpha_vantage}}'
+          EXCHANGE_RATE_API_KEY: '{{resolve:secretsmanager:worthy-api-keys:SecretString:exchange_rate}}'
+          REACT_APP_POLYGON_API_KEY: '{{resolve:secretsmanager:worthy-api-keys:SecretString:polygon}}'
+          REACT_APP_FINNHUB_API_KEY: '{{resolve:secretsmanager:worthy-api-keys:SecretString:finnhub}}'
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds:
+          - !Ref PrivateSubnet1
+          - !Ref PrivateSubnet2
+      Tags:
+        - Key: Name
+          Value: !Sub 'worthy-api-${Environment}'
+
+  LambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/worthy-api-${Environment}'
+      RetentionInDays: 7
+
+Outputs:
+  LambdaFunctionArn:
+    Description: Lambda Function ARN
+    Value: !GetAtt LambdaFunction.Arn
+  
+  LambdaFunctionName:
+    Description: Lambda Function Name
+    Value: !Ref LambdaFunction
