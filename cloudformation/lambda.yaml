@@ -66,6 +66,7 @@ Resources:
           EXCHANGE_RATE_API_KEY: '{{resolve:secretsmanager:worthy-api-keys:SecretString:exchange_rate}}'
           REACT_APP_POLYGON_API_KEY: '{{resolve:secretsmanager:worthy-api-keys:SecretString:polygon}}'
           REACT_APP_FINNHUB_API_KEY: '{{resolve:secretsmanager:worthy-api-keys:SecretString:finnhub}}'
+          REACT_APP_FINNHUB_API_KEY: '{{resolve:secretsmanager:worthy-api-keys:SecretString:finnhub}}'
       VpcConfig:
         SecurityGroupIds:
           - !Ref LambdaSecurityGroup

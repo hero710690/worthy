@@ -961,7 +961,7 @@ except ImportError:
     logger.warning("psycopg2 not available, will use mock database")
 
 # Configuration
-JWT_SECRET = os.environ.get('JWT_SECRET', '<your-jwt-secret>')
+JWT_SECRET = os.environ.get('JWT_SECRET', '')
 JWT_ALGORITHM = 'HS256'
 JWT_EXPIRATION_HOURS = 24
 DATABASE_URL = os.environ.get('DATABASE_URL', '')
