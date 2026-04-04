@@ -1,0 +1,12 @@
+__pycache__
+*.pyc
+*.pyo
+.git
+.gitignore
+*.md
+*.zip
+lambda_deployment_full/
+.env
+.env.*
+Dockerfile
+.dockerignore

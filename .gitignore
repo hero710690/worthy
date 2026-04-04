@@ -40,6 +40,13 @@ ENV/
 .aws-sam/
 samconfig.toml
 
+# Terraform
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.backup
+terraform/.terraform.lock.hcl
+terraform/terraform.tfvars
+
 # Node.js (for frontend)
 node_modules/
 npm-debug.log*

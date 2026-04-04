@@ -1,0 +1,17 @@
+# Copy this file to terraform.tfvars and fill in your values
+# DO NOT commit terraform.tfvars to version control
+
+project_id  = "your-gcp-project-id"
+region      = "asia-northeast1"
+environment = "production"
+
+# Database
+db_username = "worthy_admin"
+db_password = "CHANGE_ME_strong_password_here"
+
+# Application secrets
+jwt_secret            = "CHANGE_ME_generate_a_secure_random_string"
+alpha_vantage_api_key = "your-alpha-vantage-key"
+exchange_rate_api_key = "your-exchange-rate-key"
+finnhub_api_key       = "your-finnhub-key"
+polygon_api_key       = "your-polygon-key"

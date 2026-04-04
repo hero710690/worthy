@@ -1680,29 +1680,33 @@ def handle_create_transaction(body, user_id):
             )
         
         # Get created transaction
-        transaction = execute_query(
+        transactions = execute_query(
             DATABASE_URL,
             """
             SELECT * FROM transactions 
-            WHERE asset_id = %s AND transaction_date = %s AND shares = %s AND price_per_share = %s
+            WHERE asset_id = %s 
             ORDER BY created_at DESC LIMIT 1
             """,
-            (asset_id, transaction_date, shares, price_per_share)
-        )[0]
+            (asset_id,)
+        )
         
-        return create_response(201, {
-            "message": "Transaction created successfully",
-            "transaction": {
-                "transaction_id": transaction['transaction_id'],
-                "asset_id": transaction['asset_id'],
-                "transaction_type": transaction['transaction_type'],
-                "transaction_date": transaction['transaction_date'].isoformat(),
-                "shares": float(transaction['shares']),
-                "price_per_share": float(transaction['price_per_share']),
-                "currency": transaction['currency'],
-                "created_at": transaction['created_at'].isoformat()
-            }
-        })
+        if transactions:
+            transaction = transactions[0]
+            return create_response(201, {
+                "message": "Transaction created successfully",
+                "transaction": {
+                    "transaction_id": transaction['transaction_id'],
+                    "asset_id": transaction['asset_id'],
+                    "transaction_type": transaction['transaction_type'],
+                    "transaction_date": transaction['transaction_date'].isoformat(),
+                    "shares": float(transaction['shares']),
+                    "price_per_share": float(transaction['price_per_share']),
+                    "currency": transaction['currency'],
+                    "created_at": transaction['created_at'].isoformat()
+                }
+            })
+        else:
+            return create_response(201, {"message": "Transaction created successfully"})
         
     except Exception as e:
         logger.error(f"Create transaction error: {str(e)}")
@@ -7391,6 +7395,127 @@ def lambda_handler(event, context):
                 logger.error(f"Database connectivity test error: {str(e)}")
                 return create_error_response(500, f"Database connection failed: {str(e)}")
         
+        elif path == '/admin/init-db' and http_method == 'POST':
+            # Initialize database schema
+            try:
+                schema_sql = [
+                    "DROP TABLE IF EXISTS dividends CASCADE",
+                    "DROP TABLE IF EXISTS transactions CASCADE",
+                    "DROP TABLE IF EXISTS recurring_investments CASCADE",
+                    "DROP TABLE IF EXISTS fire_profile CASCADE",
+                    "DROP TABLE IF EXISTS password_reset_tokens CASCADE",
+                    "DROP TABLE IF EXISTS assets CASCADE",
+                    "DROP TABLE IF EXISTS users CASCADE",
+                    """CREATE TABLE users (
+                        user_id SERIAL PRIMARY KEY, name VARCHAR(50) NOT NULL,
+                        email VARCHAR(255) UNIQUE NOT NULL, password_hash VARCHAR(255) NOT NULL,
+                        base_currency VARCHAR(10) DEFAULT 'USD',
+                        birth_year INTEGER, birth_date DATE,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""",
+                    """CREATE TABLE assets (
+                        asset_id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(user_id) ON DELETE CASCADE,
+                        ticker_symbol VARCHAR(20), asset_type VARCHAR(50) NOT NULL,
+                        total_shares DECIMAL(20,8) DEFAULT 0,
+                        average_cost_basis DECIMAL(20,8) DEFAULT 0,
+                        currency VARCHAR(10) DEFAULT 'USD',
+                        interest_rate DECIMAL(5,4), maturity_date DATE, start_date DATE,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""",
+                    """CREATE TABLE transactions (
+                        transaction_id SERIAL PRIMARY KEY,
+                        asset_id INTEGER REFERENCES assets(asset_id) ON DELETE CASCADE,
+                        transaction_type VARCHAR(50) NOT NULL,
+                        transaction_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        shares DECIMAL(20,8) NOT NULL,
+                        price_per_share DECIMAL(20,8) NOT NULL,
+                        currency VARCHAR(10) DEFAULT 'USD',
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""",
+                ]
+                results = []
+                for sql in schema_sql:
+                    execute_update(DATABASE_URL, sql)
+                    results.append("OK")
+                create_recurring_investments_table()
+                create_fire_profile_table()
+                create_password_reset_tokens_table()
+                create_dividends_table()
+                return create_response(200, {"message": "Database schema initialized", "tables": len(schema_sql) + 4})
+            except Exception as e:
+                return create_error_response(500, f"Schema init failed: {str(e)}")
+
+        elif path == '/admin/restore-db' and http_method == 'POST':
+            # Restore database from JSON dump
+            try:
+                dump = json.loads(event.get('body', '{}'))
+                # Ensure fire_profiles and dividends tables match dump schema
+                extra_sql = [
+                    "DROP TABLE IF EXISTS fire_profiles CASCADE",
+                    """CREATE TABLE IF NOT EXISTS fire_profiles (
+                        profile_id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(user_id) ON DELETE CASCADE,
+                        annual_expenses DECIMAL(20,2), safe_withdrawal_rate DECIMAL(5,4),
+                        expected_annual_return DECIMAL(5,4), target_retirement_age INTEGER,
+                        barista_annual_income DECIMAL(20,2),
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""",
+                    "DROP TABLE IF EXISTS dividends CASCADE",
+                    """CREATE TABLE IF NOT EXISTS dividends (
+                        dividend_id SERIAL PRIMARY KEY, asset_id INTEGER REFERENCES assets(asset_id) ON DELETE CASCADE,
+                        user_id INTEGER REFERENCES users(user_id) ON DELETE CASCADE,
+                        ticker_symbol VARCHAR(20), ex_dividend_date DATE, payment_date DATE,
+                        dividend_per_share DECIMAL(20,8), total_dividend_amount DECIMAL(20,8),
+                        currency VARCHAR(10) DEFAULT 'USD', dividend_type VARCHAR(50),
+                        is_reinvested BOOLEAN DEFAULT false, tax_rate DECIMAL(5,4),
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""",
+                    "DROP TABLE IF EXISTS recurring_investments CASCADE",
+                    """CREATE TABLE IF NOT EXISTS recurring_investments (
+                        recurring_id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(user_id) ON DELETE CASCADE,
+                        ticker_symbol VARCHAR(20), amount DECIMAL(20,8),
+                        currency VARCHAR(10) DEFAULT 'USD',
+                        frequency VARCHAR(20), start_date DATE, next_run_date DATE,
+                        is_active BOOLEAN DEFAULT true,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""",
+                ]
+                for sql in extra_sql:
+                    execute_update(DATABASE_URL, sql)
+                results = {}
+                # Insert order matters for foreign keys
+                table_order = ['users', 'assets', 'transactions', 'recurring_investments', 'fire_profiles', 'dividends']
+                for table in table_order:
+                    records = dump.get(table, [])
+                    if not records:
+                        results[table] = 0
+                        continue
+                    cols = list(records[0].keys())
+                    col_str = ', '.join(cols)
+                    placeholders = ', '.join(['%s'] * len(cols))
+                    count = 0
+                    for rec in records:
+                        vals = []
+                        for c in cols:
+                            v = rec.get(c)
+                            vals.append(v)
+                        try:
+                            execute_update(DATABASE_URL,
+                                f"INSERT INTO {table} ({col_str}) VALUES ({placeholders}) ON CONFLICT DO NOTHING",
+                                tuple(vals))
+                            count += 1
+                        except Exception as row_err:
+                            logger.warning(f"Skip {table} row: {row_err}")
+                    # Reset sequence
+                    try:
+                        id_col = cols[0]
+                        execute_update(DATABASE_URL,
+                            f"SELECT setval(pg_get_serial_sequence('{table}', '{id_col}'), COALESCE(MAX({id_col}), 1)) FROM {table}")
+                    except Exception:
+                        pass
+                    results[table] = count
+                return create_response(200, {"message": "Restore complete", "results": results})
+            except Exception as e:
+                return create_error_response(500, f"Restore failed: {str(e)}")
+
         elif path == '/admin/list-users' and http_method == 'GET':
             # Temporary admin endpoint to list all users (for debugging)
             try:
