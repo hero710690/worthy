@@ -13,24 +13,9 @@ output "cloud_sql_connection_name" {
   value       = google_sql_database_instance.worthy.connection_name
 }
 
-output "vpc_connector_name" {
-  description = "Serverless VPC connector name"
-  value       = google_vpc_access_connector.worthy.name
-}
-
 output "cloud_run_service_account_email" {
   description = "Cloud Run service account email"
   value       = google_service_account.cloud_run.email
-}
-
-output "frontend_bucket_name" {
-  description = "Frontend Cloud Storage bucket name"
-  value       = google_storage_bucket.frontend.name
-}
-
-output "frontend_ip" {
-  description = "Frontend load balancer IP"
-  value       = google_compute_global_address.frontend.address
 }
 
 output "artifact_registry_url" {

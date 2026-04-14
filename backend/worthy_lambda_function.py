@@ -1635,6 +1635,8 @@ def handle_create_transaction(body, user_id):
         if transaction_date:
             try:
                 from datetime import datetime
+                # Handle both YYYY-MM-DD and ISO timestamp formats
+                transaction_date = str(transaction_date)[:10]
                 transaction_date = datetime.strptime(transaction_date, '%Y-%m-%d').date()
             except ValueError:
                 return create_error_response(400, "Invalid date format. Use YYYY-MM-DD")
@@ -1799,6 +1801,8 @@ def handle_update_transaction(transaction_id, body, user_id):
         if transaction_date:
             try:
                 from datetime import datetime
+                # Handle both YYYY-MM-DD and ISO timestamp formats
+                transaction_date = str(transaction_date)[:10]
                 transaction_date = datetime.strptime(transaction_date, '%Y-%m-%d').date()
             except ValueError:
                 return create_error_response(400, "Invalid date format. Use YYYY-MM-DD")
@@ -7448,16 +7452,8 @@ def lambda_handler(event, context):
             # Restore database from JSON dump
             try:
                 dump = json.loads(event.get('body', '{}'))
-                # Ensure fire_profiles and dividends tables match dump schema
+                # Ensure tables match dump schema
                 extra_sql = [
-                    "DROP TABLE IF EXISTS fire_profiles CASCADE",
-                    """CREATE TABLE IF NOT EXISTS fire_profiles (
-                        profile_id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(user_id) ON DELETE CASCADE,
-                        annual_expenses DECIMAL(20,2), safe_withdrawal_rate DECIMAL(5,4),
-                        expected_annual_return DECIMAL(5,4), target_retirement_age INTEGER,
-                        barista_annual_income DECIMAL(20,2),
-                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""",
                     "DROP TABLE IF EXISTS dividends CASCADE",
                     """CREATE TABLE IF NOT EXISTS dividends (
                         dividend_id SERIAL PRIMARY KEY, asset_id INTEGER REFERENCES assets(asset_id) ON DELETE CASCADE,
@@ -7465,7 +7461,7 @@ def lambda_handler(event, context):
                         ticker_symbol VARCHAR(20), ex_dividend_date DATE, payment_date DATE,
                         dividend_per_share DECIMAL(20,8), total_dividend_amount DECIMAL(20,8),
                         currency VARCHAR(10) DEFAULT 'USD', dividend_type VARCHAR(50),
-                        is_reinvested BOOLEAN DEFAULT false, tax_rate DECIMAL(5,4),
+                        is_reinvested BOOLEAN DEFAULT false, tax_rate DECIMAL(5,2) DEFAULT 20.0,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""",
                     "DROP TABLE IF EXISTS recurring_investments CASCADE",
@@ -7477,9 +7473,15 @@ def lambda_handler(event, context):
                         is_active BOOLEAN DEFAULT true,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""",
+                    # fire_profile: add barista_annual_income column for dump compatibility
+                    "ALTER TABLE fire_profile ADD COLUMN IF NOT EXISTS barista_annual_income DECIMAL(15,2) DEFAULT 0",
                 ]
                 for sql in extra_sql:
                     execute_update(DATABASE_URL, sql)
+                # Map dump table names to actual DB table names
+                table_name_map = {
+                    'fire_profiles': 'fire_profile',
+                }
                 results = {}
                 # Insert order matters for foreign keys
                 table_order = ['users', 'assets', 'transactions', 'recurring_investments', 'fire_profiles', 'dividends']
@@ -7488,6 +7490,7 @@ def lambda_handler(event, context):
                     if not records:
                         results[table] = 0
                         continue
+                    db_table = table_name_map.get(table, table)
                     cols = list(records[0].keys())
                     col_str = ', '.join(cols)
                     placeholders = ', '.join(['%s'] * len(cols))
@@ -7499,16 +7502,16 @@ def lambda_handler(event, context):
                             vals.append(v)
                         try:
                             execute_update(DATABASE_URL,
-                                f"INSERT INTO {table} ({col_str}) VALUES ({placeholders}) ON CONFLICT DO NOTHING",
+                                f"INSERT INTO {db_table} ({col_str}) VALUES ({placeholders}) ON CONFLICT DO NOTHING",
                                 tuple(vals))
                             count += 1
                         except Exception as row_err:
-                            logger.warning(f"Skip {table} row: {row_err}")
+                            logger.warning(f"Skip {db_table} row: {row_err}")
                     # Reset sequence
                     try:
                         id_col = cols[0]
                         execute_update(DATABASE_URL,
-                            f"SELECT setval(pg_get_serial_sequence('{table}', '{id_col}'), COALESCE(MAX({id_col}), 1)) FROM {table}")
+                            f"SELECT setval(pg_get_serial_sequence('{db_table}', '{id_col}'), COALESCE(MAX({id_col}), 1)) FROM {db_table}")
                     except Exception:
                         pass
                     results[table] = count

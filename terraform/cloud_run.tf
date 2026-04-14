@@ -4,6 +4,12 @@ resource "google_cloud_run_v2_service" "worthy_backend" {
   name     = "worthy-backend-${var.environment}"
   location = var.region
 
+  # Note: public access is enabled via gcloud annotation
+  # run.googleapis.com/invoker-iam-disabled=true (set outside Terraform)
+  lifecycle {
+    ignore_changes = [annotations]
+  }
+
   template {
     service_account = google_service_account.cloud_run.email
 
@@ -13,8 +19,11 @@ resource "google_cloud_run_v2_service" "worthy_backend" {
     }
 
     vpc_access {
-      connector = google_vpc_access_connector.worthy.id
-      egress    = "ALL_TRAFFIC"
+      network_interfaces {
+        network    = google_compute_network.worthy.id
+        subnetwork = google_compute_subnetwork.private.id
+      }
+      egress = "ALL_TRAFFIC"
     }
 
     containers {

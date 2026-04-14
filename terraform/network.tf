@@ -6,7 +6,7 @@ resource "google_compute_network" "worthy" {
   depends_on = [google_project_service.apis]
 }
 
-# Private subnet for Cloud SQL and Cloud Run VPC connector
+# Private subnet for Cloud SQL and Cloud Run (Direct VPC Egress)
 resource "google_compute_subnetwork" "private" {
   name          = "worthy-private-${var.environment}"
   ip_cidr_range = "10.0.11.0/24"
@@ -14,28 +14,6 @@ resource "google_compute_subnetwork" "private" {
   network       = google_compute_network.worthy.id
 
   private_ip_google_access = true
-}
-
-# Subnet for Serverless VPC Access connector (requires /28)
-resource "google_compute_subnetwork" "connector" {
-  name          = "worthy-connector-${var.environment}"
-  ip_cidr_range = "10.0.20.0/28"
-  region        = var.region
-  network       = google_compute_network.worthy.id
-}
-
-# Serverless VPC Access connector (Cloud Run -> Cloud SQL)
-resource "google_vpc_access_connector" "worthy" {
-  name = "worthy-connector"
-  subnet {
-    name = google_compute_subnetwork.connector.name
-  }
-  region         = var.region
-  machine_type   = "e2-micro"
-  min_instances  = 2
-  max_instances  = 3
-
-  depends_on = [google_project_service.apis]
 }
 
 # Allow internal traffic within VPC
@@ -64,9 +42,4 @@ resource "google_compute_router_nat" "worthy" {
   region                             = var.region
   nat_ip_allocate_option             = "AUTO_ONLY"
   source_subnetwork_ip_ranges_to_nat = "ALL_SUBNETWORKS_ALL_IP_RANGES"
-}
-
-# Reserve a global IP for the load balancer (frontend)
-resource "google_compute_global_address" "frontend" {
-  name = "worthy-frontend-ip-${var.environment}"
 }
