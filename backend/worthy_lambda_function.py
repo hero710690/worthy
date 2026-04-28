@@ -1718,6 +1718,155 @@ def handle_create_transaction(body, user_id):
         logger.error(f"Traceback: {traceback.format_exc()}")
         return create_error_response(500, f"Failed to create transaction: {str(e)}")
 
+def handle_sell_asset(body, user_id):
+    """Handle selling shares of an asset and depositing proceeds into a cash asset"""
+    try:
+        logger.info(f"Selling asset with body: {body}")
+
+        asset_id = body.get('asset_id')
+        shares = body.get('shares')
+        price_per_share = body.get('price_per_share')
+        currency = body.get('currency', 'USD')
+        transaction_date = body.get('transaction_date')
+        cash_asset_id = body.get('cash_asset_id')
+
+        # Validate required fields
+        if not asset_id:
+            return create_error_response(400, "asset_id is required")
+        if shares is None:
+            return create_error_response(400, "shares is required")
+        if price_per_share is None:
+            return create_error_response(400, "price_per_share is required")
+        if not cash_asset_id:
+            return create_error_response(400, "cash_asset_id is required")
+
+        shares = float(shares)
+        price_per_share = float(price_per_share)
+
+        if shares <= 0:
+            return create_error_response(400, "Shares must be greater than 0")
+        if price_per_share <= 0:
+            return create_error_response(400, "Price per share must be greater than 0")
+
+        # Verify asset exists and belongs to user
+        asset = execute_query(
+            DATABASE_URL,
+            "SELECT * FROM assets WHERE asset_id = %s AND user_id = %s",
+            (asset_id, user_id)
+        )
+        if not asset:
+            return create_error_response(404, "Asset not found")
+        asset = asset[0]
+
+        total_shares = float(asset['total_shares'])
+        if shares > total_shares:
+            return create_error_response(400, f"Cannot sell {shares} shares. Only {total_shares} shares available")
+
+        # Verify cash asset exists, belongs to user, and is a Cash type
+        cash_asset = execute_query(
+            DATABASE_URL,
+            "SELECT * FROM assets WHERE asset_id = %s AND user_id = %s",
+            (cash_asset_id, user_id)
+        )
+        if not cash_asset:
+            return create_error_response(404, "Cash asset not found")
+        cash_asset = cash_asset[0]
+
+        if cash_asset['asset_type'] != 'Cash':
+            return create_error_response(400, "cash_asset_id must refer to a Cash type asset")
+
+        # Parse transaction date
+        if transaction_date:
+            try:
+                from datetime import datetime
+                # Handle both YYYY-MM-DD and ISO timestamp formats
+                transaction_date = str(transaction_date)[:10]
+                transaction_date = datetime.strptime(transaction_date, '%Y-%m-%d').date()
+            except ValueError:
+                return create_error_response(400, "Invalid date format. Use YYYY-MM-DD")
+        else:
+            from datetime import date
+            transaction_date = date.today()
+
+        # Calculate proceeds and realized gain/loss
+        proceeds = shares * price_per_share
+        average_cost_basis = float(asset['average_cost_basis'])
+        cost_basis_total = shares * average_cost_basis
+        realized_gain_loss = proceeds - cost_basis_total
+
+        # Create sell transaction on the sold asset
+        execute_update(
+            DATABASE_URL,
+            """
+            INSERT INTO transactions (asset_id, transaction_type, transaction_date, shares, price_per_share, currency)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            """,
+            (asset_id, 'Sell', transaction_date, -shares, price_per_share, currency)
+        )
+
+        # Update the sold asset: reduce total_shares, keep average_cost_basis unchanged
+        new_total_shares = total_shares - shares
+        execute_update(
+            DATABASE_URL,
+            """
+            UPDATE assets
+            SET total_shares = %s, updated_at = CURRENT_TIMESTAMP
+            WHERE asset_id = %s
+            """,
+            (new_total_shares, asset_id)
+        )
+
+        # Update the cash asset: add proceeds to average_cost_basis (balance)
+        # Cash assets always have total_shares=1, average_cost_basis=balance
+        cash_balance = float(cash_asset['average_cost_basis'])
+        new_cash_balance = cash_balance + proceeds
+        execute_update(
+            DATABASE_URL,
+            """
+            UPDATE assets
+            SET average_cost_basis = %s, updated_at = CURRENT_TIMESTAMP
+            WHERE asset_id = %s
+            """,
+            (new_cash_balance, cash_asset_id)
+        )
+
+        # Create deposit transaction on the cash asset (shares=0, price=proceeds for audit)
+        execute_update(
+            DATABASE_URL,
+            """
+            INSERT INTO transactions (asset_id, transaction_type, transaction_date, shares, price_per_share, currency)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            """,
+            (cash_asset_id, 'LumpSum', transaction_date, 0, proceeds, currency)
+        )
+
+        return create_response(200, {
+            "message": "Asset sold successfully",
+            "sell_details": {
+                "asset_id": asset_id,
+                "ticker_symbol": asset['ticker_symbol'],
+                "shares_sold": shares,
+                "price_per_share": price_per_share,
+                "proceeds": proceeds,
+                "cost_basis_total": cost_basis_total,
+                "realized_gain_loss": realized_gain_loss,
+                "remaining_shares": new_total_shares,
+                "average_cost_basis": average_cost_basis,
+                "currency": currency,
+                "transaction_date": transaction_date.isoformat(),
+                "cash_asset_id": cash_asset_id,
+                "new_cash_balance": new_cash_balance
+            }
+        })
+
+    except Exception as e:
+        logger.error(f"Sell asset error: {str(e)}")
+        logger.error(f"Error type: {type(e).__name__}")
+        logger.error(f"Error details: {repr(e)}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
+        return create_error_response(500, f"Failed to sell asset: {str(e)}")
+
 def handle_get_transactions(user_id):
     """Get all transactions for a user"""
     try:
@@ -1943,47 +2092,61 @@ def handle_delete_transaction(transaction_id, user_id):
         rollback_applied = False
         
         if transaction['transaction_type'] == 'LumpSum':
-            # Rollback LumpSum transactions (existing logic)
-            # Get current asset totals
-            current_total_shares = float(transaction['total_shares'])
-            current_avg_cost = float(transaction['average_cost_basis'])
-            
-            # Get transaction details to rollback
-            transaction_shares = float(transaction['shares'])
-            transaction_price = float(transaction['price_per_share'])
-            
-            # Calculate new totals after removing this transaction
-            new_total_shares = current_total_shares - transaction_shares
-            
-            if new_total_shares > 0:
-                # Recalculate weighted average cost basis
-                # Current total value = current_total_shares * current_avg_cost
-                # Transaction value = transaction_shares * transaction_price
-                # New total value = current_total_value - transaction_value
-                # New avg cost = new_total_value / new_total_shares
-                
-                current_total_value = current_total_shares * current_avg_cost
-                transaction_value = transaction_shares * transaction_price
-                new_total_value = current_total_value - transaction_value
-                new_avg_cost = new_total_value / new_total_shares
-                
-                # Update asset with rollback values
+            # Get asset type to determine rollback strategy
+            asset_info = execute_query(
+                DATABASE_URL,
+                "SELECT asset_type FROM assets WHERE asset_id = %s",
+                (asset_id,)
+            )
+            asset_type = asset_info[0]['asset_type'] if asset_info else ''
+
+            if asset_type == 'Cash':
+                # Cash assets: total_shares=1 always, average_cost_basis=balance
+                # Transaction stores shares=0, price_per_share=amount (from sell deposits)
+                # or shares=amount for manual entries
+                transaction_shares = float(transaction['shares'])
+                transaction_price = float(transaction['price_per_share'])
+                deposit_amount = transaction_shares * transaction_price if transaction_shares != 0 else transaction_price
+                current_balance = float(transaction['average_cost_basis'])
+                new_balance = max(0, current_balance - deposit_amount)
                 execute_update(
                     DATABASE_URL,
                     """
-                    UPDATE assets 
-                    SET total_shares = %s, average_cost_basis = %s, updated_at = CURRENT_TIMESTAMP
+                    UPDATE assets
+                    SET average_cost_basis = %s, updated_at = CURRENT_TIMESTAMP
                     WHERE asset_id = %s
                     """,
-                    (new_total_shares, new_avg_cost, asset_id)
+                    (new_balance, asset_id)
                 )
             else:
-                # If no shares left, delete the asset entirely
-                execute_update(
-                    DATABASE_URL,
-                    "DELETE FROM assets WHERE asset_id = %s",
-                    (asset_id,)
-                )
+                # Non-cash assets: rollback shares and recalculate avg cost
+                current_total_shares = float(transaction['total_shares'])
+                current_avg_cost = float(transaction['average_cost_basis'])
+                transaction_shares = float(transaction['shares'])
+                transaction_price = float(transaction['price_per_share'])
+                new_total_shares = current_total_shares - transaction_shares
+
+                if new_total_shares > 0:
+                    current_total_value = current_total_shares * current_avg_cost
+                    transaction_value = transaction_shares * transaction_price
+                    new_total_value = current_total_value - transaction_value
+                    new_avg_cost = new_total_value / new_total_shares
+                    execute_update(
+                        DATABASE_URL,
+                        """
+                        UPDATE assets
+                        SET total_shares = %s, average_cost_basis = %s, updated_at = CURRENT_TIMESTAMP
+                        WHERE asset_id = %s
+                        """,
+                        (new_total_shares, new_avg_cost, asset_id)
+                    )
+                else:
+                    # If no shares left, delete the asset entirely
+                    execute_update(
+                        DATABASE_URL,
+                        "DELETE FROM assets WHERE asset_id = %s",
+                        (asset_id,)
+                    )
             rollback_applied = True
             
         elif transaction['transaction_type'] == 'Recurring':
@@ -2155,9 +2318,91 @@ def handle_delete_transaction(transaction_id, user_id):
                 logger.info(f"Reset dividend {dividend_record['dividend_id']} to pending status")
             else:
                 logger.warning(f"No matching dividend record found for transaction {transaction_id}")
-            
+
             rollback_applied = True
-        
+
+        elif transaction['transaction_type'] == 'Sell':
+            # Rollback Sell transaction:
+            # 1. Add sold shares back to the asset
+            # 2. Find and remove the corresponding deposit from the cash asset
+            logger.info(f"Rolling back sell transaction {transaction_id}")
+
+            raw_shares = float(transaction['shares'])
+            sale_price = float(transaction['price_per_share'])
+            # shares stored as negative; if positive, still handle correctly
+            sold_shares = abs(raw_shares)
+            proceeds = sold_shares * sale_price
+
+            logger.info(f"Sell rollback: raw_shares={raw_shares}, sold_shares={sold_shares}, proceeds={proceeds}")
+
+            # Recalculate total_shares from all remaining transactions (excluding this one)
+            remaining = execute_query(
+                DATABASE_URL,
+                """
+                SELECT COALESCE(SUM(CASE WHEN transaction_type = 'Sell' THEN -ABS(shares) ELSE shares END), 0) as total
+                FROM transactions
+                WHERE asset_id = %s AND transaction_id != %s
+                """,
+                (asset_id, transaction_id)
+            )
+            new_total_shares = float(remaining[0]['total']) if remaining else float(transaction['total_shares']) + sold_shares
+            execute_update(
+                DATABASE_URL,
+                """
+                UPDATE assets
+                SET total_shares = %s, updated_at = CURRENT_TIMESTAMP
+                WHERE asset_id = %s
+                """,
+                (new_total_shares, asset_id)
+            )
+            logger.info(f"Restored {sold_shares} shares to asset {asset_id}: new total = {new_total_shares}")
+
+            # Find the corresponding deposit transaction on the cash asset
+            # It was created at roughly the same time with matching amount
+            cash_deposit = execute_query(
+                DATABASE_URL,
+                """
+                SELECT t.transaction_id, t.asset_id, t.price_per_share, a.average_cost_basis as cash_balance
+                FROM transactions t
+                JOIN assets a ON t.asset_id = a.asset_id
+                WHERE a.user_id = %s
+                  AND a.asset_type = 'Cash'
+                  AND t.transaction_type = 'LumpSum'
+                  AND t.shares = 0
+                  AND ABS(t.price_per_share - %s) < 0.01
+                  AND ABS(EXTRACT(EPOCH FROM (t.created_at - (SELECT created_at FROM transactions WHERE transaction_id = %s))) ) < 5
+                ORDER BY t.created_at DESC
+                LIMIT 1
+                """,
+                (user_id, proceeds, transaction_id)
+            )
+
+            if cash_deposit:
+                deposit = cash_deposit[0]
+                # Remove proceeds from cash asset average_cost_basis (balance)
+                deposit_amount = float(deposit['price_per_share'])
+                new_cash_balance = float(deposit['cash_balance']) - deposit_amount
+                execute_update(
+                    DATABASE_URL,
+                    """
+                    UPDATE assets
+                    SET average_cost_basis = %s, updated_at = CURRENT_TIMESTAMP
+                    WHERE asset_id = %s
+                    """,
+                    (max(0, new_cash_balance), deposit['asset_id'])
+                )
+                # Delete the deposit transaction
+                execute_update(
+                    DATABASE_URL,
+                    "DELETE FROM transactions WHERE transaction_id = %s",
+                    (deposit['transaction_id'],)
+                )
+                logger.info(f"Reversed cash deposit: removed {deposit['shares']} from cash asset {deposit['asset_id']}")
+            else:
+                logger.warning(f"No matching cash deposit found for sell transaction {transaction_id} - only shares restored")
+
+            rollback_applied = True
+
         # Delete the transaction
         execute_update(
             DATABASE_URL,
@@ -6831,6 +7076,22 @@ def lambda_handler(event, context):
                 return create_error_response(404, f"Auth endpoint not found: {path}")
         
         # Asset management endpoints
+        elif path == '/assets/sell' and http_method == 'POST':
+            # Sell asset - requires authentication
+            body = {}
+            if event.get('body'):
+                try:
+                    body = json.loads(event['body'])
+                except json.JSONDecodeError:
+                    return create_error_response(400, "Invalid JSON in request body")
+
+            request_headers = event.get('headers', {})
+            auth_result = verify_jwt_token(request_headers.get('Authorization', ''))
+            if not auth_result['valid']:
+                return create_error_response(401, "Invalid or missing token")
+
+            return handle_sell_asset(body, auth_result['user_id'])
+
         elif path == '/assets' and http_method == 'POST':
             # Create asset - requires authentication
             body = {}
@@ -7399,6 +7660,23 @@ def lambda_handler(event, context):
                 logger.error(f"Database connectivity test error: {str(e)}")
                 return create_error_response(500, f"Database connection failed: {str(e)}")
         
+        elif path == '/admin/run-sql' and http_method == 'POST':
+            try:
+                body = json.loads(event.get('body', '{}'))
+                sql = body.get('sql', '')
+                params = body.get('params', [])
+                if sql.strip().upper().startswith('SELECT'):
+                    result = execute_query(DATABASE_URL, sql, tuple(params) if params else None)
+                    rows = []
+                    for r in result:
+                        rows.append({k: str(v) for k, v in r.items()})
+                    return create_response(200, {"rows": rows, "count": len(rows)})
+                else:
+                    execute_update(DATABASE_URL, sql, tuple(params) if params else None)
+                    return create_response(200, {"message": "OK"})
+            except Exception as e:
+                return create_error_response(500, f"SQL error: {str(e)}")
+
         elif path == '/admin/init-db' and http_method == 'POST':
             # Initialize database schema
             try:
