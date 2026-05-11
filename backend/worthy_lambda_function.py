@@ -5683,17 +5683,15 @@ def take_portfolio_snapshot(user_id):
     cumulative_dividends           — sum of all dividends ever recorded for user
     asset_count                    — number of assets with total_shares > 0
     """
-    from datetime import date
-
-    # 1. User base currency
-    user = execute_query(
+    rows = execute_query(
         DATABASE_URL,
         "SELECT base_currency FROM users WHERE user_id = %s",
         (user_id,)
-    )[0]
-    base_currency = user['base_currency']
+    )
+    if not rows:
+        raise ValueError(f"User {user_id} not found")
+    base_currency = rows[0]['base_currency']
 
-    # 2. All active assets
     assets = execute_query(
         DATABASE_URL,
         """
@@ -5718,7 +5716,6 @@ def take_portfolio_snapshot(user_id):
 
         invested_amount = shares * avg_cost
 
-        # Current market value
         if asset_type == 'CD':
             interest_rate = asset.get('interest_rate')
             maturity_date = asset.get('maturity_date')
@@ -5744,7 +5741,6 @@ def take_portfolio_snapshot(user_id):
                 current_price = avg_cost
             current_amount = shares * current_price
 
-        # Convert to base currency
         if currency != base_currency:
             try:
                 current_amount = convert_currency_amount(current_amount, currency, base_currency)
@@ -5760,7 +5756,6 @@ def take_portfolio_snapshot(user_id):
             invest_value += current_amount
             invest_invested += invested_amount
 
-    # 3. Cumulative dividends in base currency
     dividend_rows = execute_query(
         DATABASE_URL,
         """
@@ -5779,13 +5774,12 @@ def take_portfolio_snapshot(user_id):
             try:
                 amt = convert_currency_amount(amt, cur, base_currency)
             except Exception:
-                pass
+                logger.warning(f"Snapshot: dividend currency conversion failed ({cur} to {base_currency}), using original amount")
         cumulative_dividends += amt
 
     asset_count = len(assets)
     today = date.today()
 
-    # 4. Upsert
     execute_update(
         DATABASE_URL,
         """
@@ -5800,8 +5794,7 @@ def take_portfolio_snapshot(user_id):
             invest_value = EXCLUDED.invest_value,
             invest_invested = EXCLUDED.invest_invested,
             cumulative_dividends = EXCLUDED.cumulative_dividends,
-            asset_count = EXCLUDED.asset_count,
-            created_at = CURRENT_TIMESTAMP
+            asset_count = EXCLUDED.asset_count
         """,
         (user_id, today, total_value, total_invested, base_currency,
          asset_count, invest_value, invest_invested, cumulative_dividends)
