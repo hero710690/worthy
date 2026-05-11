@@ -3,5 +3,15 @@ steps:
     args: ['build', '-t', 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/worthy-production/worthy-backend:latest', '.']
   - name: 'gcr.io/cloud-builders/docker'
     args: ['push', 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/worthy-production/worthy-backend:latest']
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'worthy-backend-production'
+      - '--image'
+      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/worthy-production/worthy-backend:latest'
+      - '--region'
+      - 'asia-northeast1'
+      - '--quiet'
 options:
   logging: CLOUD_LOGGING_ONLY
