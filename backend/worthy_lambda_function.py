@@ -5813,6 +5813,112 @@ def take_portfolio_snapshot(user_id):
         'base_currency': base_currency,
     }
 
+def handle_batch_portfolio_snapshot(body=None):
+    """
+    Batch endpoint: take a snapshot for every active user.
+    Accepts optional JSON body: {"backfill_days": 3} to backfill missing days.
+    Called by Cloud Scheduler daily at 9 PM JST (12:00 UTC).
+    """
+    from datetime import date, timedelta
+
+    logger.info("Starting portfolio snapshot batch")
+
+    backfill_days = 0
+    if body and isinstance(body, dict):
+        backfill_days = int(body.get('backfill_days', 0))
+
+    users = execute_query(
+        DATABASE_URL,
+        "SELECT DISTINCT user_id FROM assets WHERE total_shares > 0"
+    )
+
+    results = {'success': [], 'failed': [], 'backfilled': []}
+    today = date.today()
+
+    for user_row in users:
+        uid = user_row['user_id']
+        try:
+            if backfill_days > 0:
+                for days_ago in range(backfill_days, 0, -1):
+                    target_date = today - timedelta(days=days_ago)
+                    existing = execute_query(
+                        DATABASE_URL,
+                        "SELECT id FROM portfolio_snapshots WHERE user_id = %s AND snapshot_date = %s",
+                        (uid, target_date)
+                    )
+                    if not existing:
+                        take_portfolio_snapshot(uid)
+                        execute_update(
+                            DATABASE_URL,
+                            "UPDATE portfolio_snapshots SET snapshot_date = %s WHERE user_id = %s AND snapshot_date = %s",
+                            (target_date, uid, today)
+                        )
+                        results['backfilled'].append({'user_id': uid, 'date': str(target_date)})
+
+            take_portfolio_snapshot(uid)
+            results['success'].append(uid)
+        except Exception as e:
+            logger.error(f"Snapshot failed for user {uid}: {str(e)}")
+            results['failed'].append({'user_id': uid, 'error': str(e)})
+
+    logger.info(f"Snapshot batch complete: {len(results['success'])} ok, {len(results['failed'])} failed, {len(results['backfilled'])} backfilled")
+    return create_response(200, {
+        'message': 'Portfolio snapshot batch complete',
+        'results': results,
+    })
+
+def handle_get_portfolio_snapshots(user_id, range_param='1Y'):
+    """
+    Return snapshot time-series for the authenticated user.
+    range_param: '1W' | '1M' | '3M' | '1Y' | 'ALL'
+    """
+    from datetime import date, timedelta
+
+    today = date.today()
+    range_map = {
+        '1W':  today - timedelta(weeks=1),
+        '1M':  today - timedelta(days=30),
+        '3M':  today - timedelta(days=90),
+        '1Y':  today - timedelta(days=365),
+        'ALL': date(2000, 1, 1),
+    }
+    since = range_map.get(range_param.upper(), range_map['1Y'])
+
+    rows = execute_query(
+        DATABASE_URL,
+        """
+        SELECT snapshot_date, total_value, total_invested,
+               invest_value, invest_invested, cumulative_dividends,
+               asset_count, base_currency
+        FROM portfolio_snapshots
+        WHERE user_id = %s AND snapshot_date >= %s
+        ORDER BY snapshot_date ASC
+        """,
+        (user_id, since)
+    )
+
+    snapshots = [
+        {
+            'date': str(r['snapshot_date']),
+            'total_value': float(r['total_value']),
+            'total_invested': float(r['total_invested']),
+            'invest_value': float(r['invest_value']),
+            'invest_invested': float(r['invest_invested']),
+            'cumulative_dividends': float(r['cumulative_dividends']),
+            'asset_count': int(r['asset_count']),
+        }
+        for r in rows
+    ]
+
+    base_currency = rows[0]['base_currency'] if rows else 'USD'
+
+    return create_response(200, {
+        'snapshots': snapshots,
+        'range': range_param.upper(),
+        'base_currency': base_currency,
+        'count': len(snapshots),
+    })
+
 def get_inflation_rate_from_profile(user_id):
     """Get inflation rate from user's FIRE profile, with fallback to default"""
     try:
@@ -8109,6 +8215,19 @@ def lambda_handler(event, context):
             query_params = event.get('queryStringParameters') or {}
             return handle_get_stock_prices_multi_api(query_params)
         
+        elif path == '/batch/portfolio-snapshot' and http_method == 'POST':
+            body = json.loads(event.get('body', '{}')) if event.get('body') else {}
+            return handle_batch_portfolio_snapshot(body)
+
+        elif path == '/portfolio/snapshots' and http_method == 'GET':
+            request_headers = event.get('headers', {})
+            auth_result = verify_jwt_token(request_headers.get('Authorization', ''))
+            if not auth_result['valid']:
+                return create_error_response(401, "Invalid or missing token")
+            query_params = event.get('queryStringParameters') or {}
+            range_param = query_params.get('range', '1Y')
+            return handle_get_portfolio_snapshots(auth_result['user_id'], range_param)
+
         elif path == '/batch/recurring-investments' and http_method == 'POST':
             # Batch processing for recurring investments - no authentication required (internal)
             body = json.loads(event.get('body', '{}')) if event.get('body') else {}
