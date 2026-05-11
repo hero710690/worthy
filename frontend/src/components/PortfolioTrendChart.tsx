@@ -133,12 +133,12 @@ export const PortfolioTrendChart: React.FC<Props> = ({ baseCurrency }) => {
         borderWidth: 1,
         padding: 12,
         callbacks: {
-          title: (items: any[]) => snapshots[items[0].dataIndex]?.date ?? '',
-          label: (ctx: any) => {
+          title: (items: { dataIndex: number }[]) => snapshots[items[0].dataIndex]?.date ?? '',
+          label: (ctx: { datasetIndex: number; parsed: { y: number } }) => {
             const datasetLabels = ['Portfolio Value', 'Total Invested', 'Cumulative Dividends'];
             return ` ${datasetLabels[ctx.datasetIndex]} : ${formatTooltipValue(ctx.parsed.y, baseCurrency)}`;
           },
-          labelTextColor: (ctx: any) => {
+          labelTextColor: (ctx: { datasetIndex: number }) => {
             return ['#5c6bc0', '#ec407a', '#66bb6a'][ctx.datasetIndex] ?? '#333';
           },
         },
@@ -155,7 +155,7 @@ export const PortfolioTrendChart: React.FC<Props> = ({ baseCurrency }) => {
       y: {
         grid: { color: 'rgba(0,0,0,0.04)' },
         ticks: {
-          callback: (value: any) => formatAxisValue(value, baseCurrency),
+          callback: (value: number | string) => formatAxisValue(Number(value), baseCurrency),
         },
       },
     },
