@@ -123,7 +123,7 @@ export const PortfolioTrendChart: React.FC<Props> = ({ baseCurrency }) => {
     plugins: {
       legend: {
         position: 'bottom' as const,
-        labels: { usePointStyle: true, pointStyleWidth: 20, padding: 20 },
+        labels: { usePointStyle: true, pointStyleWidth: 10, boxHeight: 8, padding: 12, font: { size: 11 } },
       },
       tooltip: {
         backgroundColor: 'white',

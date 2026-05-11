@@ -305,20 +305,18 @@ export const Analytics: React.FC = () => {
       {/* Portfolio Value Change Tracker */}
       {portfolioChanges && (
         <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', mb: 4 }}>
-          <CardContent sx={{ p: 4 }}>
-            <Typography variant="h6" sx={{ mb: 3, fontWeight: 'bold' }}>
-              Portfolio Value Changes
-            </Typography>
-
-            {/* Current Portfolio Value */}
-            <Box sx={{ mb: 4, p: 3, bgcolor: 'primary.50', borderRadius: 2 }}>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                Current Portfolio Value
+          <CardContent sx={{ p: 3 }}>
+            <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+              <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                Portfolio Value Changes
               </Typography>
-              <Typography variant="h4" sx={{ fontWeight: 'bold', color: 'primary.main' }}>
-                {formatCurrency(portfolioChanges.current_value, portfolioChanges.base_currency)}
-              </Typography>
-            </Box>
+              <Box>
+                <Typography variant="caption" color="text.secondary">Current Portfolio Value</Typography>
+                <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'primary.main', lineHeight: 1.2 }}>
+                  {formatCurrency(portfolioChanges.current_value, portfolioChanges.base_currency)}
+                </Typography>
+              </Box>
+            </Stack>
 
             {/* Period Changes Grid */}
             <Grid container spacing={3}>
@@ -608,9 +606,12 @@ export const Analytics: React.FC = () => {
         </Card>
       )}
 
-      {/* Asset Allocation Analysis */}
+      {/* Asset Allocation Analysis + Portfolio Summary side by side */}
+      <Grid container spacing={3} sx={{ mb: 4 }} alignItems="stretch">
+        {/* Asset Allocation Analysis */}
       {portfolioReturns && (
-        <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', mb: 4 }}>
+        <Grid item xs={12} md={6}>
+        <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', height: '100%' }}>
           <CardContent sx={{ p: 4 }}>
             <Typography variant="h6" sx={{ mb: 3, fontWeight: 'bold' }}>
               🥧 Asset Allocation Analysis
@@ -714,10 +715,12 @@ export const Analytics: React.FC = () => {
             </Grid>
           </CardContent>
         </Card>
+        </Grid>
       )}
 
-      {/* Portfolio Summary */}
-      <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200' }}>
+        {/* Portfolio Summary */}
+        <Grid item xs={12} md={6}>
+        <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', height: '100%' }}>
         <CardContent sx={{ p: 4 }}>
           <Typography variant="h6" sx={{ mb: 2 }}>
             📊 Portfolio Summary
@@ -783,6 +786,8 @@ export const Analytics: React.FC = () => {
           )}
         </CardContent>
       </Card>
+        </Grid>
+      </Grid>
     </Box>
   );
 };
