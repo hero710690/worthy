@@ -5673,7 +5673,7 @@ def get_portfolio_total_value(user_id):
 # Asset types treated as liquid/investable (invest_* columns)
 INVESTABLE_ASSET_TYPES = {'Stock', 'ETF', 'Bond'}
 
-def take_portfolio_snapshot(user_id):
+def take_portfolio_snapshot(user_id, snapshot_date=None):
     """
     Compute and upsert a portfolio snapshot for user_id for today's date.
     Returns a dict with the snapshot values, or raises on error.
@@ -5778,7 +5778,7 @@ def take_portfolio_snapshot(user_id):
         cumulative_dividends += amt
 
     asset_count = len(assets)
-    today = date.today()
+    today = snapshot_date or date.today()
 
     execute_update(
         DATABASE_URL,
@@ -5825,7 +5825,7 @@ def handle_batch_portfolio_snapshot(body=None):
 
     backfill_days = 0
     if body and isinstance(body, dict):
-        backfill_days = int(body.get('backfill_days', 0))
+        backfill_days = min(int(body.get('backfill_days', 0)), 30)
 
     users = execute_query(
         DATABASE_URL,
@@ -5847,12 +5847,7 @@ def handle_batch_portfolio_snapshot(body=None):
                         (uid, target_date)
                     )
                     if not existing:
-                        take_portfolio_snapshot(uid)
-                        execute_update(
-                            DATABASE_URL,
-                            "UPDATE portfolio_snapshots SET snapshot_date = %s WHERE user_id = %s AND snapshot_date = %s",
-                            (target_date, uid, today)
-                        )
+                        take_portfolio_snapshot(uid, snapshot_date=target_date)
                         results['backfilled'].append({'user_id': uid, 'date': str(target_date)})
 
             take_portfolio_snapshot(uid)
@@ -5874,6 +5869,7 @@ def handle_get_portfolio_snapshots(user_id, range_param='1Y'):
     """
     from datetime import date, timedelta
 
+    range_param = range_param.upper()
     today = date.today()
     range_map = {
         '1W':  today - timedelta(weeks=1),
@@ -5882,7 +5878,7 @@ def handle_get_portfolio_snapshots(user_id, range_param='1Y'):
         '1Y':  today - timedelta(days=365),
         'ALL': date(2000, 1, 1),
     }
-    since = range_map.get(range_param.upper(), range_map['1Y'])
+    since = range_map.get(range_param, range_map['1Y'])
 
     rows = execute_query(
         DATABASE_URL,
@@ -5900,12 +5896,12 @@ def handle_get_portfolio_snapshots(user_id, range_param='1Y'):
     snapshots = [
         {
             'date': str(r['snapshot_date']),
-            'total_value': float(r['total_value']),
-            'total_invested': float(r['total_invested']),
-            'invest_value': float(r['invest_value']),
-            'invest_invested': float(r['invest_invested']),
-            'cumulative_dividends': float(r['cumulative_dividends']),
-            'asset_count': int(r['asset_count']),
+            'total_value': float(r['total_value'] or 0),
+            'total_invested': float(r['total_invested'] or 0),
+            'invest_value': float(r['invest_value'] or 0),
+            'invest_invested': float(r['invest_invested'] or 0),
+            'cumulative_dividends': float(r['cumulative_dividends'] or 0),
+            'asset_count': int(r['asset_count'] or 0),
         }
         for r in rows
     ]
@@ -5914,7 +5910,7 @@ def handle_get_portfolio_snapshots(user_id, range_param='1Y'):
 
     return create_response(200, {
         'snapshots': snapshots,
-        'range': range_param.upper(),
+        'range': range_param,
         'base_currency': base_currency,
         'count': len(snapshots),
     })
