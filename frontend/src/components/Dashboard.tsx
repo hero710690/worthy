@@ -42,32 +42,75 @@ export const Dashboard: React.FC = () => {
   const [portfolioValuation, setPortfolioValuation] = useState<PortfolioValuation | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingPrices, setLoadingPrices] = useState(false);
+  const [pricesLoadedCount, setPricesLoadedCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
+
+  const streamPortfolioPrices = async (assetList: Asset[], baseCurrency: string) => {
+    setLoadingPrices(true);
+    setPricesLoadedCount(0);
+    try {
+      await exchangeRateService.getRatesWithRefresh();
+    } catch (_) {}
+
+    const valuations: any[] = [];
+    let runningTotal = 0;
+    let runningPL = 0;
+    let anyLive = false;
+    let loaded = 0;
+
+    for (const asset of assetList) {
+      try {
+        const v = await assetValuationService.valuateAsset(asset, baseCurrency);
+        valuations.push(v);
+        runningTotal += v.totalValueInBaseCurrency;
+        runningPL += v.unrealizedGainLoss;
+        if (v.priceSource === 'API') anyLive = true;
+      } catch (_) {
+        const cost = asset.total_shares * asset.average_cost_basis;
+        valuations.push({
+          asset, currentPrice: undefined,
+          currentPriceInBaseCurrency: asset.average_cost_basis,
+          totalValueInOriginalCurrency: cost, totalValueInBaseCurrency: cost,
+          unrealizedGainLoss: 0, unrealizedGainLossPercent: 0,
+          lastUpdated: new Date(), priceSource: 'MANUAL' as const,
+        });
+        runningTotal += cost;
+      }
+      loaded++;
+      setPricesLoadedCount(loaded);
+      setPortfolioValuation({
+        assets: [...valuations],
+        totalValueInBaseCurrency: runningTotal,
+        totalUnrealizedGainLoss: runningPL,
+        totalUnrealizedGainLossPercent: runningTotal > 0 ? (runningPL / runningTotal) * 100 : 0,
+        baseCurrency,
+        lastUpdated: new Date(),
+        apiStatus: { exchangeRates: exchangeRateService.isUsingRealApiRates(), stockPrices: anyLive },
+      });
+    }
+    setLoadingPrices(false);
+  };
 
   const fetchPortfolioData = async (forceRefresh: boolean = false) => {
     try {
       if (forceRefresh) {
         setRefreshing(true);
+        stockPriceService.clearCache();
       } else {
         setLoading(true);
       }
-      
-      // Fetch assets from API
+
       const response = await assetAPI.getAssets();
       setAssets(response.assets);
-      
-      // Get user's base currency
-      const baseCurrency = user?.base_currency || 'USD';
-      
-      // Valuate portfolio with real-time data
-      const valuation = await assetValuationService.valuatePortfolio(response.assets, baseCurrency);
-      setPortfolioValuation(valuation);
-      
       setError(null);
+      setLoading(false);
+      setRefreshing(false);
+
+      await streamPortfolioPrices(response.assets, user?.base_currency || 'USD');
     } catch (error: any) {
       console.error('Failed to fetch portfolio data:', error);
       setError(error.response?.data?.message || 'Failed to fetch portfolio data');
-    } finally {
       setLoading(false);
       setRefreshing(false);
     }
@@ -178,13 +221,23 @@ export const Dashboard: React.FC = () => {
             >
               Welcome back, {user?.name?.split(' ')[0] || 'User'}!
             </Typography>
-            <Typography 
-              variant="body1" 
-              color="text.secondary"
-              sx={{ fontSize: { xs: '0.95rem', md: '1rem' } }}
-            >
-              {loading ? 'Loading your portfolio...' : 'Track your investments and achieve your financial goals'}
-            </Typography>
+            <Stack direction="row" alignItems="center" spacing={1}>
+              <Typography
+                variant="body1"
+                color="text.secondary"
+                sx={{ fontSize: { xs: '0.95rem', md: '1rem' } }}
+              >
+                Track your investments and achieve your financial goals
+              </Typography>
+              {loadingPrices && (
+                <>
+                  <CircularProgress size={14} thickness={5} />
+                  <Typography variant="caption" color="text.secondary">
+                    {pricesLoadedCount}/{assets.length}
+                  </Typography>
+                </>
+              )}
+            </Stack>
           </Box>
           
           <Stack direction="row" spacing={2} alignItems="center">
