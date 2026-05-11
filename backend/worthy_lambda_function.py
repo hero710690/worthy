@@ -5716,7 +5716,9 @@ def take_portfolio_snapshot(user_id, snapshot_date=None):
 
         invested_amount = shares * avg_cost
 
-        if asset_type == 'CD':
+        if asset_type == 'Cash':
+            current_amount = invested_amount
+        elif asset_type == 'CD':
             interest_rate = asset.get('interest_rate')
             maturity_date = asset.get('maturity_date')
             start_date = asset.get('start_date') or asset.get('created_at')
