@@ -25,6 +25,7 @@ import { portfolioAPI, type PortfolioValueChangesResponse } from '../services/po
 import { returnsCalculationService } from '../services/returnsCalculationService';
 import { fireApi } from '../services/fireApi';
 import type { PortfolioReturns } from '../types/returns';
+import { PortfolioTrendChart } from './PortfolioTrendChart';
 
 export const Analytics: React.FC = () => {
   const { user } = useAuthStore();
@@ -402,6 +403,11 @@ export const Analytics: React.FC = () => {
             </Alert>
           </CardContent>
         </Card>
+      )}
+
+      {/* Portfolio Trend Chart */}
+      {user && (
+        <PortfolioTrendChart baseCurrency={user.base_currency || 'USD'} />
       )}
 
       {/* Estimated Annual Return Section */}
