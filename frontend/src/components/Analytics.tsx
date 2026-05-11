@@ -306,17 +306,15 @@ export const Analytics: React.FC = () => {
       {portfolioChanges && (
         <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', mb: 4 }}>
           <CardContent sx={{ p: 3 }}>
-            <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
-              <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-                Portfolio Value Changes
+            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 0.5 }}>
+              Portfolio Value Changes
+            </Typography>
+            <Box sx={{ mb: 2 }}>
+              <Typography variant="caption" color="text.secondary">Current Portfolio Value</Typography>
+              <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'primary.main', lineHeight: 1.2 }}>
+                {formatCurrency(portfolioChanges.current_value, portfolioChanges.base_currency)}
               </Typography>
-              <Box>
-                <Typography variant="caption" color="text.secondary">Current Portfolio Value</Typography>
-                <Typography variant="h5" sx={{ fontWeight: 'bold', color: 'primary.main', lineHeight: 1.2 }}>
-                  {formatCurrency(portfolioChanges.current_value, portfolioChanges.base_currency)}
-                </Typography>
-              </Box>
-            </Stack>
+            </Box>
 
             {/* Period Changes Grid */}
             <Grid container spacing={3}>
