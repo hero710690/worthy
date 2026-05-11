@@ -81,45 +81,47 @@ class PortfolioAPI {
   }
 
   async getPortfolioValueChanges(): Promise<PortfolioValueChangesResponse> {
-    // Get performance data for different periods
-    // Use more accurate period calculations
-    const [weekData, monthData, threeMonthData, yearData] = await Promise.all([
-      this.getPortfolioPerformance(0.23), // ~1 week (1/4.3 months)
-      this.getPortfolioPerformance(1),    // 1 month
-      this.getPortfolioPerformance(3),    // 3 months
-      this.getPortfolioPerformance(12),   // 1 year
-    ]);
+    // Use snapshot history for accurate period comparisons
+    const res = await this.getPortfolioSnapshots('1Y');
+    const snapshots = res.snapshots;
+    const baseCurrency = res.base_currency;
 
-    // Calculate previous values based on current value and returns
-    const currentValue = yearData.portfolio_performance.current_value;
-    const baseCurrency = yearData.portfolio_performance.base_currency;
+    const today = new Date();
+    const latest = snapshots[snapshots.length - 1];
+    const currentValue = latest?.total_value ?? 0;
 
-    const calculatePreviousValue = (current: number, returnPercentage: number): number => {
-      // Handle edge cases
-      if (returnPercentage === 0 || current === 0) return current;
-      return current / (1 + returnPercentage / 100);
+    const findSnapshotDaysAgo = (days: number) => {
+      const target = new Date(today);
+      target.setDate(target.getDate() - days);
+      const targetStr = target.toISOString().slice(0, 10);
+      // Find closest snapshot on or before target date
+      const candidates = snapshots.filter(s => s.date <= targetStr);
+      return candidates[candidates.length - 1] ?? snapshots[0];
     };
 
-    const createValueChange = (data: PortfolioPerformance, period: string): PortfolioValueChange => {
-      const previousValue = calculatePreviousValue(currentValue, data.total_return_percentage);
+    const makeChange = (period: string, daysAgo: number): PortfolioValueChange => {
+      const prior = findSnapshotDaysAgo(daysAgo);
+      const previousValue = prior?.total_value ?? currentValue;
+      const absoluteChange = currentValue - previousValue;
+      const percentageChange = previousValue > 0 ? (absoluteChange / previousValue) * 100 : 0;
       return {
         period,
         current_value: currentValue,
         previous_value: previousValue,
-        absolute_change: currentValue - previousValue,
-        percentage_change: data.total_return_percentage,
-        start_date: data.start_date,
-        end_date: data.end_date,
+        absolute_change: absoluteChange,
+        percentage_change: percentageChange,
+        start_date: prior?.date ?? latest?.date ?? '',
+        end_date: latest?.date ?? '',
         base_currency: baseCurrency,
       };
     };
 
     return {
       value_changes: {
-        '1W': createValueChange(weekData.portfolio_performance, '1W'),
-        '1M': createValueChange(monthData.portfolio_performance, '1M'),
-        '3M': createValueChange(threeMonthData.portfolio_performance, '3M'),
-        '1Y': createValueChange(yearData.portfolio_performance, '1Y'),
+        '1W': makeChange('1W', 7),
+        '1M': makeChange('1M', 30),
+        '3M': makeChange('3M', 90),
+        '1Y': makeChange('1Y', 365),
       },
       current_value: currentValue,
       base_currency: baseCurrency,

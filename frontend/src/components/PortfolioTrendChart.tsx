@@ -209,7 +209,7 @@ export const PortfolioTrendChart: React.FC<Props> = ({ baseCurrency }) => {
 
         {!loading && !error && snapshots.length > 0 && (
           <Box sx={{ height: 340 }}>
-            <Line data={chartData} options={chartOptions} />
+            <Line key={viewMode} data={chartData} options={chartOptions} />
           </Box>
         )}
       </CardContent>
