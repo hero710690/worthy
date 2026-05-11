@@ -135,8 +135,8 @@ export const PortfolioTrendChart: React.FC<Props> = ({ baseCurrency }) => {
         callbacks: {
           title: (items: any[]) => snapshots[items[0].dataIndex]?.date ?? '',
           label: (ctx: any) => {
-            const labels = ['Portfolio Value', 'Total Invested', 'Cumulative Dividends'];
-            return ` ${labels[ctx.datasetIndex]} : ${formatTooltipValue(ctx.parsed.y, baseCurrency)}`;
+            const datasetLabels = ['Portfolio Value', 'Total Invested', 'Cumulative Dividends'];
+            return ` ${datasetLabels[ctx.datasetIndex]} : ${formatTooltipValue(ctx.parsed.y, baseCurrency)}`;
           },
           labelTextColor: (ctx: any) => {
             return ['#5c6bc0', '#ec407a', '#66bb6a'][ctx.datasetIndex] ?? '#333';
