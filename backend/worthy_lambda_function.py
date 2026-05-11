@@ -5736,7 +5736,8 @@ def take_portfolio_snapshot(user_id, snapshot_date=None):
         else:
             try:
                 price_data = fetch_stock_price_with_fallback(ticker)
-                current_price = float(price_data['current_price']) if price_data and 'current_price' in price_data else avg_cost
+                raw_price = (price_data.get('current_price') or price_data.get('price')) if price_data else None
+                current_price = float(raw_price) if raw_price else avg_cost
             except Exception:
                 current_price = avg_cost
             current_amount = shares * current_price
