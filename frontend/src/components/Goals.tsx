@@ -56,6 +56,7 @@ const Goals: React.FC = () => {
   const [portfolioValuation, setPortfolioValuation] = useState<PortfolioValuation | null>(null);
   const [recurringInvestments, setRecurringInvestments] = useState<RecurringInvestment[]>([]);
   const [includeCashInFIRE, setIncludeCashInFIRE] = useState<boolean>(true); // New state for cash/CD inclusion
+  const [portfolioLoading, setPortfolioLoading] = useState(false);
   
   // Calculate portfolio value for FIRE calculations (with optional cash/CD exclusion)
   const getPortfolioValueForFIRE = () => {
@@ -264,145 +265,112 @@ const Goals: React.FC = () => {
   };
 
   const loadFIREData = async () => {
+    setLoading(true);
+    setError(null);
+    const userBaseCurrency = user?.base_currency || 'USD';
+
+    // Kick off all three requests in parallel — assets, FIRE profile, FIRE progress
+    const [assetsResult, profileResult, progressResult] = await Promise.allSettled([
+      assetAPI.getAssets(),
+      fireApi.getFIREProfile(),
+      fireApi.getFIREProgress(),
+    ]);
+
+    // Apply FIRE profile (fast, unblocks the UI)
+    if (profileResult.status === 'fulfilled' && profileResult.value.fire_profile) {
+      const fp = profileResult.value.fire_profile;
+      setFireProfile(fp);
+      setFormData({
+        annual_expenses: fp.annual_expenses,
+        target_retirement_age: fp.target_retirement_age,
+        annual_income: fp.annual_income || 100000,
+        safe_withdrawal_rate: fp.safe_withdrawal_rate,
+        expected_return_pre_retirement: fp.expected_return_pre_retirement || 0.07,
+        expected_return_post_retirement: fp.expected_return_post_retirement || 0.05,
+        expected_inflation_rate: fp.expected_inflation_rate,
+        other_passive_income: fp.other_passive_income || 0,
+        effective_tax_rate: fp.effective_tax_rate || 0.15,
+        barista_monthly_contribution: fp.barista_monthly_contribution ?? 0,
+        inflation_rate: fp.inflation_rate,
+      });
+      setBaristaMonthlyContribution(fp.barista_monthly_contribution || 2000);
+      const userAge = user?.birth_date ? calculatePreciseAge(user.birth_date) : 35;
+      setParameters(prev => ({
+        ...prev,
+        currentAge: userAge,
+        retireAge: fp.target_retirement_age,
+        fireNumber: fp.annual_expenses,
+        rate: Math.round((fp.expected_return_pre_retirement || 0.07) * 1000) / 10,
+        withdrawalRate: 3.6,
+      }));
+    } else {
+      setFireProfile(null);
+    }
+
+    if (progressResult.status === 'fulfilled') {
+      setFireProgress(progressResult.value);
+      setCalculations(progressResult.value.calculations || []);
+    } else {
+      setFireProgress(null);
+      setCalculations([]);
+    }
+
+    // Show the page immediately — portfolio value streams in below
+    setLoading(false);
+
+    // Now stream portfolio valuation asset-by-asset in the background
+    const assetList = assetsResult.status === 'fulfilled' ? assetsResult.value.assets : [];
+    if (assetList.length === 0) {
+      setPortfolioValuation({
+        assets: [], totalValueInBaseCurrency: 0, totalUnrealizedGainLoss: 0,
+        totalUnrealizedGainLossPercent: 0, baseCurrency: userBaseCurrency,
+        lastUpdated: new Date(), apiStatus: { exchangeRates: false, stockPrices: false },
+      });
+      return;
+    }
+
+    setPortfolioLoading(true);
     try {
-      setLoading(true);
-      setError(null);
-      
-      console.log('🔥 Loading FIRE data...');
-      
-      // Get user's base currency
-      const userBaseCurrency = user?.base_currency || 'USD';
-      console.log('💰 User base currency:', userBaseCurrency);
-      
-      // Load assets and calculate portfolio value
+      await exchangeRateService.getRatesWithRefresh();
+    } catch (_) {}
+
+    const valuations: any[] = [];
+    let runningTotal = 0;
+    let runningPL = 0;
+    let anyLive = false;
+
+    for (const asset of assetList) {
       try {
-        console.log('📊 Loading assets...');
-        const assetsResponse = await assetAPI.getAssets();
-        console.log('📊 Assets response:', assetsResponse);
-        
-        if (assetsResponse.assets && assetsResponse.assets.length > 0) {
-          console.log('💼 Calculating portfolio valuation...');
-          const valuation = await assetValuationService.valuatePortfolio(
-            assetsResponse.assets,
-            userBaseCurrency
-          );
-          console.log('💼 Portfolio valuation:', valuation);
-          setPortfolioValuation(valuation);
-        } else {
-          console.log('📊 No assets found, setting empty portfolio');
-          setPortfolioValuation({
-            assets: [],
-            totalValueInBaseCurrency: 0,
-            totalUnrealizedGainLoss: 0,
-            totalUnrealizedGainLossPercent: 0,
-            baseCurrency: userBaseCurrency,
-            lastUpdated: new Date(),
-            apiStatus: {
-              exchangeRates: false,
-              stockPrices: false
-            }
-          });
-        }
-      } catch (assetError) {
-        console.error('❌ Error loading assets:', assetError);
-        // Continue without assets - set empty portfolio
-        setPortfolioValuation({
-          assets: [],
-          totalValueInBaseCurrency: 0,
-          totalUnrealizedGainLoss: 0,
-          totalUnrealizedGainLossPercent: 0,
-          baseCurrency: userBaseCurrency,
-          lastUpdated: new Date(),
-          apiStatus: {
-            exchangeRates: false,
-            stockPrices: false
-          }
-        });
+        const v = await assetValuationService.valuateAsset(asset, userBaseCurrency);
+        valuations.push(v);
+        runningTotal += v.totalValueInBaseCurrency;
+        runningPL += v.unrealizedGainLoss;
+        if (v.priceSource === 'API') anyLive = true;
+      } catch (_) {
+        const fallback = {
+          asset, currentPrice: undefined, currentPriceInBaseCurrency: asset.average_cost_basis,
+          totalValueInOriginalCurrency: asset.total_shares * asset.average_cost_basis,
+          totalValueInBaseCurrency: asset.total_shares * asset.average_cost_basis,
+          unrealizedGainLoss: 0, unrealizedGainLossPercent: 0,
+          lastUpdated: new Date(), priceSource: 'MANUAL' as const,
+        };
+        valuations.push(fallback);
+        runningTotal += fallback.totalValueInBaseCurrency;
       }
 
-      // Try to load existing FIRE profile and progress
-      try {
-        console.log('🔥 Loading FIRE profile...');
-        const profileResponse = await fireApi.getFIREProfile();
-        console.log('🔥 FIRE profile response:', profileResponse);
-        console.log('🔥 Profile exists?', !!profileResponse?.fire_profile);
-        
-        if (profileResponse.fire_profile) {
-          console.log('✅ FIRE profile found:', profileResponse.fire_profile);
-          setFireProfile(profileResponse.fire_profile);
-          
-          // Update form data with existing profile
-          setFormData({
-            annual_expenses: profileResponse.fire_profile.annual_expenses,
-            target_retirement_age: profileResponse.fire_profile.target_retirement_age,
-            annual_income: profileResponse.fire_profile.annual_income || 100000,
-            safe_withdrawal_rate: profileResponse.fire_profile.safe_withdrawal_rate,
-            expected_return_pre_retirement: profileResponse.fire_profile.expected_return_pre_retirement || 0.07,
-            expected_return_post_retirement: profileResponse.fire_profile.expected_return_post_retirement || 0.05,
-            expected_inflation_rate: profileResponse.fire_profile.expected_inflation_rate,
-            other_passive_income: profileResponse.fire_profile.other_passive_income || 0,
-            effective_tax_rate: profileResponse.fire_profile.effective_tax_rate || 0.15,
-            barista_monthly_contribution: profileResponse.fire_profile.barista_monthly_contribution ?? fireProfile.barista_monthly_contribution,
-            inflation_rate: profileResponse.fire_profile.inflation_rate
-          });
-          
-          // Initialize parameters with user data
-          const userAge = user?.birth_date ? calculatePreciseAge(user.birth_date) : 35;
-          
-          // Set barista monthly contribution from profile
-          setBaristaMonthlyContribution(profileResponse.fire_profile.barista_monthly_contribution || 2000);
-          
-          setParameters(prev => ({
-            ...prev,
-            currentAge: userAge,
-            retireAge: profileResponse.fire_profile.target_retirement_age,
-            fireNumber: profileResponse.fire_profile.annual_expenses, // Using as FIRE number
-            rate: Math.round((profileResponse.fire_profile.expected_return_pre_retirement || 0.07) * 100 * 10) / 10, // Convert to percentage and round to 1 decimal
-            withdrawalRate: 3.6, // 🔧 ALWAYS default to 3.6% for what-if simulator, regardless of saved profile
-            principal: getPortfolioValueForFIRE() // Use filtered value
-          }));
-          
-          console.log('✅ FIRE profile loaded successfully');
-        } else {
-          console.log('❌ No FIRE profile found in response');
-          console.log('🔍 Response structure:', Object.keys(profileResponse || {}));
-          setFireProfile(null);
-        }
-        
-        // Try to load FIRE progress (optional)
-        try {
-          console.log('📈 Loading FIRE progress...');
-          const progressResponse = await fireApi.getFIREProgress();
-          console.log('📈 FIRE progress response:', progressResponse);
-          setFireProgress(progressResponse);
-          setCalculations(progressResponse.calculations || []);
-        } catch (progressError) {
-          console.log('ℹ️ No FIRE progress found (this is normal for new profiles)');
-          setFireProgress(null);
-          setCalculations([]);
-        }
-        
-      } catch (profileError: any) {
-        console.log('ℹ️ No existing FIRE profile found, will need to create one');
-        console.log('Profile error details:', profileError);
-        setFireProfile(null);
-        setFireProgress(null);
-        setCalculations([]);
-      }
-      
-      console.log('✅ FIRE data loading completed');
-      
-    } catch (err: any) {
-      console.error('❌ Failed to load FIRE data:', err);
-      console.error('Error details:', {
-        message: err.message,
-        response: err.response?.data,
-        status: err.response?.status
+      // Update portfolio valuation incrementally so FIRE calcs re-run with improving data
+      setPortfolioValuation({
+        assets: [...valuations],
+        totalValueInBaseCurrency: runningTotal,
+        totalUnrealizedGainLoss: runningPL,
+        totalUnrealizedGainLossPercent: runningTotal > 0 ? (runningPL / runningTotal) * 100 : 0,
+        baseCurrency: userBaseCurrency,
+        lastUpdated: new Date(),
+        apiStatus: { exchangeRates: exchangeRateService.isUsingRealApiRates(), stockPrices: anyLive },
       });
-      setError(err.response?.data?.message || err.message || 'Failed to load FIRE data');
-    } finally {
-      setLoading(false);
     }
+
+    setPortfolioLoading(false);
   };
 
   const loadRecurringInvestments = async () => {
@@ -488,12 +456,22 @@ const Goals: React.FC = () => {
     }}>
       {/* Header */}
       <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 1 }}>
-          🔥 FIRE Goals & Progress
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          Track your journey to Financial Independence, Retire Early
-        </Typography>
+        <Stack direction="row" alignItems="flex-start" justifyContent="space-between">
+          <Box>
+            <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 1 }}>
+              🔥 FIRE Goals & Progress
+            </Typography>
+            <Typography variant="body1" color="text.secondary">
+              Track your journey to Financial Independence, Retire Early
+            </Typography>
+          </Box>
+          {portfolioLoading && (
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 1 }}>
+              <LinearProgress sx={{ width: 80 }} />
+              <Typography variant="caption" color="text.secondary">Updating portfolio…</Typography>
+            </Stack>
+          )}
+        </Stack>
         
         {!fireProfile && (
           <Alert severity="info" sx={{ mt: 2 }}>
