@@ -59,6 +59,8 @@ export const AssetsList: React.FC = () => {
   const [portfolioValue, setPortfolioValue] = useState(0);
   const [totalUnrealizedPL, setTotalUnrealizedPL] = useState(0);
   const [apiStatus, setApiStatus] = useState({ exchangeRates: false, stockPrices: false });
+  const [loadingPrices, setLoadingPrices] = useState(false);
+  const [pricesLoadedCount, setPricesLoadedCount] = useState(0);
   
   // Sorting state
   const [sortBy, setSortBy] = useState<'asset' | 'type' | 'currency' | 'shares' | 'value'>('asset');
@@ -69,53 +71,64 @@ export const AssetsList: React.FC = () => {
       setLoading(true);
       const response = await assetAPI.getAssets();
       setAssets(response.assets);
-      
-      // Fetch current prices and calculate portfolio value
-      await updatePortfolioData(response.assets);
-      
       setError(null);
+      setLoading(false);
+      // Fetch prices incrementally so rows populate as data arrives
+      await updatePortfolioDataIncremental(response.assets);
     } catch (error: any) {
       console.error('Failed to fetch assets:', error);
       setError(error.response?.data?.message || 'Failed to fetch assets');
-    } finally {
       setLoading(false);
     }
   };
 
-  const updatePortfolioData = async (assetList: Asset[]) => {
+  const updatePortfolioDataIncremental = async (assetList: Asset[]) => {
+    const baseCurrency = user?.base_currency || 'USD';
+    setLoadingPrices(true);
+    setPricesLoadedCount(0);
+
     try {
-      const baseCurrency = user?.base_currency || 'USD';
-      
-      // Get portfolio valuation with real-time data
-      const portfolioValuation = await assetValuationService.valuatePortfolio(assetList, baseCurrency);
-      
-      // Update state with real-time data
-      setPortfolioValue(portfolioValuation.totalValueInBaseCurrency);
-      setTotalUnrealizedPL(portfolioValuation.totalUnrealizedGainLoss);
-      setApiStatus(portfolioValuation.apiStatus);
-      
-      // Extract current prices for display
-      const pricesMap = new Map<string, number>();
-      portfolioValuation.assets.forEach(valuation => {
+      await exchangeRateService.getRatesWithRefresh();
+    } catch (_) {}
+
+    const pricesMap = new Map<string, number>(currentPrices);
+    let runningTotal = 0;
+    let runningPL = 0;
+    let anyLive = false;
+    let loaded = 0;
+
+    for (const asset of assetList) {
+      try {
+        const valuation = await assetValuationService.valuateAsset(asset, baseCurrency);
         if (valuation.currentPrice) {
-          pricesMap.set(valuation.asset.ticker_symbol, valuation.currentPrice);
+          pricesMap.set(asset.ticker_symbol, valuation.currentPrice);
+          setCurrentPrices(new Map(pricesMap));
         }
-      });
-      setCurrentPrices(pricesMap);
-      
-    } catch (error) {
-      console.error('Failed to update portfolio data:', error);
+        runningTotal += valuation.totalValueInBaseCurrency;
+        runningPL += valuation.unrealizedGainLoss;
+        if (valuation.priceSource === 'API') anyLive = true;
+        loaded++;
+        setPricesLoadedCount(loaded);
+        setPortfolioValue(runningTotal);
+        setTotalUnrealizedPL(runningPL);
+      } catch (_) {
+        loaded++;
+        setPricesLoadedCount(loaded);
+      }
     }
+
+    setApiStatus({
+      exchangeRates: exchangeRateService.isUsingRealApiRates(),
+      stockPrices: anyLive,
+    });
+    setLoadingPrices(false);
   };
 
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      // Force refresh of external data
       await exchangeRateService.forceRefreshRates();
       stockPriceService.clearCache();
-      
-      // Refresh assets and portfolio data
       await fetchAssets();
     } catch (error) {
       console.error('Failed to refresh data:', error);
@@ -531,9 +544,19 @@ export const AssetsList: React.FC = () => {
       >
         <CardContent sx={{ p: 0 }}>
           <Box sx={{ p: 3, borderBottom: '1px solid', borderColor: 'grey.200' }}>
-            <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
-              Asset Holdings
-            </Typography>
+            <Stack direction="row" alignItems="center" justifyContent="space-between">
+              <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                Asset Holdings
+              </Typography>
+              {loadingPrices && (
+                <Stack direction="row" alignItems="center" spacing={1}>
+                  <CircularProgress size={14} thickness={5} />
+                  <Typography variant="caption" color="text.secondary">
+                    Loading prices… {pricesLoadedCount}/{assets.length}
+                  </Typography>
+                </Stack>
+              )}
+            </Stack>
           </Box>
           
           {assets.length === 0 ? (
