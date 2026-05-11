@@ -5762,16 +5762,17 @@ def take_portfolio_snapshot(user_id, snapshot_date=None):
     dividend_rows = execute_query(
         DATABASE_URL,
         """
-        SELECT d.total_dividend_amount, a.currency
-        FROM dividends d
-        JOIN assets a ON d.asset_id = a.asset_id
-        WHERE d.user_id = %s
+        SELECT t.shares * t.price_per_share AS dividend_amount, t.currency
+        FROM transactions t
+        JOIN assets a ON t.asset_id = a.asset_id
+        WHERE a.user_id = %s AND t.transaction_type = 'Dividend'
+          AND t.shares > 0 AND t.price_per_share > 0
         """,
         (user_id,)
     )
     cumulative_dividends = 0.0
     for row in dividend_rows:
-        amt = float(row['total_dividend_amount'])
+        amt = float(row['dividend_amount'])
         cur = row['currency']
         if cur != base_currency:
             try:
