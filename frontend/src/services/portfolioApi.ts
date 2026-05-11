@@ -44,6 +44,25 @@ export interface PortfolioValueChangesResponse {
   base_currency: string;
 }
 
+export type SnapshotRange = '1W' | '1M' | '3M' | '1Y' | 'ALL';
+
+export interface PortfolioSnapshot {
+  date: string;
+  total_value: number;
+  total_invested: number;
+  invest_value: number;
+  invest_invested: number;
+  cumulative_dividends: number;
+  asset_count: number;
+}
+
+export interface PortfolioSnapshotsResponse {
+  snapshots: PortfolioSnapshot[];
+  range: SnapshotRange;
+  base_currency: string;
+  count: number;
+}
+
 class PortfolioAPI {
   private getAuthHeaders() {
     const token = localStorage.getItem('worthy_token');
@@ -105,6 +124,14 @@ class PortfolioAPI {
       current_value: currentValue,
       base_currency: baseCurrency,
     };
+  }
+
+  async getPortfolioSnapshots(range: SnapshotRange = '1Y'): Promise<PortfolioSnapshotsResponse> {
+    const response = await axios.get(
+      `${API_BASE_URL}/portfolio/snapshots?range=${range}`,
+      { headers: this.getAuthHeaders() }
+    );
+    return response.data;
   }
 }
 
