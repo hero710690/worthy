@@ -410,6 +410,111 @@ export const Analytics: React.FC = () => {
         <PortfolioTrendChart baseCurrency={user.base_currency || 'USD'} />
       )}
 
+      {/* Estimated Annual Return Section */}
+      {portfolioReturns && (
+        <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', mb: 4 }}>
+          <CardContent sx={{ p: 4 }}>
+            <Typography variant="h6" sx={{ mb: 3, fontWeight: 'bold' }}>
+              📊 Estimated Annual Return Rate
+            </Typography>
+
+            {/* Main Return Display */}
+            <Box sx={{ mb: 4, p: 3, bgcolor: 'success.50', borderRadius: 2, textAlign: 'center' }}>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                Based on Your Portfolio Performance
+              </Typography>
+              <Typography variant="h3" sx={{ fontWeight: 'bold', color: 'success.main', mb: 1 }}>
+                {portfolioReturns.portfolioAnnualizedReturnPercent.toFixed(2)}%
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                {portfolioReturns.weightedAverageHoldingPeriod < 1
+                  ? `Actual Return over ${(portfolioReturns.weightedAverageHoldingPeriod * 365.25).toFixed(0)} days`
+                  : `Annualized Return (CAGR) over ${portfolioReturns.weightedAverageHoldingPeriod.toFixed(1)} years`
+                }
+              </Typography>
+            </Box>
+
+            {/* Performance Details */}
+            <Grid container spacing={3} sx={{ mb: 4 }}>
+              <Grid item xs={12} sm={6} md={3}>
+                <Box sx={{ textAlign: 'center', p: 2 }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>Total Return</Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                    {portfolioReturns.portfolioTotalReturnPercent.toFixed(2)}%
+                  </Typography>
+                </Box>
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <Box sx={{ textAlign: 'center', p: 2 }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>Holding Period</Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                    {portfolioReturns.weightedAverageHoldingPeriod.toFixed(1)} years
+                  </Typography>
+                </Box>
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <Box sx={{ textAlign: 'center', p: 2 }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>Total Assets</Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold' }}>
+                    {portfolioReturns.totalAssets}
+                  </Typography>
+                </Box>
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
+                <Box sx={{ textAlign: 'center', p: 2 }}>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>Performance Grade</Typography>
+                  <Chip
+                    label={portfolioReturns.advancedMetrics.performanceGrade}
+                    size="medium"
+                    sx={{
+                      bgcolor: portfolioReturns.portfolioAnnualizedReturnPercent >= 10 ? 'success.50' :
+                        portfolioReturns.portfolioAnnualizedReturnPercent >= 7 ? 'info.50' :
+                          portfolioReturns.portfolioAnnualizedReturnPercent >= 0 ? 'warning.50' : 'error.50',
+                      color: portfolioReturns.portfolioAnnualizedReturnPercent >= 10 ? 'success.main' :
+                        portfolioReturns.portfolioAnnualizedReturnPercent >= 7 ? 'info.main' :
+                          portfolioReturns.portfolioAnnualizedReturnPercent >= 0 ? 'warning.main' : 'error.main',
+                      fontWeight: 'bold',
+                    }}
+                  />
+                </Box>
+              </Grid>
+            </Grid>
+
+            {/* Use in FIRE Settings */}
+            <Box sx={{ p: 3, bgcolor: 'primary.50', borderRadius: 2 }}>
+              <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'stretch', sm: 'center' }} spacing={2}>
+                <Box sx={{ flex: 1 }}>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'primary.main', mb: 1 }}>
+                    🎯 Use in FIRE Calculations
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Apply this calculated return rate to your FIRE profile for more accurate projections based on your actual investment performance.
+                  </Typography>
+                </Box>
+                <Button
+                  variant="contained"
+                  size="large"
+                  onClick={updateFIREProfileWithCalculatedReturn}
+                  disabled={updatingFIREProfile}
+                  startIcon={updatingFIREProfile ? <CircularProgress size={16} /> : <TrendingUp />}
+                  sx={{ borderRadius: 2, minWidth: { xs: '100%', sm: 'auto' } }}
+                >
+                  {updatingFIREProfile ? 'Updating...' : 'Update FIRE Settings'}
+                </Button>
+              </Stack>
+            </Box>
+
+            <Alert severity="info" sx={{ mt: 3 }}>
+              <Typography variant="body2">
+                <strong>How it's calculated:</strong> Annualized return (CAGR) based on cost basis and current portfolio value.
+                Assets with no purchase history beyond their initial setup use total return instead of CAGR.
+                Excludes Cash positions.
+              </Typography>
+            </Alert>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Individual Asset Performance */}
       {portfolioReturns && portfolioReturns.assets.length > 0 && (
         <Card sx={{ borderRadius: 3, border: '1px solid', borderColor: 'grey.200', mb: 4 }}>

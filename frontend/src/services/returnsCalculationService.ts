@@ -150,25 +150,31 @@ class ReturnsCalculationService {
           ? (totalReturn / initialInvestmentInBaseCurrency) * 100
           : 0;
 
-        // Holding period: use earliest non-Initialization transaction date so the CAGR
-        // reflects real market exposure, not the app enrollment date.
-        const nonInitTx = transactions
-          .filter(t => t.transaction_type !== 'Initialization' && t.transaction_type !== 'Dividend')
+        // Holding period: use earliest non-Initialization, non-Dividend transaction date.
+        // Initialization transactions record cost at app enrollment, not the original purchase
+        // date — using them produces wildly inflated CAGR (e.g. TSMC at 560→2235 TWD in 8 months).
+        // If the asset has ONLY Initialization transactions we cannot compute a meaningful CAGR,
+        // so we fall back to showing total return % without annualizing.
+        const realPurchaseTx = transactions.filter(
+          t => t.transaction_type !== 'Initialization' && t.transaction_type !== 'Dividend'
+        );
+        const hasRealPurchaseHistory = realPurchaseTx.length > 0;
+
+        const txDates = realPurchaseTx
           .map(t => new Date(t.transaction_date || t.date))
           .filter(d => !isNaN(d.getTime()));
-        const earliestDate = nonInitTx.length > 0
-          ? new Date(Math.min(...nonInitTx.map(d => d.getTime())))
+        const earliestDate = txDates.length > 0
+          ? new Date(Math.min(...txDates.map(d => d.getTime())))
           : new Date(asset.created_at);
         const now = new Date();
         const holdingPeriodDays = Math.max(1, (now.getTime() - earliestDate.getTime()) / (1000 * 60 * 60 * 24));
         const holdingPeriodYears = holdingPeriodDays / 365.25;
 
-        // Always use CAGR — linear annualization amplifies errors for short periods.
-        // For periods under 30 days just show the actual return (too short to annualize meaningfully).
         let annualizedReturnPercent = 0;
 
         if (initialInvestmentInBaseCurrency > 0) {
-          if (holdingPeriodDays < 30) {
+          if (!hasRealPurchaseHistory || holdingPeriodDays < 30) {
+            // No real purchase history or too short: show total return as-is, don't annualize
             annualizedReturnPercent = totalReturnPercent;
           } else {
             const ratio = currentValueInBaseCurrency / initialInvestmentInBaseCurrency;
