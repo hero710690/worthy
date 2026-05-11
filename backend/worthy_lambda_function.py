@@ -5670,6 +5670,156 @@ def get_portfolio_total_value(user_id):
         logger.error(f"Error getting portfolio total value: {str(e)}")
         return 0
 
+# Asset types treated as liquid/investable (invest_* columns)
+INVESTABLE_ASSET_TYPES = {'Stock', 'ETF', 'Bond'}
+
+def take_portfolio_snapshot(user_id):
+    """
+    Compute and upsert a portfolio snapshot for user_id for today's date.
+    Returns a dict with the snapshot values, or raises on error.
+
+    total_value / total_invested  — all assets (Stock, ETF, Bond, Cash, CD)
+    invest_value / invest_invested — investable assets only (Stock, ETF, Bond)
+    cumulative_dividends           — sum of all dividends ever recorded for user
+    asset_count                    — number of assets with total_shares > 0
+    """
+    from datetime import date
+
+    # 1. User base currency
+    user = execute_query(
+        DATABASE_URL,
+        "SELECT base_currency FROM users WHERE user_id = %s",
+        (user_id,)
+    )[0]
+    base_currency = user['base_currency']
+
+    # 2. All active assets
+    assets = execute_query(
+        DATABASE_URL,
+        """
+        SELECT ticker_symbol, total_shares, average_cost_basis, currency, asset_type,
+               interest_rate, maturity_date, start_date, created_at
+        FROM assets WHERE user_id = %s AND total_shares > 0
+        """,
+        (user_id,)
+    )
+
+    total_value = 0.0
+    total_invested = 0.0
+    invest_value = 0.0
+    invest_invested = 0.0
+
+    for asset in assets:
+        ticker = asset['ticker_symbol']
+        shares = float(asset['total_shares'])
+        avg_cost = float(asset['average_cost_basis'])
+        currency = asset.get('currency', 'USD')
+        asset_type = asset.get('asset_type', 'Stock')
+
+        invested_amount = shares * avg_cost
+
+        # Current market value
+        if asset_type == 'CD':
+            interest_rate = asset.get('interest_rate')
+            maturity_date = asset.get('maturity_date')
+            start_date = asset.get('start_date') or asset.get('created_at')
+            if interest_rate and maturity_date and start_date:
+                start_str = start_date.strftime('%Y-%m-%d') if hasattr(start_date, 'strftime') else str(start_date)[:10]
+                mat_str = maturity_date.strftime('%Y-%m-%d') if hasattr(maturity_date, 'strftime') else str(maturity_date)
+                cd_calc = calculate_cd_compound_interest(
+                    principal=shares * avg_cost,
+                    annual_rate=float(interest_rate),
+                    start_date=start_str,
+                    maturity_date=mat_str,
+                    compounding_frequency='daily'
+                )
+                current_amount = cd_calc['current_value']
+            else:
+                current_amount = invested_amount
+        else:
+            try:
+                price_data = fetch_stock_price_with_fallback(ticker)
+                current_price = float(price_data['current_price']) if price_data and 'current_price' in price_data else avg_cost
+            except Exception:
+                current_price = avg_cost
+            current_amount = shares * current_price
+
+        # Convert to base currency
+        if currency != base_currency:
+            try:
+                current_amount = convert_currency_amount(current_amount, currency, base_currency)
+                invested_amount = convert_currency_amount(invested_amount, currency, base_currency)
+            except Exception:
+                logger.warning(f"Snapshot: currency conversion failed for {ticker}, skipping")
+                continue
+
+        total_value += current_amount
+        total_invested += invested_amount
+
+        if asset_type in INVESTABLE_ASSET_TYPES:
+            invest_value += current_amount
+            invest_invested += invested_amount
+
+    # 3. Cumulative dividends in base currency
+    dividend_rows = execute_query(
+        DATABASE_URL,
+        """
+        SELECT d.total_dividend_amount, a.currency
+        FROM dividends d
+        JOIN assets a ON d.asset_id = a.asset_id
+        WHERE d.user_id = %s
+        """,
+        (user_id,)
+    )
+    cumulative_dividends = 0.0
+    for row in dividend_rows:
+        amt = float(row['total_dividend_amount'])
+        cur = row['currency']
+        if cur != base_currency:
+            try:
+                amt = convert_currency_amount(amt, cur, base_currency)
+            except Exception:
+                pass
+        cumulative_dividends += amt
+
+    asset_count = len(assets)
+    today = date.today()
+
+    # 4. Upsert
+    execute_update(
+        DATABASE_URL,
+        """
+        INSERT INTO portfolio_snapshots
+            (user_id, snapshot_date, total_value, total_invested, base_currency,
+             asset_count, invest_value, invest_invested, cumulative_dividends)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        ON CONFLICT (user_id, snapshot_date)
+        DO UPDATE SET
+            total_value = EXCLUDED.total_value,
+            total_invested = EXCLUDED.total_invested,
+            invest_value = EXCLUDED.invest_value,
+            invest_invested = EXCLUDED.invest_invested,
+            cumulative_dividends = EXCLUDED.cumulative_dividends,
+            asset_count = EXCLUDED.asset_count,
+            created_at = CURRENT_TIMESTAMP
+        """,
+        (user_id, today, total_value, total_invested, base_currency,
+         asset_count, invest_value, invest_invested, cumulative_dividends)
+    )
+
+    logger.info(f"Snapshot saved for user {user_id} on {today}: total={total_value:.2f} {base_currency}")
+    return {
+        'user_id': user_id,
+        'snapshot_date': str(today),
+        'total_value': total_value,
+        'total_invested': total_invested,
+        'invest_value': invest_value,
+        'invest_invested': invest_invested,
+        'cumulative_dividends': cumulative_dividends,
+        'asset_count': asset_count,
+        'base_currency': base_currency,
+    }
+
 def get_inflation_rate_from_profile(user_id):
     """Get inflation rate from user's FIRE profile, with fallback to default"""
     try:
