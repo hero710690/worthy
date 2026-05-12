@@ -31,6 +31,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
 import { assetAPI } from '../services/assetApi';
 import { assetValuationService, type PortfolioValuation } from '../services/assetValuationService';
+import { portfolioAPI } from '../services/portfolioApi';
 import { exchangeRateService } from '../services/exchangeRateService';
 import { stockPriceService } from '../services/stockPriceService';
 import type { Asset } from '../types/assets';
@@ -44,6 +45,7 @@ export const Dashboard: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [loadingPrices, setLoadingPrices] = useState(false);
   const [pricesLoadedCount, setPricesLoadedCount] = useState(0);
+  const [snapshotBaseline, setSnapshotBaseline] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const streamPortfolioPrices = async (assetList: Asset[], baseCurrency: string) => {
@@ -56,6 +58,7 @@ export const Dashboard: React.FC = () => {
     const valuations: any[] = [];
     let runningTotal = 0;
     let runningPL = 0;
+    let runningCost = 0;
     let anyLive = false;
     let loaded = 0;
 
@@ -65,6 +68,11 @@ export const Dashboard: React.FC = () => {
         valuations.push(v);
         runningTotal += v.totalValueInBaseCurrency;
         runningPL += v.unrealizedGainLoss;
+        const assetCost = asset.total_shares * asset.average_cost_basis;
+        const assetCostInBase = asset.currency !== baseCurrency
+          ? exchangeRateService.convertCurrency(assetCost, asset.currency, baseCurrency)
+          : assetCost;
+        runningCost += assetCostInBase;
         if (v.priceSource === 'API') anyLive = true;
       } catch (_) {
         const cost = asset.total_shares * asset.average_cost_basis;
@@ -76,6 +84,7 @@ export const Dashboard: React.FC = () => {
           lastUpdated: new Date(), priceSource: 'MANUAL' as const,
         });
         runningTotal += cost;
+        runningCost += cost;
       }
       loaded++;
       setPricesLoadedCount(loaded);
@@ -83,7 +92,7 @@ export const Dashboard: React.FC = () => {
         assets: [...valuations],
         totalValueInBaseCurrency: runningTotal,
         totalUnrealizedGainLoss: runningPL,
-        totalUnrealizedGainLossPercent: runningTotal > 0 ? (runningPL / runningTotal) * 100 : 0,
+        totalUnrealizedGainLossPercent: runningCost > 0 ? (runningPL / runningCost) * 100 : 0,
         baseCurrency,
         lastUpdated: new Date(),
         apiStatus: { exchangeRates: exchangeRateService.isUsingRealApiRates(), stockPrices: anyLive },
@@ -101,13 +110,22 @@ export const Dashboard: React.FC = () => {
         setLoading(true);
       }
 
-      const response = await assetAPI.getAssets();
-      setAssets(response.assets);
+      const [assetResponse] = await Promise.all([
+        assetAPI.getAssets(),
+        portfolioAPI.getPortfolioSnapshots('1W').then((res) => {
+          const snaps = res.snapshots;
+          if (snaps.length > 0) {
+            // Use the most recent snapshot as the baseline to compare against live prices
+            setSnapshotBaseline(snaps[snaps.length - 1].total_value);
+          }
+        }).catch(() => {}),
+      ]);
+      setAssets(assetResponse.assets);
       setError(null);
       setLoading(false);
       setRefreshing(false);
 
-      await streamPortfolioPrices(response.assets, user?.base_currency || 'USD');
+      await streamPortfolioPrices(assetResponse.assets, user?.base_currency || 'USD');
     } catch (error: any) {
       console.error('Failed to fetch portfolio data:', error);
       setError(error.response?.data?.message || 'Failed to fetch portfolio data');
@@ -147,30 +165,32 @@ export const Dashboard: React.FC = () => {
     };
   };
 
+  // Only show day change once all prices have finished streaming to avoid misleading partial totals
+  const dayChangeAbs = (!loadingPrices && portfolioValuation && snapshotBaseline != null)
+    ? portfolioValuation.totalValueInBaseCurrency - snapshotBaseline
+    : null;
+  const dayChangePct = (dayChangeAbs != null && snapshotBaseline != null && snapshotBaseline > 0)
+    ? (dayChangeAbs / snapshotBaseline) * 100
+    : null;
+
   const portfolioStats = [
     {
-      title: 'Total Assets',
-      value: assets.length.toString(),
-      change: '+0.0%',
-      changeType: 'positive',
+      title: 'Day Change',
+      value: dayChangeAbs != null ? `${dayChangeAbs >= 0 ? '+' : '-'}${formatBaseCurrency(Math.abs(dayChangeAbs))}` : '—',
+      change: dayChangePct != null ? `${dayChangePct >= 0 ? '+' : ''}${dayChangePct.toFixed(2)}%` : '—',
+      changeType: dayChangeAbs == null ? 'neutral' : dayChangeAbs >= 0 ? 'positive' : 'negative',
       icon: <AccountBalance />,
       color: '#667eea',
-      subtext: 'vs last month'
+      subtext: 'vs latest snapshot',
     },
     {
       title: 'Portfolio Value',
       value: portfolioValuation ? formatBaseCurrency(portfolioValuation.totalValueInBaseCurrency) : '$0.00',
-      change: portfolioValuation && portfolioValuation.totalUnrealizedGainLossPercent !== 0 
-        ? `${portfolioValuation.totalUnrealizedGainLossPercent >= 0 ? '+' : ''}${portfolioValuation.totalUnrealizedGainLossPercent.toFixed(2)}%`
-        : '+0.0%',
-      changeType: portfolioValuation && portfolioValuation.totalUnrealizedGainLossPercent > 0 
-        ? 'positive' 
-        : portfolioValuation && portfolioValuation.totalUnrealizedGainLossPercent < 0 
-        ? 'negative' 
-        : 'neutral',
+      change: '',
+      changeType: 'neutral',
       icon: <TrendingUp />,
       color: '#764ba2',
-      subtext: 'unrealized P&L'
+      subtext: '',
     },
     {
       title: 'Unrealized P&L',

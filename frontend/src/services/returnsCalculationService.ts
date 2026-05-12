@@ -108,8 +108,8 @@ class ReturnsCalculationService {
 
     // Process each asset
     for (const asset of assets) {
-      // Skip cash assets for return calculations
-      if (asset.asset_type === 'Cash') {
+      // Skip cash and CD assets — their value is principal/compound interest, not market return
+      if (asset.asset_type === 'Cash' || asset.asset_type === 'CD') {
         continue;
       }
 
@@ -156,36 +156,33 @@ class ReturnsCalculationService {
         // If the asset has ONLY Initialization transactions we cannot compute a meaningful CAGR,
         // so we fall back to showing total return % without annualizing.
         const realPurchaseTx = transactions.filter(
-          t => t.transaction_type !== 'Initialization' && t.transaction_type !== 'Dividend'
+          t => t.transaction_type === 'LumpSum' || t.transaction_type === 'Recurring'
         );
         const hasRealPurchaseHistory = realPurchaseTx.length > 0;
 
         const txDates = realPurchaseTx
           .map(t => new Date(t.transaction_date || t.date))
           .filter(d => !isNaN(d.getTime()));
+
+        // For init-only assets, use the Initialization transaction date as a proxy
+        // for when the investment was actually made (closer than asset.created_at)
+        const initTx = transactions.filter(t => t.transaction_type === 'Initialization');
+        const initDates = initTx
+          .map(t => new Date(t.transaction_date || t.date))
+          .filter(d => !isNaN(d.getTime()));
+
         const earliestDate = txDates.length > 0
           ? new Date(Math.min(...txDates.map(d => d.getTime())))
+          : initDates.length > 0
+          ? new Date(Math.min(...initDates.map(d => d.getTime())))
           : new Date(asset.created_at);
         const now = new Date();
         const holdingPeriodDays = Math.max(1, (now.getTime() - earliestDate.getTime()) / (1000 * 60 * 60 * 24));
         const holdingPeriodYears = holdingPeriodDays / 365.25;
 
-        let annualizedReturnPercent = 0;
-
-        if (initialInvestmentInBaseCurrency > 0) {
-          if (!hasRealPurchaseHistory || holdingPeriodDays < 30) {
-            // No real purchase history or too short: show total return as-is, don't annualize
-            annualizedReturnPercent = totalReturnPercent;
-          } else {
-            const ratio = currentValueInBaseCurrency / initialInvestmentInBaseCurrency;
-            if (ratio > 0) {
-              annualizedReturnPercent = (Math.pow(ratio, 1 / holdingPeriodYears) - 1) * 100;
-            }
-          }
-        }
-
-        // Calculate annualized return amount
-        const annualizedReturn = (annualizedReturnPercent / 100) * initialInvestmentInBaseCurrency;
+        // Individual assets always show total return, not annualized
+        const annualizedReturnPercent = totalReturnPercent;
+        const annualizedReturn = totalReturn;
 
         // Calculate dividends from transactions
         const dividendTransactions = transactions.filter(t => t.transaction_type === 'Dividend');
