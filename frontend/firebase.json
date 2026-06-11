@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "site": "worthy",
+    "site": "worthy-app-d3ab3",
     "public": "dist",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
     "rewrites": [
