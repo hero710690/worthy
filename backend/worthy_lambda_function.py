@@ -6032,9 +6032,11 @@ def take_portfolio_snapshot(user_id, snapshot_date=None):
     try:
         _txns, _meta, _base = _load_user_ledger(user_id)
         _asof = _coerce_date(snapshot_date or date.today())
-        total_invested, invest_invested = compute_invested_asof(
-            _txns, _meta, _base, _asof)
+        # Compute dividends first so an invested-computation failure below does
+        # not silently drop the (already-available) cumulative dividends.
         cumulative_dividends = compute_cumulative_dividends_asof(
+            _txns, _meta, _base, _asof)
+        total_invested, invest_invested = compute_invested_asof(
             _txns, _meta, _base, _asof)
     except Exception as e:
         logger.error(f"Snapshot: ledger invested computation failed for user {user_id}: {e}; "
