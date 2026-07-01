@@ -4361,10 +4361,84 @@ def convert_currency_amount(amount, from_currency, to_currency):
                 return converted_amount
         
         raise Exception(f"No exchange rate found for {from_currency} to {to_currency}")
-        
+
     except Exception as e:
         logger.error(f"❌ Currency conversion failed for {from_currency} to {to_currency}: {str(e)}")
         raise e
+
+
+def _fetch_yahoo_fx_series(pair_currency, start_date, end_date):
+    """
+    Fetch daily USD->pair_currency close prices from Yahoo Finance for the
+    inclusive date window. Returns { datetime.date: float }.
+
+    Yahoo quotes USD-based FX as '{CUR}=X' (e.g. TWD=X == USD->TWD).
+    """
+    import datetime as _dt
+    symbol = f"{pair_currency}=X"
+    # Pad the window so weekends/holidays before the first requested date resolve.
+    period1 = int(_dt.datetime.combine(start_date - _dt.timedelta(days=7), _dt.time()).timestamp())
+    period2 = int(_dt.datetime.combine(end_date + _dt.timedelta(days=1), _dt.time()).timestamp())
+    url = (
+        f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+        f"?period1={period1}&period2={period2}&interval=1d"
+    )
+    response = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
+    response.raise_for_status()
+    data = response.json()
+    result = data["chart"]["result"][0]
+    timestamps = result.get("timestamp") or []
+    closes = result["indicators"]["quote"][0].get("close") or []
+    series = {}
+    for ts, close in zip(timestamps, closes):
+        if close is None:
+            continue
+        d = _dt.datetime.utcfromtimestamp(ts).date()
+        series[d] = float(close)
+    return series
+
+
+def _usd_rate_on(pair_currency, on_date):
+    """USD -> pair_currency close for on_date, carrying forward within a cached window."""
+    if pair_currency == "USD":
+        return 1.0
+    cache_key = f"histfx_{pair_currency}"
+    cached = get_cached_exchange_rate("USD", cache_key)
+    series = cached.get("series") if cached else None
+    if not series or on_date not in series:
+        fetched = _fetch_yahoo_fx_series(pair_currency, on_date, on_date)
+        # Merge with any prior cached series (keys are ISO strings in cache).
+        series = dict((k, v) for k, v in (series or {}).items())
+        series.update(fetched)
+        set_cached_exchange_rate("USD", cache_key, {"series": series})
+    # Exact date, else most recent prior date (carry forward).
+    if on_date in series:
+        return series[on_date]
+    prior = [d for d in series.keys() if d <= on_date]
+    if not prior:
+        raise Exception(f"No historical USD->{pair_currency} rate on or before {on_date}")
+    return series[max(prior)]
+
+
+def get_historical_fx_rate(from_currency, to_currency, on_date):
+    """
+    Multiplicative rate r such that amount_to = amount_from * r, for on_date.
+    Crosses via USD. Falls back to current spot on failure.
+    """
+    if from_currency == to_currency:
+        return 1.0
+    try:
+        usd_to_from = _usd_rate_on(from_currency, on_date)  # USD->from
+        usd_to_to = _usd_rate_on(to_currency, on_date)      # USD->to
+        # from->to = (USD->to) / (USD->from)
+        return usd_to_to / usd_to_from
+    except Exception as e:
+        logger.warning(
+            f"Historical FX {from_currency}->{to_currency} on {on_date} failed ({e}); "
+            f"falling back to current spot"
+        )
+        return convert_currency_amount(1.0, from_currency, to_currency)
+
 
 def get_historical_stock_price(ticker, target_date, fallback_current_price=None):
     """
