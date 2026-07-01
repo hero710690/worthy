@@ -5977,11 +5977,20 @@ def take_portfolio_snapshot(user_id, snapshot_date=None):
                 continue
 
         total_value += current_amount
-        total_invested += invested_amount
 
         if asset_type in INVESTABLE_ASSET_TYPES:
             invest_value += current_amount
-            invest_invested += invested_amount
+
+    # Invested (cost basis) is reconstructed point-in-time from the ledger so
+    # backdated transactions and sells are reflected correctly.
+    try:
+        _txns, _meta, _base = _load_user_ledger(user_id)
+        total_invested, invest_invested = compute_invested_asof(
+            _txns, _meta, _base, _coerce_date(snapshot_date or date.today()))
+    except Exception as e:
+        logger.error(f"Snapshot: ledger invested computation failed for user {user_id}: {e}; "
+                     f"keeping asset-table fallback")
+        # total_invested / invest_invested retain any loop value (0.0 here).
 
     dividend_rows = execute_query(
         DATABASE_URL,
