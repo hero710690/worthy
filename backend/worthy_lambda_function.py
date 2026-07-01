@@ -5831,6 +5831,71 @@ def compute_invested_asof(transactions, asset_meta, base_currency, asof_date):
     return total_invested, invest_invested
 
 
+def _load_user_ledger(user_id):
+    """Return (transactions, asset_meta, base_currency) for a user."""
+    base_rows = execute_query(
+        DATABASE_URL,
+        "SELECT base_currency FROM users WHERE user_id = %s",
+        (user_id,)
+    )
+    if not base_rows:
+        raise ValueError(f"User {user_id} not found")
+    base_currency = base_rows[0]['base_currency']
+
+    rows = execute_query(
+        DATABASE_URL,
+        """
+        SELECT t.asset_id, t.transaction_type, t.transaction_date,
+               t.shares, t.price_per_share, a.currency, a.asset_type
+        FROM transactions t
+        JOIN assets a ON t.asset_id = a.asset_id
+        WHERE a.user_id = %s
+        """,
+        (user_id,)
+    )
+    transactions = []
+    asset_meta = {}
+    for r in rows:
+        aid = str(r['asset_id'])
+        transactions.append({
+            'asset_id': aid,
+            'transaction_type': r['transaction_type'],
+            'transaction_date': r['transaction_date'],
+            'shares': r['shares'],
+            'price_per_share': r['price_per_share'],
+        })
+        asset_meta[aid] = {'currency': r.get('currency', 'USD'),
+                           'asset_type': r.get('asset_type', 'Stock')}
+    return transactions, asset_meta, base_currency
+
+
+def recompute_snapshot_invested(user_id, snapshot_date, transactions=None,
+                                asset_meta=None, base_currency=None):
+    """Recompute and UPDATE only the invested columns of an existing snapshot."""
+    if transactions is None or asset_meta is None or base_currency is None:
+        transactions, asset_meta, base_currency = _load_user_ledger(user_id)
+
+    asof = _coerce_date(snapshot_date)
+    total_invested, invest_invested = compute_invested_asof(
+        transactions, asset_meta, base_currency, asof)
+
+    execute_update(
+        DATABASE_URL,
+        """
+        UPDATE portfolio_snapshots
+        SET total_invested = %s, invest_invested = %s
+        WHERE user_id = %s AND snapshot_date = %s
+        """,
+        (total_invested, invest_invested, user_id, snapshot_date)
+    )
+    return {
+        'user_id': user_id,
+        'snapshot_date': str(snapshot_date),
+        'total_invested': total_invested,
+        'invest_invested': invest_invested,
+    }
+
+
 def take_portfolio_snapshot(user_id, snapshot_date=None):
     """
     Compute and upsert a portfolio snapshot for user_id for today's date.
