@@ -12,9 +12,14 @@ export interface RawContribution {
   shares: number;
   price_per_share: number;
   currency: string;
+  asset_type?: string;
 }
 
 const CONTRIBUTION_TYPES = new Set(['LumpSum', 'Recurring', 'Initialization']);
+// The projection is investments-only (seeded from invest_value), so only
+// contributions into investable assets count. Deposits into Cash/CD accounts
+// must NOT inflate the projected investment line.
+const INVESTABLE_ASSET_TYPES = new Set(['Stock', 'ETF', 'Bond']);
 
 function toDate(iso: string): Date {
   return new Date(iso.slice(0, 10) + 'T00:00:00');
@@ -24,6 +29,8 @@ function toDate(iso: string): Date {
  * Convert the raw transaction ledger into base-currency contribution events.
  * Only LumpSum/Recurring/Initialization strictly after firstSnapshotDate count;
  * Sell/Dividend are ignored (the seed already embeds holdings up to snapshot[0]).
+ * Only contributions into investable assets (Stock/ETF/Bond) count — deposits
+ * into Cash/CD are excluded so they don't spike the investments-only projection.
  */
 export function extractContributions(
   transactions: RawContribution[],
@@ -35,6 +42,7 @@ export function extractContributions(
   const events: ContributionEvent[] = [];
   for (const t of transactions) {
     if (!CONTRIBUTION_TYPES.has(t.transaction_type)) continue;
+    if (t.asset_type && !INVESTABLE_ASSET_TYPES.has(t.asset_type)) continue;
     const txDate = toDate(t.transaction_date);
     if (txDate <= firstDate) continue; // seed already covers this
     const native = t.shares * t.price_per_share;
