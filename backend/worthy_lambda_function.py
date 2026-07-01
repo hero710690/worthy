@@ -6089,6 +6089,54 @@ def handle_batch_portfolio_snapshot(body=None):
         'results': results,
     })
 
+def handle_backfill_snapshot_invested(body=None):
+    """
+    Re-runnable one-time backfill: recompute invested columns for existing
+    snapshots from the transaction ledger.
+
+    body: optional {"user_id": <id>} to scope to a single user.
+    """
+    logger.info("Starting snapshot invested backfill")
+    user_id = None
+    if body and isinstance(body, dict):
+        user_id = body.get('user_id')
+
+    if user_id:
+        user_ids = [user_id]
+    else:
+        rows = execute_query(
+            DATABASE_URL,
+            "SELECT DISTINCT user_id FROM portfolio_snapshots"
+        )
+        user_ids = [r['user_id'] for r in rows]
+
+    results = {'updated': 0, 'users': 0, 'failed': []}
+    for uid in user_ids:
+        try:
+            transactions, asset_meta, base_currency = _load_user_ledger(uid)
+            date_rows = execute_query(
+                DATABASE_URL,
+                "SELECT snapshot_date FROM portfolio_snapshots WHERE user_id = %s ORDER BY snapshot_date",
+                (uid,)
+            )
+            for dr in date_rows:
+                recompute_snapshot_invested(
+                    user_id=uid, snapshot_date=dr['snapshot_date'],
+                    transactions=transactions, asset_meta=asset_meta,
+                    base_currency=base_currency)
+                results['updated'] += 1
+            results['users'] += 1
+        except Exception as e:
+            logger.error(f"Backfill failed for user {uid}: {str(e)}")
+            results['failed'].append({'user_id': uid, 'error': str(e)})
+
+    logger.info(f"Backfill complete: {results['updated']} snapshots, "
+                f"{results['users']} users, {len(results['failed'])} failed")
+    return create_response(200, {
+        'message': 'Snapshot invested backfill complete',
+        'results': results,
+    })
+
 def handle_get_portfolio_snapshots(user_id, range_param='1Y'):
     """
     Return snapshot time-series for the authenticated user.
@@ -8441,6 +8489,10 @@ def lambda_handler(event, context):
         elif path == '/batch/portfolio-snapshot' and http_method == 'POST':
             body = json.loads(event.get('body', '{}')) if event.get('body') else {}
             return handle_batch_portfolio_snapshot(body)
+
+        elif path == '/batch/backfill-snapshot-invested' and http_method == 'POST':
+            body = json.loads(event.get('body', '{}')) if event.get('body') else {}
+            return handle_backfill_snapshot_invested(body)
 
         elif path == '/portfolio/snapshots' and http_method == 'GET':
             request_headers = event.get('headers', {})
