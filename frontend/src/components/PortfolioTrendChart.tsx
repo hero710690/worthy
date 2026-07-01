@@ -132,7 +132,7 @@ export const PortfolioTrendChart: React.FC<Props> = ({ baseCurrency }) => {
   const labels = snapshots.map((s) => formatDateLabel(s.date));
 
   const projectionData = useMemo<number[] | null>(() => {
-    if (range !== 'ALL' || !showProjection) return null;
+    if (range !== 'ALL' || viewMode !== 'invested' || !showProjection) return null;
     if (snapshots.length < 2 || !ratesReady) return null;
     const dates = snapshots.map((s) => s.date);
     const seed = snapshots[0].invest_value;
@@ -143,7 +143,7 @@ export const PortfolioTrendChart: React.FC<Props> = ({ baseCurrency }) => {
       (amount, from, to) => exchangeRateService.convertCurrency(amount, from, to)
     );
     return computeProjection(dates, seed, lastValidRate, contributions);
-  }, [range, showProjection, snapshots, ratesReady, transactions, baseCurrency, lastValidRate]);
+  }, [range, viewMode, showProjection, snapshots, ratesReady, transactions, baseCurrency, lastValidRate]);
 
   const datasets = [
     {
@@ -272,7 +272,7 @@ export const PortfolioTrendChart: React.FC<Props> = ({ baseCurrency }) => {
               <ToggleButton value="invested">INVESTMENTS ONLY</ToggleButton>
             </ToggleButtonGroup>
 
-            {range === 'ALL' && (
+            {range === 'ALL' && viewMode === 'invested' && (
               <>
                 <TextField
                   label="Return %"

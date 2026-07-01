@@ -61,9 +61,13 @@ export function extractContributions(
   return events;
 }
 
+const DAYS_PER_MONTH = 30.44; // average calendar month
+
 /**
- * Compound the seed value across the snapshot dates, injecting contributions
- * that fall within each step. Returns one projected value per snapshot date.
+ * Compound the seed value across the snapshot dates, injecting a flat monthly
+ * average contribution (prorated by the days in each step). The monthly average
+ * is the total of all contributions divided by the number of months spanned by
+ * the snapshot window. Returns one projected value per snapshot date.
  */
 export function computeProjection(
   snapshotDates: string[],
@@ -73,6 +77,15 @@ export function computeProjection(
 ): number[] {
   if (snapshotDates.length === 0) return [];
   const r = annualRatePct / 100;
+
+  // Monthly average contribution over the snapshot window.
+  const totalContributions = contributions.reduce((sum, c) => sum + c.baseAmount, 0);
+  const firstDate = toDate(snapshotDates[0]);
+  const lastDate = toDate(snapshotDates[snapshotDates.length - 1]);
+  const windowDays = (lastDate.getTime() - firstDate.getTime()) / (1000 * 60 * 60 * 24);
+  const windowMonths = windowDays / DAYS_PER_MONTH;
+  const monthlyAvg = windowMonths > 0 ? totalContributions / windowMonths : 0;
+
   const result: number[] = [seedValue];
   for (let i = 1; i < snapshotDates.length; i++) {
     const prevDate = toDate(snapshotDates[i - 1]);
@@ -80,11 +93,8 @@ export function computeProjection(
     const deltaDays = (curDate.getTime() - prevDate.getTime()) / (1000 * 60 * 60 * 24);
     const deltaYears = deltaDays / 365;
     const grown = result[i - 1] * Math.pow(1 + r, deltaYears);
-    let stepContribution = 0;
-    for (const c of contributions) {
-      const cd = toDate(c.date);
-      if (cd > prevDate && cd <= curDate) stepContribution += c.baseAmount;
-    }
+    // Inject the monthly average prorated by the days in this step.
+    const stepContribution = monthlyAvg * (deltaDays / DAYS_PER_MONTH);
     result.push(grown + stepContribution);
   }
   return result;
