@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Box,
   Card,
@@ -9,6 +9,9 @@ import {
   CircularProgress,
   Alert,
   Stack,
+  TextField,
+  FormControlLabel,
+  Switch,
 } from '@mui/material';
 import {
   Chart as ChartJS,
@@ -23,6 +26,9 @@ import {
 } from 'chart.js';
 import { Line } from 'react-chartjs-2';
 import { portfolioAPI, type PortfolioSnapshot, type SnapshotRange } from '../services/portfolioApi';
+import { assetAPI } from '../services/assetApi';
+import { extractContributions, computeProjection, type RawContribution } from '../services/portfolioProjection';
+import { exchangeRateService } from '../services/exchangeRateService';
 
 ChartJS.register(CategoryScale, LinearScale, LineElement, PointElement, Title, Tooltip, Legend, Filler);
 
@@ -64,6 +70,12 @@ export const PortfolioTrendChart: React.FC<Props> = ({ baseCurrency }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [rateInput, setRateInput] = useState<string>('7');
+  const [lastValidRate, setLastValidRate] = useState<number>(7);
+  const [showProjection, setShowProjection] = useState<boolean>(true);
+  const [transactions, setTransactions] = useState<RawContribution[]>([]);
+  const [ratesReady, setRatesReady] = useState<boolean>(false);
+
   useEffect(() => {
     setLoading(true);
     setError(null);
@@ -74,47 +86,105 @@ export const PortfolioTrendChart: React.FC<Props> = ({ baseCurrency }) => {
       .finally(() => setLoading(false));
   }, [range]);
 
+  useEffect(() => {
+    if (range !== 'ALL') return;
+    if (transactions.length > 0 && ratesReady) return;
+    let cancelled = false;
+    Promise.all([
+      assetAPI.getTransactions(),
+      exchangeRateService.getRatesWithRefresh(baseCurrency),
+    ])
+      .then(([txRes]) => {
+        if (cancelled) return;
+        setTransactions((txRes.transactions ?? []) as RawContribution[]);
+        setRatesReady(true);
+      })
+      .catch(() => {
+        // Projection is best-effort; on failure it simply won't render.
+        if (!cancelled) setRatesReady(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [range, baseCurrency, transactions.length, ratesReady]);
+
+  const handleRateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    setRateInput(raw);
+    const parsed = parseFloat(raw);
+    if (!Number.isNaN(parsed) && parsed >= 0 && parsed <= 100) {
+      setLastValidRate(parsed);
+    }
+  };
+
   const valueKey: keyof PortfolioSnapshot = viewMode === 'total' ? 'total_value' : 'invest_value';
   const investedKey: keyof PortfolioSnapshot = viewMode === 'total' ? 'total_invested' : 'invest_invested';
 
   const labels = snapshots.map((s) => formatDateLabel(s.date));
 
-  const chartData = {
-    labels,
-    datasets: [
-      {
-        label: 'Portfolio Value',
-        data: snapshots.map((s) => s[valueKey] as number),
-        borderColor: '#5c6bc0',
-        backgroundColor: 'rgba(92, 107, 192, 0.15)',
-        fill: true,
-        tension: 0.3,
-        pointRadius: 0,
-        borderWidth: 2,
-      },
-      {
-        label: 'Total Invested',
-        data: snapshots.map((s) => s[investedKey] as number),
-        borderColor: '#ec407a',
-        backgroundColor: 'transparent',
-        fill: false,
-        tension: 0.3,
-        pointRadius: 0,
-        borderWidth: 1.5,
-        borderDash: [5, 5],
-      },
-      {
-        label: 'Cumulative Dividends',
-        data: snapshots.map((s) => s.cumulative_dividends),
-        borderColor: '#66bb6a',
-        backgroundColor: 'transparent',
-        fill: false,
-        tension: 0.3,
-        pointRadius: 0,
-        borderWidth: 1.5,
-      },
-    ],
-  };
+  const projectionData = useMemo<number[] | null>(() => {
+    if (range !== 'ALL' || !showProjection) return null;
+    if (snapshots.length < 2 || !ratesReady) return null;
+    const dates = snapshots.map((s) => s.date);
+    const seed = snapshots[0].invest_value;
+    const contributions = extractContributions(
+      transactions,
+      snapshots[0].date,
+      baseCurrency,
+      (amount, from, to) => exchangeRateService.convertCurrency(amount, from, to)
+    );
+    return computeProjection(dates, seed, lastValidRate, contributions);
+  }, [range, showProjection, snapshots, ratesReady, transactions, baseCurrency, lastValidRate]);
+
+  const datasets = [
+    {
+      label: 'Portfolio Value',
+      data: snapshots.map((s) => s[valueKey] as number),
+      borderColor: '#5c6bc0',
+      backgroundColor: 'rgba(92, 107, 192, 0.15)',
+      fill: true,
+      tension: 0.3,
+      pointRadius: 0,
+      borderWidth: 2,
+    },
+    {
+      label: 'Total Invested',
+      data: snapshots.map((s) => s[investedKey] as number),
+      borderColor: '#ec407a',
+      backgroundColor: 'transparent',
+      fill: false,
+      tension: 0.3,
+      pointRadius: 0,
+      borderWidth: 1.5,
+      borderDash: [5, 5],
+    },
+    {
+      label: 'Cumulative Dividends',
+      data: snapshots.map((s) => s.cumulative_dividends),
+      borderColor: '#66bb6a',
+      backgroundColor: 'transparent',
+      fill: false,
+      tension: 0.3,
+      pointRadius: 0,
+      borderWidth: 1.5,
+    },
+  ];
+
+  if (projectionData) {
+    datasets.push({
+      label: `Projected (investments @ ${lastValidRate}%)`,
+      data: projectionData,
+      borderColor: '#ffa726',
+      backgroundColor: 'transparent',
+      fill: false,
+      tension: 0.3,
+      pointRadius: 0,
+      borderWidth: 1.5,
+      borderDash: [2, 3],
+    } as typeof datasets[number]);
+  }
+
+  const chartData = { labels, datasets };
 
   const chartOptions = {
     responsive: true,
@@ -135,11 +205,11 @@ export const PortfolioTrendChart: React.FC<Props> = ({ baseCurrency }) => {
         callbacks: {
           title: (items: { dataIndex: number }[]) => snapshots[items[0].dataIndex]?.date ?? '',
           label: (ctx: { datasetIndex: number; parsed: { y: number } }) => {
-            const datasetLabels = ['Portfolio Value', 'Total Invested', 'Cumulative Dividends'];
-            return ` ${datasetLabels[ctx.datasetIndex]} : ${formatTooltipValue(ctx.parsed.y, baseCurrency)}`;
+            const label = datasets[ctx.datasetIndex]?.label ?? '';
+            return ` ${label} : ${formatTooltipValue(ctx.parsed.y, baseCurrency)}`;
           },
           labelTextColor: (ctx: { datasetIndex: number }) => {
-            return ['#5c6bc0', '#ec407a', '#66bb6a'][ctx.datasetIndex] ?? '#333';
+            return (datasets[ctx.datasetIndex]?.borderColor as string) ?? '#333';
           },
         },
       },
@@ -192,6 +262,31 @@ export const PortfolioTrendChart: React.FC<Props> = ({ baseCurrency }) => {
               <ToggleButton value="total">ALL ASSETS</ToggleButton>
               <ToggleButton value="invested">INVESTMENTS ONLY</ToggleButton>
             </ToggleButtonGroup>
+
+            {range === 'ALL' && (
+              <>
+                <TextField
+                  label="Return %"
+                  value={rateInput}
+                  onChange={handleRateChange}
+                  size="small"
+                  type="number"
+                  inputProps={{ step: 0.1, min: 0, max: 100, style: { width: 64 } }}
+                  sx={{ '& .MuiInputBase-root': { height: 32 } }}
+                />
+                <FormControlLabel
+                  control={
+                    <Switch
+                      size="small"
+                      checked={showProjection}
+                      onChange={(e) => setShowProjection(e.target.checked)}
+                    />
+                  }
+                  label="Projection"
+                  sx={{ '& .MuiFormControlLabel-label': { fontSize: '0.75rem' } }}
+                />
+              </>
+            )}
           </Stack>
         </Stack>
 
@@ -209,7 +304,7 @@ export const PortfolioTrendChart: React.FC<Props> = ({ baseCurrency }) => {
 
         {!loading && !error && snapshots.length > 0 && (
           <Box sx={{ height: 340 }}>
-            <Line key={viewMode} data={chartData} options={chartOptions} />
+            <Line key={`${viewMode}-${range}-${showProjection}-${lastValidRate}`} data={chartData} options={chartOptions} />
           </Box>
         )}
       </CardContent>
