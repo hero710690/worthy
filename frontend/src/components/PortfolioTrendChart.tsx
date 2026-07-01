@@ -103,6 +103,8 @@ export const PortfolioTrendChart: React.FC<Props> = ({ baseCurrency }) => {
       })
       .catch(() => {
         // Projection is best-effort; on failure it simply won't render.
+        // Clear the attempt guard so returning to ALL later retries the fetch.
+        projectionFetchAttempted.current = false;
         if (!cancelled) setRatesReady(false);
       });
     return () => {
@@ -311,7 +313,7 @@ export const PortfolioTrendChart: React.FC<Props> = ({ baseCurrency }) => {
 
         {!loading && !error && snapshots.length > 0 && (
           <Box sx={{ height: 340 }}>
-            <Line key={`${viewMode}-${range}-${showProjection}`} data={chartData} options={chartOptions} />
+            <Line key={`${viewMode}-${range}`} data={chartData} options={chartOptions} />
           </Box>
         )}
       </CardContent>
