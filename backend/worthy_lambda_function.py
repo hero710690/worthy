@@ -4377,7 +4377,7 @@ def _fetch_yahoo_fx_series(pair_currency, start_date, end_date):
     import datetime as _dt
     symbol = f"{pair_currency}=X"
     # Pad the window so weekends/holidays before the first requested date resolve.
-    period1 = int(_dt.datetime.combine(start_date - _dt.timedelta(days=7), _dt.time()).timestamp())
+    period1 = int(_dt.datetime.combine(start_date - _dt.timedelta(days=14), _dt.time()).timestamp())
     period2 = int(_dt.datetime.combine(end_date + _dt.timedelta(days=1), _dt.time()).timestamp())
     url = (
         f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
@@ -5819,7 +5819,10 @@ def compute_invested_asof(transactions, asset_meta, base_currency, asof_date):
             logger.warning(f"compute_invested_asof: no asset_meta for {aid}, skipping")
             continue
         native_invested = h['shares'] * h['avg_cost']
-        currency = meta.get('currency', 'USD')
+        currency = meta.get('currency')
+        if not currency:
+            logger.warning(f"compute_invested_asof: no currency for {aid}, skipping")
+            continue
         try:
             rate = get_historical_fx_rate(currency, base_currency, asof_date)
             base_invested = native_invested * rate
@@ -5930,6 +5933,8 @@ def take_portfolio_snapshot(user_id, snapshot_date=None):
     total_invested = 0.0
     invest_value = 0.0
     invest_invested = 0.0
+    fallback_total_invested = 0.0
+    fallback_invest_invested = 0.0
 
     for asset in assets:
         ticker = asset['ticker_symbol']
@@ -5977,9 +5982,11 @@ def take_portfolio_snapshot(user_id, snapshot_date=None):
                 continue
 
         total_value += current_amount
+        fallback_total_invested += invested_amount
 
         if asset_type in INVESTABLE_ASSET_TYPES:
             invest_value += current_amount
+            fallback_invest_invested += invested_amount
 
     # Invested (cost basis) is reconstructed point-in-time from the ledger so
     # backdated transactions and sells are reflected correctly.
@@ -5989,8 +5996,9 @@ def take_portfolio_snapshot(user_id, snapshot_date=None):
             _txns, _meta, _base, _coerce_date(snapshot_date or date.today()))
     except Exception as e:
         logger.error(f"Snapshot: ledger invested computation failed for user {user_id}: {e}; "
-                     f"keeping asset-table fallback")
-        # total_invested / invest_invested retain any loop value (0.0 here).
+                     f"falling back to asset-table (current-holdings) invested")
+        total_invested = fallback_total_invested
+        invest_invested = fallback_invest_invested
 
     dividend_rows = execute_query(
         DATABASE_URL,
