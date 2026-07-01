@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Box,
   Card,
@@ -75,6 +75,7 @@ export const PortfolioTrendChart: React.FC<Props> = ({ baseCurrency }) => {
   const [showProjection, setShowProjection] = useState<boolean>(true);
   const [transactions, setTransactions] = useState<RawContribution[]>([]);
   const [ratesReady, setRatesReady] = useState<boolean>(false);
+  const projectionFetchAttempted = useRef(false);
 
   useEffect(() => {
     setLoading(true);
@@ -88,8 +89,9 @@ export const PortfolioTrendChart: React.FC<Props> = ({ baseCurrency }) => {
 
   useEffect(() => {
     if (range !== 'ALL') return;
-    if (transactions.length > 0 && ratesReady) return;
+    if (projectionFetchAttempted.current) return;
     let cancelled = false;
+    projectionFetchAttempted.current = true;
     Promise.all([
       assetAPI.getTransactions(),
       exchangeRateService.getRatesWithRefresh(baseCurrency),
@@ -106,7 +108,12 @@ export const PortfolioTrendChart: React.FC<Props> = ({ baseCurrency }) => {
     return () => {
       cancelled = true;
     };
-  }, [range, baseCurrency, transactions.length, ratesReady]);
+  }, [range, baseCurrency]);
+
+  useEffect(() => {
+    projectionFetchAttempted.current = false;
+    setRatesReady(false);
+  }, [baseCurrency]);
 
   const handleRateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value;
@@ -304,7 +311,7 @@ export const PortfolioTrendChart: React.FC<Props> = ({ baseCurrency }) => {
 
         {!loading && !error && snapshots.length > 0 && (
           <Box sx={{ height: 340 }}>
-            <Line key={`${viewMode}-${range}-${showProjection}-${lastValidRate}`} data={chartData} options={chartOptions} />
+            <Line key={`${viewMode}-${range}-${showProjection}`} data={chartData} options={chartOptions} />
           </Box>
         )}
       </CardContent>
