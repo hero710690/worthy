@@ -5835,6 +5835,40 @@ def compute_invested_asof(transactions, asset_meta, base_currency, asof_date):
     return total_invested, invest_invested
 
 
+def compute_cumulative_dividends_asof(transactions, asset_meta, base_currency, asof_date):
+    """
+    Point-in-time cumulative dividends in base_currency as of asof_date.
+
+    Sums Dividend transactions on or before asof_date, converting each to
+    base_currency using historical FX rates. Transactions with missing
+    asset_meta / currency or FX failures are skipped (logged).
+
+    Returns float total.
+    """
+    total = 0.0
+    for txn in transactions:
+        if txn.get('transaction_type') != 'Dividend':
+            continue
+        if _coerce_date(txn['transaction_date']) > asof_date:
+            continue
+        aid = str(txn['asset_id'])
+        meta = asset_meta.get(aid)
+        if not meta:
+            logger.warning(f"compute_cumulative_dividends_asof: no asset_meta for {aid}, skipping")
+            continue
+        currency = meta.get('currency')
+        if not currency:
+            logger.warning(f"compute_cumulative_dividends_asof: no currency for {aid}, skipping")
+            continue
+        native_amount = float(txn['shares']) * float(txn['price_per_share'])
+        try:
+            rate = get_historical_fx_rate(currency, base_currency, asof_date)
+            total += native_amount * rate
+        except Exception:
+            logger.warning(f"compute_cumulative_dividends_asof: FX failed for {aid} ({currency}), skipping")
+    return total
+
+
 def _load_user_ledger(user_id):
     """Return (transactions, asset_meta, base_currency) for a user."""
     base_rows = execute_query(
@@ -5882,21 +5916,24 @@ def recompute_snapshot_invested(user_id, snapshot_date, transactions=None,
     asof = _coerce_date(snapshot_date)
     total_invested, invest_invested = compute_invested_asof(
         transactions, asset_meta, base_currency, asof)
+    cumulative_dividends = compute_cumulative_dividends_asof(
+        transactions, asset_meta, base_currency, asof)
 
     execute_update(
         DATABASE_URL,
         """
         UPDATE portfolio_snapshots
-        SET total_invested = %s, invest_invested = %s
+        SET total_invested = %s, invest_invested = %s, cumulative_dividends = %s
         WHERE user_id = %s AND snapshot_date = %s
         """,
-        (total_invested, invest_invested, user_id, snapshot_date)
+        (total_invested, invest_invested, cumulative_dividends, user_id, snapshot_date)
     )
     return {
         'user_id': user_id,
         'snapshot_date': str(snapshot_date),
         'total_invested': total_invested,
         'invest_invested': invest_invested,
+        'cumulative_dividends': cumulative_dividends,
     }
 
 
@@ -5988,39 +6025,22 @@ def take_portfolio_snapshot(user_id, snapshot_date=None):
             invest_value += current_amount
             fallback_invest_invested += invested_amount
 
-    # Invested (cost basis) is reconstructed point-in-time from the ledger so
-    # backdated transactions and sells are reflected correctly.
+    # Invested (cost basis) and cumulative_dividends are reconstructed
+    # point-in-time from the ledger so backdated transactions and sells are
+    # reflected correctly.
+    cumulative_dividends = 0.0
     try:
         _txns, _meta, _base = _load_user_ledger(user_id)
+        _asof = _coerce_date(snapshot_date or date.today())
         total_invested, invest_invested = compute_invested_asof(
-            _txns, _meta, _base, _coerce_date(snapshot_date or date.today()))
+            _txns, _meta, _base, _asof)
+        cumulative_dividends = compute_cumulative_dividends_asof(
+            _txns, _meta, _base, _asof)
     except Exception as e:
         logger.error(f"Snapshot: ledger invested computation failed for user {user_id}: {e}; "
                      f"falling back to asset-table (current-holdings) invested")
         total_invested = fallback_total_invested
         invest_invested = fallback_invest_invested
-
-    dividend_rows = execute_query(
-        DATABASE_URL,
-        """
-        SELECT t.shares * t.price_per_share AS dividend_amount, t.currency
-        FROM transactions t
-        JOIN assets a ON t.asset_id = a.asset_id
-        WHERE a.user_id = %s AND t.transaction_type = 'Dividend'
-          AND t.shares > 0 AND t.price_per_share > 0
-        """,
-        (user_id,)
-    )
-    cumulative_dividends = 0.0
-    for row in dividend_rows:
-        amt = float(row['dividend_amount'])
-        cur = row['currency']
-        if cur != base_currency:
-            try:
-                amt = convert_currency_amount(amt, cur, base_currency)
-            except Exception:
-                logger.warning(f"Snapshot: dividend currency conversion failed ({cur} to {base_currency}), using original amount")
-        cumulative_dividends += amt
 
     asset_count = len(assets)
     today = snapshot_date or date.today()
