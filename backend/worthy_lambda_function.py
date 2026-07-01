@@ -5802,6 +5802,35 @@ def reconstruct_holdings_asof(transactions, asof_date):
     return {aid: h for aid, h in holdings.items() if h['shares'] > 1e-9}
 
 
+def compute_invested_asof(transactions, asset_meta, base_currency, asof_date):
+    """
+    Point-in-time invested amounts in base_currency as of asof_date.
+
+    asset_meta: { asset_id: {'currency': str, 'asset_type': str} }
+    Returns (total_invested, invest_invested).
+    """
+    holdings = reconstruct_holdings_asof(transactions, asof_date)
+    total_invested = 0.0
+    invest_invested = 0.0
+    for aid, h in holdings.items():
+        meta = asset_meta.get(str(aid))
+        if not meta:
+            logger.warning(f"compute_invested_asof: no asset_meta for {aid}, skipping")
+            continue
+        native_invested = h['shares'] * h['avg_cost']
+        currency = meta.get('currency', 'USD')
+        try:
+            rate = get_historical_fx_rate(currency, base_currency, asof_date)
+            base_invested = native_invested * rate
+        except Exception:
+            logger.warning(f"compute_invested_asof: FX failed for {aid} ({currency}), skipping")
+            continue
+        total_invested += base_invested
+        if meta.get('asset_type') in INVESTABLE_ASSET_TYPES:
+            invest_invested += base_invested
+    return total_invested, invest_invested
+
+
 def take_portfolio_snapshot(user_id, snapshot_date=None):
     """
     Compute and upsert a portfolio snapshot for user_id for today's date.
