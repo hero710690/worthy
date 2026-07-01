@@ -5673,6 +5673,61 @@ def get_portfolio_total_value(user_id):
 # Asset types treated as liquid/investable (invest_* columns)
 INVESTABLE_ASSET_TYPES = {'Stock', 'ETF', 'Bond'}
 
+def _coerce_date(value):
+    """Accept a datetime.date, datetime.datetime, or ISO string -> datetime.date."""
+    import datetime as _dt
+    if isinstance(value, _dt.datetime):
+        return value.date()
+    if isinstance(value, _dt.date):
+        return value
+    return _dt.date.fromisoformat(str(value)[:10])
+
+
+def reconstruct_holdings_asof(transactions, asof_date):
+    """
+    Replay a user's transaction ledger to reconstruct per-asset holdings and
+    average cost basis (native currency) as of asof_date.
+
+    Average-cost method: buys update the running average; sells reduce shares
+    but leave average cost per share unchanged; dividends are ignored.
+
+    Returns { asset_id: {'shares': float, 'avg_cost': float} } for assets that
+    still hold shares (> 1e-9) as of the date.
+    """
+    BUY_TYPES = {'Initialization', 'LumpSum', 'Recurring'}
+
+    # Sort by date so replay order is correct regardless of input ordering.
+    ordered = sorted(
+        (t for t in transactions if _coerce_date(t['transaction_date']) <= asof_date),
+        key=lambda t: (_coerce_date(t['transaction_date']),)
+    )
+
+    holdings = {}  # asset_id -> {'shares': float, 'avg_cost': float}
+    for t in ordered:
+        aid = str(t['asset_id'])
+        ttype = t['transaction_type']
+        shares = float(t['shares'])
+        price = float(t['price_per_share'])
+
+        if ttype == 'Dividend':
+            continue
+
+        h = holdings.setdefault(aid, {'shares': 0.0, 'avg_cost': 0.0})
+
+        if ttype in BUY_TYPES:
+            new_shares = h['shares'] + shares
+            if new_shares > 1e-9:
+                h['avg_cost'] = (h['shares'] * h['avg_cost'] + shares * price) / new_shares
+            h['shares'] = new_shares
+        elif ttype == 'Sell':
+            # shares is stored negative for sells; avg_cost unchanged.
+            h['shares'] = h['shares'] + shares
+        else:
+            logger.warning(f"reconstruct_holdings_asof: unknown transaction_type {ttype!r}, ignoring")
+
+    return {aid: h for aid, h in holdings.items() if h['shares'] > 1e-9}
+
+
 def take_portfolio_snapshot(user_id, snapshot_date=None):
     """
     Compute and upsert a portfolio snapshot for user_id for today's date.
