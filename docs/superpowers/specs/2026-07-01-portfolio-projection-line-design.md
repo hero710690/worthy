@@ -33,6 +33,7 @@ contributions that actually occurred during the historical window.
 | Contribution model | Derived from **`invest_invested` delta** between consecutive snapshots (cost-basis increase captures both LumpSum and Recurring buys). No extra API calls. |
 | View coupling | **Investments-only, always** — uses `invest_value` / `invest_invested` regardless of the ALL ASSETS / INVESTMENTS ONLY toggle. |
 | Line visibility | **Show/hide toggle**, default ON. Not persisted (resets to 7% / ON on reload). |
+| Time-range gating | Projection line **only displays when the time-range toggle is `ALL`**. For `1W`/`1M`/`3M`/`1Y` the line, its rate input, and its toggle are hidden. |
 | Negative delta (sells) | Treated as **no change**: `contribution = max(0, delta)`. Sells inject nothing; the projected value only grows by the return rate that period. |
 
 ## Projection Math
@@ -51,7 +52,8 @@ snapshot spacing is handled correctly.
 ## UI
 
 New controls in the card header, alongside the existing time-range and view-mode
-toggles:
+toggles. **These controls are only rendered when the time-range toggle is `ALL`;**
+they are hidden for every other range.
 
 - **Annual return rate** — a small numeric `TextField` (suffix `%`), default `7`,
   accepts decimals (e.g. `7.5`). Invalid/empty input falls back to the last valid
@@ -71,6 +73,9 @@ Projection recomputes (via `useMemo` over `snapshots` + `rate`) when:
 - the rate input changes,
 - the range changes (new snapshots fetched),
 - the projection toggle changes visibility (dataset included/excluded).
+
+The projected dataset is included **only when `range === 'ALL'`** and the
+projection toggle is ON; otherwise it is excluded from the chart.
 
 ## Edge Cases
 
