@@ -5746,6 +5746,7 @@ def get_portfolio_total_value(user_id):
 
 # Asset types treated as liquid/investable (invest_* columns)
 INVESTABLE_ASSET_TYPES = {'Stock', 'ETF', 'Bond'}
+ROLLING_RECOMPUTE_DAYS = 90
 
 def _coerce_date(value):
     """Accept a datetime.date, datetime.datetime, or ISO string -> datetime.date."""
@@ -6078,6 +6079,29 @@ def handle_batch_portfolio_snapshot(body=None):
                         results['backfilled'].append({'user_id': uid, 'date': str(target_date)})
 
             take_portfolio_snapshot(uid)
+
+            # Recompute invested (point-in-time) for the rolling window so
+            # backdated/edited transactions within the window self-correct.
+            try:
+                transactions, asset_meta, base_currency = _load_user_ledger(uid)
+                window_start = today - timedelta(days=ROLLING_RECOMPUTE_DAYS)
+                window_rows = execute_query(
+                    DATABASE_URL,
+                    """
+                    SELECT snapshot_date FROM portfolio_snapshots
+                    WHERE user_id = %s AND snapshot_date >= %s
+                    ORDER BY snapshot_date
+                    """,
+                    (uid, window_start)
+                )
+                for wr in window_rows:
+                    recompute_snapshot_invested(
+                        user_id=uid, snapshot_date=wr['snapshot_date'],
+                        transactions=transactions, asset_meta=asset_meta,
+                        base_currency=base_currency)
+            except Exception as e:
+                logger.error(f"Rolling recompute failed for user {uid}: {str(e)}")
+
             results['success'].append(uid)
         except Exception as e:
             logger.error(f"Snapshot failed for user {uid}: {str(e)}")
