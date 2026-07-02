@@ -131,3 +131,41 @@ def test_price_fetch_fails_no_prior_snapshot_uses_computed():
     assert out["total_value"] == 2000.0
     assert out["invest_value"] == 2000.0
     assert "params" in inserted  # UPSERT was called
+
+
+def test_mock_price_treated_as_failure_carries_forward():
+    """A 'successful' fetch returning source='mock' is garbage and must trigger carry-forward."""
+    prior_total = 800000.0
+    prior_invest = 750000.0
+
+    def fake_query(db, query, params=None):
+        q = query.lower()
+        if "base_currency from users" in q:
+            return [{"base_currency": "TWD"}]
+        if "from assets where user_id" in q:
+            return [{"ticker_symbol": "0050.TW", "total_shares": 10,
+                     "average_cost_basis": 44.0, "currency": "TWD",
+                     "asset_type": "Stock", "interest_rate": None,
+                     "maturity_date": None, "start_date": None, "created_at": None}]
+        if "from portfolio_snapshots" in q and "snapshot_date <" in q:
+            return [{"total_value": prior_total, "invest_value": prior_invest}]
+        return []
+
+    inserted = {}
+
+    def fake_update(db, query, params):
+        inserted["params"] = params
+
+    # Mock fallback: truthy dict with a price but source == 'mock'.
+    with mock.patch.object(wlf, "execute_query", side_effect=fake_query), \
+         mock.patch.object(wlf, "execute_update", side_effect=fake_update), \
+         mock.patch.object(wlf, "fetch_stock_price_with_fallback",
+                           return_value={"price": 100.0, "source": "mock"}), \
+         mock.patch.object(wlf, "_load_user_ledger", return_value=([], {}, "TWD")), \
+         mock.patch.object(wlf, "compute_invested_asof", return_value=(5000.0, 4500.0)), \
+         mock.patch.object(wlf, "compute_cumulative_dividends_asof", return_value=100.0):
+        out = wlf.take_portfolio_snapshot(7, snapshot_date=datetime.date(2026, 7, 2))
+
+    # Mock price must be rejected -> carry forward the prior snapshot's values.
+    assert out["total_value"] == prior_total, f"Expected carry-forward {prior_total}, got {out['total_value']}"
+    assert out["invest_value"] == prior_invest, f"Expected carry-forward {prior_invest}, got {out['invest_value']}"

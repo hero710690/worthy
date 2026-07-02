@@ -6006,12 +6006,16 @@ def take_portfolio_snapshot(user_id, snapshot_date=None):
             try:
                 price_data = fetch_stock_price_with_fallback(ticker)
                 raw_price = (price_data.get('current_price') or price_data.get('price')) if price_data else None
-                if raw_price:
+                # Mock data is a garbage fallback ($100 USD for unmapped symbols)
+                # that silently corrupts the snapshot (e.g. TW stocks priced in
+                # USD). Treat it as a failed fetch so the value is carried forward.
+                is_mock = bool(price_data) and price_data.get('source') == 'mock'
+                if raw_price and not is_mock:
                     current_price = float(raw_price)
                 else:
                     price_fetch_failed = True
                     current_price = avg_cost
-                    logger.warning(f"Snapshot: price unavailable for {ticker}, will carry forward previous snapshot value")
+                    logger.warning(f"Snapshot: price unavailable/mock for {ticker}, will carry forward previous snapshot value")
             except Exception:
                 price_fetch_failed = True
                 current_price = avg_cost
