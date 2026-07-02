@@ -5972,6 +5972,7 @@ def take_portfolio_snapshot(user_id, snapshot_date=None):
     invest_invested = 0.0
     fallback_total_invested = 0.0
     fallback_invest_invested = 0.0
+    price_fetch_failed = False
 
     for asset in assets:
         ticker = asset['ticker_symbol']
@@ -6005,9 +6006,16 @@ def take_portfolio_snapshot(user_id, snapshot_date=None):
             try:
                 price_data = fetch_stock_price_with_fallback(ticker)
                 raw_price = (price_data.get('current_price') or price_data.get('price')) if price_data else None
-                current_price = float(raw_price) if raw_price else avg_cost
+                if raw_price:
+                    current_price = float(raw_price)
+                else:
+                    price_fetch_failed = True
+                    current_price = avg_cost
+                    logger.warning(f"Snapshot: price unavailable for {ticker}, will carry forward previous snapshot value")
             except Exception:
+                price_fetch_failed = True
                 current_price = avg_cost
+                logger.warning(f"Snapshot: price unavailable for {ticker}, will carry forward previous snapshot value")
             current_amount = shares * current_price
 
         if currency != base_currency:
@@ -6046,6 +6054,29 @@ def take_portfolio_snapshot(user_id, snapshot_date=None):
 
     asset_count = len(assets)
     today = snapshot_date or date.today()
+
+    if price_fetch_failed:
+        prior_rows = execute_query(
+            DATABASE_URL,
+            """
+            SELECT total_value, invest_value FROM portfolio_snapshots
+            WHERE user_id = %s AND snapshot_date < %s
+            ORDER BY snapshot_date DESC LIMIT 1
+            """,
+            (user_id, today)
+        )
+        if prior_rows:
+            total_value = prior_rows[0]['total_value']
+            invest_value = prior_rows[0]['invest_value']
+            logger.warning(
+                f"Snapshot: price fetch failed for user {user_id} on {today}; "
+                f"carrying forward prior snapshot values (total={total_value}, invest={invest_value})"
+            )
+        else:
+            logger.warning(
+                f"Snapshot: price fetch failed for user {user_id} on {today} and no prior snapshot exists; "
+                f"using cost-basis fallback values"
+            )
 
     execute_update(
         DATABASE_URL,
