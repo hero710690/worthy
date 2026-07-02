@@ -6008,14 +6008,24 @@ def take_portfolio_snapshot(user_id, snapshot_date=None):
                 raw_price = (price_data.get('current_price') or price_data.get('price')) if price_data else None
                 # Mock data is a garbage fallback ($100 USD for unmapped symbols)
                 # that silently corrupts the snapshot (e.g. TW stocks priced in
-                # USD). Treat it as a failed fetch so the value is carried forward.
+                # USD). Treat it as a failed fetch.
                 is_mock = bool(price_data) and price_data.get('source') == 'mock'
                 if raw_price and not is_mock:
                     current_price = float(raw_price)
                 else:
-                    price_fetch_failed = True
-                    current_price = avg_cost
-                    logger.warning(f"Snapshot: price unavailable/mock for {ticker}, will carry forward previous snapshot value")
+                    # Per-asset fallback: use THIS asset's own previous close if the
+                    # API returned a real (non-mock) quote with one, so a bad current
+                    # price for one asset doesn't freeze the whole snapshot.
+                    prev_close = price_data.get('previousClose') if (price_data and not is_mock) else None
+                    if prev_close:
+                        current_price = float(prev_close)
+                        logger.warning(f"Snapshot: current price missing for {ticker}, using its previous close {prev_close}")
+                    else:
+                        # No usable per-asset price (all APIs failed / mock). Fall back
+                        # to cost here and carry forward the aggregate value below.
+                        price_fetch_failed = True
+                        current_price = avg_cost
+                        logger.warning(f"Snapshot: price unavailable/mock for {ticker}, will carry forward previous snapshot value")
             except Exception:
                 price_fetch_failed = True
                 current_price = avg_cost
