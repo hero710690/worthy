@@ -4423,13 +4423,14 @@ def _usd_rate_on(pair_currency, on_date):
         series = dict((k, v) for k, v in (series or {}).items())
         series.update(fetched)
         set_cached_exchange_rate("USD", cache_key, {"series": series})
-    # Exact date, else most recent prior date (carry forward).
-    if on_date in series:
-        return series[on_date]
-    prior = [d for d in series.keys() if d <= on_date]
-    if not prior:
+    # Carry forward on WEEKDAYS only. Yahoo forex has weekend bars (forex trades
+    # Sunday), but stock closes don't — so a weekend value snapshot must use the
+    # last weekday's FX to stay aligned with the Friday stock-close carry-forward
+    # (otherwise weekends aren't flat).
+    candidates = [d for d in series.keys() if d <= on_date and d.weekday() < 5]
+    if not candidates:
         raise Exception(f"No historical USD->{pair_currency} rate on or before {on_date}")
-    return series[max(prior)]
+    return series[max(candidates)]
 
 
 def get_historical_fx_rate(from_currency, to_currency, on_date):

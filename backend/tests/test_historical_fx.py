@@ -36,6 +36,21 @@ def test_carry_forward_on_missing_date():
     assert abs(rate - 32.5) < 1e-6
 
 
+def test_weekend_fx_uses_friday_not_sunday_bar():
+    # Yahoo forex has a Sunday bar (32.9); a Sunday value snapshot must still use
+    # Friday's rate (32.5) to stay aligned with the Friday stock-close carry-forward.
+    series = {
+        datetime.date(2026, 7, 3): 32.5,   # Friday
+        datetime.date(2026, 7, 5): 32.9,   # Sunday (forex bar)
+    }
+    with mock.patch.object(wlf, "_fetch_yahoo_fx_series", return_value=series):
+        sat = wlf.get_historical_fx_rate("USD", "TWD", datetime.date(2026, 7, 4))
+        sun = wlf.get_historical_fx_rate("USD", "TWD", datetime.date(2026, 7, 5))
+    assert abs(sat - 32.5) < 1e-6
+    assert abs(sun - 32.5) < 1e-6   # Sunday uses Friday, not the Sunday bar
+    assert sat == sun               # weekend stays flat
+
+
 def test_cross_via_usd():
     # from=JPY to=TWD: rate = (USD->TWD) / (USD->JPY)
     def fake_series(pair_currency, start, end):
