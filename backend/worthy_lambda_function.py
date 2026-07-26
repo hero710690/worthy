@@ -6349,6 +6349,29 @@ def handle_backfill_snapshot_value(body=None):
 
     logger.info(f"Starting snapshot value backfill {start_date}..{end_date} user={scope_user}")
 
+    import time
+    # Fetch each ticker's price series at most once for the whole call (shared
+    # across users) with retry/backoff, so mass requests don't get rate-limited
+    # by Yahoo. Only non-empty series are cached; an empty one is treated as a
+    # failure (we NEVER fall back to cost basis for a market asset).
+    series_cache = {}
+
+    def _series_for(ticker):
+        if ticker in series_cache:
+            return series_cache[ticker]
+        s = {}
+        for attempt in range(4):
+            try:
+                s = _fetch_yahoo_price_series(ticker, start_date, end_date)
+                if s:
+                    break
+            except Exception as e:
+                logger.warning(f"Value backfill: series fetch {ticker} attempt {attempt+1}/4 failed: {e}")
+            time.sleep(2)
+        if s:
+            series_cache[ticker] = s
+        return s
+
     if scope_user:
         user_ids = [scope_user]
     else:
@@ -6359,7 +6382,7 @@ def handle_backfill_snapshot_value(body=None):
         )
         user_ids = [r['user_id'] for r in rows]
 
-    results = {'updated': 0, 'users': 0, 'failed': []}
+    results = {'updated': 0, 'skipped': 0, 'users': 0, 'failed': []}
     for uid in user_ids:
         try:
             transactions, asset_meta, base_currency = _load_user_ledger(uid)
@@ -6376,22 +6399,12 @@ def handle_backfill_snapshot_value(body=None):
             if not date_rows:
                 continue
 
-            # Prefetch each investable ticker's daily price series once for the window.
-            price_series = {}
-            for m in asset_meta.values():
-                tk = m.get('ticker_symbol')
-                if m.get('asset_type') in INVESTABLE_ASSET_TYPES and tk and tk not in price_series:
-                    try:
-                        price_series[tk] = _fetch_yahoo_price_series(tk, start_date, end_date)
-                    except Exception as e:
-                        logger.warning(f"Value backfill: price series failed for {tk}: {e}")
-                        price_series[tk] = {}
-
             for dr in date_rows:
                 d = _coerce_date(dr['snapshot_date'])
                 holdings = reconstruct_holdings_asof(transactions, d)
                 total_value = 0.0
                 invest_value = 0.0
+                unpriceable = False
                 for aid, h in holdings.items():
                     m = asset_meta.get(str(aid))
                     if not m:
@@ -6403,10 +6416,16 @@ def handle_backfill_snapshot_value(body=None):
                     avg_cost = h['avg_cost']
 
                     if asset_type in INVESTABLE_ASSET_TYPES and ticker:
-                        px = _price_on(price_series.get(ticker, {}), d)
-                        native_val = shares * px if px else shares * avg_cost  # cost fallback
+                        px = _price_on(_series_for(ticker), d)
+                        if not px:
+                            # No real market price -> do NOT fall back to cost
+                            # (that silently understates). Skip this whole date.
+                            logger.warning(f"Value backfill: no price for {ticker} on {d} (user {uid}); skipping date")
+                            unpriceable = True
+                            break
+                        native_val = shares * px
                     else:
-                        # Cash ~ face amount; CD ~ principal (accrued interest ignored for backfill)
+                        # Cash ~ face amount; CD ~ principal (accrued interest ignored)
                         native_val = shares * avg_cost
 
                     try:
@@ -6418,6 +6437,10 @@ def handle_backfill_snapshot_value(body=None):
                     total_value += base_val
                     if asset_type in INVESTABLE_ASSET_TYPES:
                         invest_value += base_val
+
+                if unpriceable:
+                    results['skipped'] += 1
+                    continue
 
                 execute_update(
                     DATABASE_URL,

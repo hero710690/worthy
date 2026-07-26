@@ -59,6 +59,37 @@ def test_value_backfill_uses_historical_price_and_updates():
     assert abs(float(by_date["2026-07-03"][0]) - 1050.0) < 1e-6
 
 
+def test_value_backfill_skips_date_when_no_price_no_cost_fallback():
+    """If a market asset has no historical price, the date is SKIPPED (not written
+    at cost basis) so values are never silently understated."""
+    txns = [{"asset_id": "S", "transaction_type": "LumpSum",
+             "transaction_date": datetime.date(2026, 6, 1),
+             "shares": 10, "price_per_share": 90.0}]
+    meta = {"S": {"currency": "TWD", "asset_type": "Stock", "ticker_symbol": "9999.TW"}}
+
+    updates = []
+
+    def fake_query(db, query, params=None):
+        q = query.lower()
+        if "snapshot_date from portfolio_snapshots" in q:
+            return [{"snapshot_date": "2026-07-02"}]
+        return []
+
+    with mock.patch.object(wlf, "wait_for_egress_ready", return_value=True), \
+         mock.patch.object(wlf, "execute_query", side_effect=fake_query), \
+         mock.patch.object(wlf, "execute_update", side_effect=lambda *a: updates.append(a)), \
+         mock.patch.object(wlf, "_load_user_ledger", return_value=(txns, meta, "TWD")), \
+         mock.patch.object(wlf, "_fetch_yahoo_price_series", return_value={}), \
+         mock.patch("time.sleep"), \
+         mock.patch.object(wlf, "get_historical_fx_rate", return_value=1.0):
+        resp = wlf.handle_backfill_snapshot_value(
+            {"user_id": 7, "start_date": "2026-07-02", "end_date": "2026-07-02"})
+
+    assert resp["statusCode"] == 200
+    assert resp["body"] and '"skipped": 1' in resp["body"]
+    assert len(updates) == 0  # nothing written at cost basis
+
+
 def test_value_backfill_requires_dates():
     resp = wlf.handle_backfill_snapshot_value({"user_id": 7})
     assert resp["statusCode"] == 400
