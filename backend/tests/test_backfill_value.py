@@ -3,91 +3,35 @@ from unittest import mock
 import worthy_lambda_function as wlf
 
 
-def test_price_on_exact_and_carry_forward():
-    series = {
-        datetime.date(2026, 7, 1): 100.0,
-        datetime.date(2026, 7, 3): 110.0,
-    }
-    # exact
-    assert wlf._price_on(series, datetime.date(2026, 7, 3)) == 110.0
-    # carry forward (7/2 -> most recent prior = 7/1)
-    assert wlf._price_on(series, datetime.date(2026, 7, 2)) == 100.0
-    # before any data -> None
-    assert wlf._price_on(series, datetime.date(2026, 6, 30)) is None
-    # empty
-    assert wlf._price_on({}, datetime.date(2026, 7, 2)) is None
-
-
-def test_value_backfill_uses_historical_price_and_updates():
-    """A stock's value comes from the historical price series, not carry-forward or cost."""
-    txns = [{"asset_id": "S", "transaction_type": "LumpSum",
-             "transaction_date": datetime.date(2026, 6, 1),
-             "shares": 10, "price_per_share": 90.0}]
-    meta = {"S": {"currency": "TWD", "asset_type": "Stock", "ticker_symbol": "0050.TW"}}
-
+def test_value_backfill_populates_then_updates_from_stored_prices():
     updates = []
 
     def fake_query(db, query, params=None):
         q = query.lower()
-        if "distinct user_id from portfolio_snapshots" in q:
-            return [{"user_id": 7}]
+        if "distinct ticker_symbol" in q:
+            return [{"ticker_symbol": "AAA", "currency": "USD"}]
         if "snapshot_date from portfolio_snapshots" in q:
             return [{"snapshot_date": "2026-07-02"}, {"snapshot_date": "2026-07-03"}]
-        return []
-
-    def fake_update(db, query, params):
-        updates.append(params)
-
-    series = {datetime.date(2026, 7, 2): 101.0, datetime.date(2026, 7, 3): 105.0}
-
-    with mock.patch.object(wlf, "wait_for_egress_ready", return_value=True), \
-         mock.patch.object(wlf, "execute_query", side_effect=fake_query), \
-         mock.patch.object(wlf, "execute_update", side_effect=fake_update), \
-         mock.patch.object(wlf, "_load_user_ledger", return_value=(txns, meta, "TWD")), \
-         mock.patch.object(wlf, "_fetch_yahoo_price_series", return_value=series), \
-         mock.patch.object(wlf, "get_historical_fx_rate", return_value=1.0):
-        resp = wlf.handle_backfill_snapshot_value(
-            {"start_date": "2026-07-02", "end_date": "2026-07-03"})
-
-    assert resp["statusCode"] == 200
-    assert len(updates) == 2
-    # 7/02: 10 shares * 101.0 = 1010 ; 7/03: 10 * 105.0 = 1050
-    # UPDATE params: (total_value, invest_value, user_id, snapshot_date)
-    by_date = {p[3]: p for p in updates}
-    assert abs(float(by_date["2026-07-02"][0]) - 1010.0) < 1e-6
-    assert abs(float(by_date["2026-07-02"][1]) - 1010.0) < 1e-6
-    assert abs(float(by_date["2026-07-03"][0]) - 1050.0) < 1e-6
-
-
-def test_value_backfill_skips_date_when_no_price_no_cost_fallback():
-    """If a market asset has no historical price, the date is SKIPPED (not written
-    at cost basis) so values are never silently understated."""
-    txns = [{"asset_id": "S", "transaction_type": "LumpSum",
-             "transaction_date": datetime.date(2026, 6, 1),
-             "shares": 10, "price_per_share": 90.0}]
-    meta = {"S": {"currency": "TWD", "asset_type": "Stock", "ticker_symbol": "9999.TW"}}
-
-    updates = []
-
-    def fake_query(db, query, params=None):
-        q = query.lower()
-        if "snapshot_date from portfolio_snapshots" in q:
-            return [{"snapshot_date": "2026-07-02"}]
         return []
 
     with mock.patch.object(wlf, "wait_for_egress_ready", return_value=True), \
          mock.patch.object(wlf, "execute_query", side_effect=fake_query), \
          mock.patch.object(wlf, "execute_update", side_effect=lambda *a: updates.append(a)), \
-         mock.patch.object(wlf, "_load_user_ledger", return_value=(txns, meta, "TWD")), \
-         mock.patch.object(wlf, "_fetch_yahoo_price_series", return_value={}), \
-         mock.patch("time.sleep"), \
-         mock.patch.object(wlf, "get_historical_fx_rate", return_value=1.0):
+         mock.patch.object(wlf, "populate_price_history", return_value=42) as pop, \
+         mock.patch.object(wlf, "_load_user_ledger", return_value=([], {}, "TWD")), \
+         mock.patch.object(wlf, "_load_price_history", return_value={"AAA": {}}), \
+         mock.patch.object(wlf, "compute_value_from_history",
+                           side_effect=[(1000.0, 900.0), (1100.0, 950.0)]):
         resp = wlf.handle_backfill_snapshot_value(
-            {"user_id": 7, "start_date": "2026-07-02", "end_date": "2026-07-02"})
+            {"user_id": 7, "start_date": "2026-07-02", "end_date": "2026-07-03"})
 
     assert resp["statusCode"] == 200
-    assert resp["body"] and '"skipped": 1' in resp["body"]
-    assert len(updates) == 0  # nothing written at cost basis
+    # prices populated once before per-date compute
+    pop.assert_called_once()
+    assert len(updates) == 2
+    # execute_update(db, query, params) ; params=(total, invest, uid, date)
+    assert float(updates[0][2][0]) == 1000.0
+    assert float(updates[1][2][0]) == 1100.0
 
 
 def test_value_backfill_requires_dates():

@@ -5988,6 +5988,121 @@ def recompute_snapshot_invested(user_id, snapshot_date, transactions=None,
     }
 
 
+def populate_price_history(ticker_currency_pairs, start_date, end_date):
+    """
+    Fetch Yahoo daily closes for each ticker over [start_date, end_date] and upsert
+    into the price_history table. Fetches each ticker at most once (with retry), so
+    repeated recomputes read from storage instead of re-hitting Yahoo.
+
+    ticker_currency_pairs: iterable of (ticker_symbol, currency).
+    Returns the number of (ticker, date) rows stored.
+    """
+    import time
+    stored = 0
+    seen = set()
+    for ticker, currency in ticker_currency_pairs:
+        if not ticker or ticker in seen:
+            continue
+        seen.add(ticker)
+        series = {}
+        for attempt in range(4):
+            try:
+                series = _fetch_yahoo_price_series(ticker, start_date, end_date)
+                if series:
+                    break
+            except Exception as e:
+                logger.warning(f"populate_price_history: {ticker} attempt {attempt+1}/4 failed: {e}")
+            time.sleep(2)
+        if not series:
+            logger.warning(f"populate_price_history: no price series for {ticker} {start_date}..{end_date}")
+            continue
+        for d, close in series.items():
+            try:
+                execute_update(
+                    DATABASE_URL,
+                    """
+                    INSERT INTO price_history (ticker_symbol, price_date, close_price, currency)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (ticker_symbol, price_date)
+                    DO UPDATE SET close_price = EXCLUDED.close_price, currency = EXCLUDED.currency
+                    """,
+                    (ticker, d, close, currency)
+                )
+                stored += 1
+            except Exception as e:
+                logger.warning(f"populate_price_history: upsert failed {ticker} {d}: {e}")
+    return stored
+
+
+def _load_price_history(tickers, upto_date):
+    """Return { ticker: { date: close } } for the given tickers, price_date <= upto_date."""
+    tickers = [t for t in set(tickers) if t]
+    if not tickers:
+        return {}
+    rows = execute_query(
+        DATABASE_URL,
+        """
+        SELECT ticker_symbol, price_date, close_price
+        FROM price_history
+        WHERE ticker_symbol = ANY(%s) AND price_date <= %s
+        """,
+        (tickers, upto_date)
+    )
+    out = {}
+    for r in rows:
+        out.setdefault(r['ticker_symbol'], {})[_coerce_date(r['price_date'])] = float(r['close_price'])
+    return out
+
+
+def compute_value_from_history(transactions, asset_meta, base_currency, asof_date, price_map=None):
+    """
+    Point-in-time portfolio value from STORED historical close prices.
+
+    value = (cumulative quantity from the ledger as of asof_date)
+            x (stored close on/before asof_date, carried forward)
+            x (historical FX on asof_date)
+
+    Cash is valued at its balance and CD at principal (shares x avg_cost).
+    Returns (total_value, invest_value) in base_currency.
+    """
+    holdings = reconstruct_holdings_asof(transactions, asof_date)
+    if price_map is None:
+        tickers = [m.get('ticker_symbol') for m in asset_meta.values()
+                   if m.get('asset_type') in INVESTABLE_ASSET_TYPES and m.get('ticker_symbol')]
+        price_map = _load_price_history(tickers, asof_date)
+
+    total_value = 0.0
+    invest_value = 0.0
+    for aid, h in holdings.items():
+        m = asset_meta.get(str(aid))
+        if not m:
+            continue
+        currency = m.get('currency', 'USD')
+        asset_type = m.get('asset_type', 'Stock')
+        ticker = m.get('ticker_symbol')
+        shares = h['shares']
+        avg_cost = h['avg_cost']
+
+        if asset_type in INVESTABLE_ASSET_TYPES and ticker:
+            close = _price_on(price_map.get(ticker, {}), asof_date)
+            # No stored close on/before this date (symbol not yet trading) -> 0.
+            native_val = shares * close if close else 0.0
+        else:
+            # Cash ~ balance; CD ~ principal (accrued interest ignored by design).
+            native_val = shares * avg_cost
+
+        try:
+            rate = get_historical_fx_rate(currency, base_currency, asof_date)
+        except Exception:
+            rate = 1.0
+        base_val = native_val * rate
+
+        total_value += base_val
+        if asset_type in INVESTABLE_ASSET_TYPES:
+            invest_value += base_val
+    return total_value, invest_value
+
+
 def take_portfolio_snapshot(user_id, snapshot_date=None):
     """
     Compute and upsert a portfolio snapshot for user_id for today's date.
@@ -5998,150 +6113,32 @@ def take_portfolio_snapshot(user_id, snapshot_date=None):
     cumulative_dividends           — sum of all dividends ever recorded for user
     asset_count                    — number of assets with total_shares > 0
     """
-    rows = execute_query(
-        DATABASE_URL,
-        "SELECT base_currency FROM users WHERE user_id = %s",
-        (user_id,)
-    )
-    if not rows:
-        raise ValueError(f"User {user_id} not found")
-    base_currency = rows[0]['base_currency']
-
-    assets = execute_query(
-        DATABASE_URL,
-        """
-        SELECT ticker_symbol, total_shares, average_cost_basis, currency, asset_type,
-               interest_rate, maturity_date, start_date, created_at
-        FROM assets WHERE user_id = %s AND total_shares > 0
-        """,
-        (user_id,)
-    )
-
-    total_value = 0.0
-    total_invested = 0.0
-    invest_value = 0.0
-    invest_invested = 0.0
-    fallback_total_invested = 0.0
-    fallback_invest_invested = 0.0
-    price_fetch_failed = False
-
-    for asset in assets:
-        ticker = asset['ticker_symbol']
-        shares = float(asset['total_shares'])
-        avg_cost = float(asset['average_cost_basis'])
-        currency = asset.get('currency', 'USD')
-        asset_type = asset.get('asset_type', 'Stock')
-
-        invested_amount = shares * avg_cost
-
-        if asset_type == 'Cash':
-            current_amount = invested_amount
-        elif asset_type == 'CD':
-            interest_rate = asset.get('interest_rate')
-            maturity_date = asset.get('maturity_date')
-            start_date = asset.get('start_date') or asset.get('created_at')
-            if interest_rate and maturity_date and start_date:
-                start_str = start_date.strftime('%Y-%m-%d') if hasattr(start_date, 'strftime') else str(start_date)[:10]
-                mat_str = maturity_date.strftime('%Y-%m-%d') if hasattr(maturity_date, 'strftime') else str(maturity_date)
-                cd_calc = calculate_cd_compound_interest(
-                    principal=shares * avg_cost,
-                    annual_rate=float(interest_rate),
-                    start_date=start_str,
-                    maturity_date=mat_str,
-                    compounding_frequency='daily'
-                )
-                current_amount = cd_calc['current_value']
-            else:
-                current_amount = invested_amount
-        else:
-            try:
-                price_data = fetch_stock_price_with_fallback(ticker)
-                raw_price = (price_data.get('current_price') or price_data.get('price')) if price_data else None
-                # Mock data is a garbage fallback ($100 USD for unmapped symbols)
-                # that silently corrupts the snapshot (e.g. TW stocks priced in
-                # USD). Treat it as a failed fetch.
-                is_mock = bool(price_data) and price_data.get('source') == 'mock'
-                if raw_price and not is_mock:
-                    current_price = float(raw_price)
-                else:
-                    # Per-asset fallback: use THIS asset's own previous close if the
-                    # API returned a real (non-mock) quote with one, so a bad current
-                    # price for one asset doesn't freeze the whole snapshot.
-                    prev_close = price_data.get('previousClose') if (price_data and not is_mock) else None
-                    if prev_close:
-                        current_price = float(prev_close)
-                        logger.warning(f"Snapshot: current price missing for {ticker}, using its previous close {prev_close}")
-                    else:
-                        # No usable per-asset price (all APIs failed / mock). Fall back
-                        # to cost here and carry forward the aggregate value below.
-                        price_fetch_failed = True
-                        current_price = avg_cost
-                        logger.warning(f"Snapshot: price unavailable/mock for {ticker}, will carry forward previous snapshot value")
-            except Exception:
-                price_fetch_failed = True
-                current_price = avg_cost
-                logger.warning(f"Snapshot: price unavailable for {ticker}, will carry forward previous snapshot value")
-            current_amount = shares * current_price
-
-        if currency != base_currency:
-            try:
-                current_amount = convert_currency_amount(current_amount, currency, base_currency)
-                invested_amount = convert_currency_amount(invested_amount, currency, base_currency)
-            except Exception:
-                logger.warning(f"Snapshot: currency conversion failed for {ticker}, skipping")
-                continue
-
-        total_value += current_amount
-        fallback_total_invested += invested_amount
-
-        if asset_type in INVESTABLE_ASSET_TYPES:
-            invest_value += current_amount
-            fallback_invest_invested += invested_amount
-
-    # Invested (cost basis) and cumulative_dividends are reconstructed
-    # point-in-time from the ledger so backdated transactions and sells are
-    # reflected correctly.
-    cumulative_dividends = 0.0
-    try:
-        _txns, _meta, _base = _load_user_ledger(user_id)
-        _asof = _coerce_date(snapshot_date or date.today())
-        # Compute dividends first so an invested-computation failure below does
-        # not silently drop the (already-available) cumulative dividends.
-        cumulative_dividends = compute_cumulative_dividends_asof(
-            _txns, _meta, _base, _asof)
-        total_invested, invest_invested = compute_invested_asof(
-            _txns, _meta, _base, _asof)
-    except Exception as e:
-        logger.error(f"Snapshot: ledger invested computation failed for user {user_id}: {e}; "
-                     f"falling back to asset-table (current-holdings) invested")
-        total_invested = fallback_total_invested
-        invest_invested = fallback_invest_invested
-
-    asset_count = len(assets)
     today = snapshot_date or date.today()
+    asof = _coerce_date(today)
 
-    if price_fetch_failed:
-        prior_rows = execute_query(
-            DATABASE_URL,
-            """
-            SELECT total_value, invest_value FROM portfolio_snapshots
-            WHERE user_id = %s AND snapshot_date < %s
-            ORDER BY snapshot_date DESC LIMIT 1
-            """,
-            (user_id, today)
-        )
-        if prior_rows:
-            total_value = prior_rows[0]['total_value']
-            invest_value = prior_rows[0]['invest_value']
-            logger.warning(
-                f"Snapshot: price fetch failed for user {user_id} on {today}; "
-                f"carrying forward prior snapshot values (total={total_value}, invest={invest_value})"
-            )
-        else:
-            logger.warning(
-                f"Snapshot: price fetch failed for user {user_id} on {today} and no prior snapshot exists; "
-                f"using cost-basis fallback values"
-            )
+    # The ledger drives everything, point-in-time: quantity (for value), cost
+    # basis (invested), and dividends.
+    transactions, asset_meta, base_currency = _load_user_ledger(user_id)
+
+    # Value from STORED close prices: fetch today's close for this user's
+    # investable symbols into price_history, then value = quantity x close x FX.
+    pairs = [(m.get('ticker_symbol'), m.get('currency', 'USD'))
+             for m in asset_meta.values()
+             if m.get('asset_type') in INVESTABLE_ASSET_TYPES and m.get('ticker_symbol')]
+    try:
+        populate_price_history(pairs, asof, asof)
+    except Exception as e:
+        logger.warning(f"Snapshot: price history population failed for user {user_id}: {e}")
+
+    total_value, invest_value = compute_value_from_history(
+        transactions, asset_meta, base_currency, asof)
+
+    cumulative_dividends = compute_cumulative_dividends_asof(
+        transactions, asset_meta, base_currency, asof)
+    total_invested, invest_invested = compute_invested_asof(
+        transactions, asset_meta, base_currency, asof)
+
+    asset_count = len(reconstruct_holdings_asof(transactions, asof))
 
     execute_update(
         DATABASE_URL,
@@ -6349,29 +6346,6 @@ def handle_backfill_snapshot_value(body=None):
 
     logger.info(f"Starting snapshot value backfill {start_date}..{end_date} user={scope_user}")
 
-    import time
-    # Fetch each ticker's price series at most once for the whole call (shared
-    # across users) with retry/backoff, so mass requests don't get rate-limited
-    # by Yahoo. Only non-empty series are cached; an empty one is treated as a
-    # failure (we NEVER fall back to cost basis for a market asset).
-    series_cache = {}
-
-    def _series_for(ticker):
-        if ticker in series_cache:
-            return series_cache[ticker]
-        s = {}
-        for attempt in range(4):
-            try:
-                s = _fetch_yahoo_price_series(ticker, start_date, end_date)
-                if s:
-                    break
-            except Exception as e:
-                logger.warning(f"Value backfill: series fetch {ticker} attempt {attempt+1}/4 failed: {e}")
-            time.sleep(2)
-        if s:
-            series_cache[ticker] = s
-        return s
-
     if scope_user:
         user_ids = [scope_user]
     else:
@@ -6382,7 +6356,32 @@ def handle_backfill_snapshot_value(body=None):
         )
         user_ids = [r['user_id'] for r in rows]
 
-    results = {'updated': 0, 'skipped': 0, 'users': 0, 'failed': []}
+    # Populate price_history once for ALL investable symbols in scope over the
+    # range, so per-date value computation reads stored prices (no re-fetch, no
+    # rate-limiting). Symbols come from the assets table (shared across users).
+    if scope_user:
+        sym_rows = execute_query(
+            DATABASE_URL,
+            """
+            SELECT DISTINCT ticker_symbol, currency FROM assets
+            WHERE user_id = %s AND asset_type = ANY(%s) AND ticker_symbol IS NOT NULL
+            """,
+            (scope_user, list(INVESTABLE_ASSET_TYPES))
+        )
+    else:
+        sym_rows = execute_query(
+            DATABASE_URL,
+            """
+            SELECT DISTINCT ticker_symbol, currency FROM assets
+            WHERE asset_type = ANY(%s) AND ticker_symbol IS NOT NULL
+            """,
+            (list(INVESTABLE_ASSET_TYPES),)
+        )
+    pairs = [(r['ticker_symbol'], r.get('currency', 'USD')) for r in sym_rows]
+    stored = populate_price_history(pairs, start_date, end_date)
+    logger.info(f"Value backfill: stored {stored} price rows for {len(pairs)} symbols")
+
+    results = {'updated': 0, 'users': 0, 'failed': []}
     for uid in user_ids:
         try:
             transactions, asset_meta, base_currency = _load_user_ledger(uid)
@@ -6399,49 +6398,15 @@ def handle_backfill_snapshot_value(body=None):
             if not date_rows:
                 continue
 
+            # Load this user's stored price history once (<= end_date) for carry-forward.
+            tickers = [m.get('ticker_symbol') for m in asset_meta.values()
+                       if m.get('asset_type') in INVESTABLE_ASSET_TYPES and m.get('ticker_symbol')]
+            price_map = _load_price_history(tickers, end_date)
+
             for dr in date_rows:
                 d = _coerce_date(dr['snapshot_date'])
-                holdings = reconstruct_holdings_asof(transactions, d)
-                total_value = 0.0
-                invest_value = 0.0
-                unpriceable = False
-                for aid, h in holdings.items():
-                    m = asset_meta.get(str(aid))
-                    if not m:
-                        continue
-                    currency = m.get('currency', 'USD')
-                    asset_type = m.get('asset_type', 'Stock')
-                    ticker = m.get('ticker_symbol')
-                    shares = h['shares']
-                    avg_cost = h['avg_cost']
-
-                    if asset_type in INVESTABLE_ASSET_TYPES and ticker:
-                        px = _price_on(_series_for(ticker), d)
-                        if not px:
-                            # No real market price -> do NOT fall back to cost
-                            # (that silently understates). Skip this whole date.
-                            logger.warning(f"Value backfill: no price for {ticker} on {d} (user {uid}); skipping date")
-                            unpriceable = True
-                            break
-                        native_val = shares * px
-                    else:
-                        # Cash ~ face amount; CD ~ principal (accrued interest ignored)
-                        native_val = shares * avg_cost
-
-                    try:
-                        rate = get_historical_fx_rate(currency, base_currency, d)
-                    except Exception:
-                        rate = 1.0
-                    base_val = native_val * rate
-
-                    total_value += base_val
-                    if asset_type in INVESTABLE_ASSET_TYPES:
-                        invest_value += base_val
-
-                if unpriceable:
-                    results['skipped'] += 1
-                    continue
-
+                total_value, invest_value = compute_value_from_history(
+                    transactions, asset_meta, base_currency, d, price_map=price_map)
                 execute_update(
                     DATABASE_URL,
                     """
@@ -8560,6 +8525,12 @@ def lambda_handler(event, context):
                         price_per_share DECIMAL(20,8) NOT NULL,
                         currency VARCHAR(10) DEFAULT 'USD',
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""",
+                    """CREATE TABLE IF NOT EXISTS price_history (
+                        ticker_symbol VARCHAR(20) NOT NULL,
+                        price_date DATE NOT NULL,
+                        close_price DECIMAL(20,8) NOT NULL,
+                        currency VARCHAR(10) DEFAULT 'USD',
+                        PRIMARY KEY (ticker_symbol, price_date))""",
                 ]
                 results = []
                 for sql in schema_sql:
