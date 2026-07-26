@@ -13,9 +13,21 @@ import jwt
 import requests
 import pytz
 import math
+import socket
 from datetime import datetime, timedelta, date
 from dateutil.relativedelta import relativedelta
 from email_validator import validate_email, EmailNotValidError
+
+# Force IPv4 for all outbound HTTP (requests/urllib3). The Cloud Run VPC has no
+# IPv6 egress route, so connecting to dual-stack hosts like Yahoo Finance
+# (query1.finance.yahoo.com has AAAA records) fails with "[Errno 101] Network is
+# unreachable" when the stack tries IPv6 first. Restricting getaddrinfo to IPv4
+# makes those hosts reachable via their IPv4 addresses.
+try:
+    import urllib3.util.connection as _urllib3_conn
+    _urllib3_conn.allowed_gai_family = lambda: socket.AF_INET
+except Exception as _e:  # pragma: no cover - defensive; never block startup
+    logging.getLogger().warning(f"Could not force IPv4 for urllib3: {_e}")
 
 # Caching imports
 from cachetools import TTLCache
