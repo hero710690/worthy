@@ -17,6 +17,7 @@ def test_batch_recomputes_last_90_days_per_user():
     recompute_calls = []
 
     with mock.patch.object(wlf, "execute_query", side_effect=fake_query), \
+         mock.patch.object(wlf, "wait_for_egress_ready", return_value=True), \
          mock.patch.object(wlf, "take_portfolio_snapshot", return_value={"total_value": 1}), \
          mock.patch.object(wlf, "_load_user_ledger", return_value=([], {}, "TWD")), \
          mock.patch.object(wlf, "recompute_snapshot_invested",

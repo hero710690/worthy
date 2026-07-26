@@ -6137,6 +6137,32 @@ def take_portfolio_snapshot(user_id, snapshot_date=None):
         'base_currency': base_currency,
     }
 
+def wait_for_egress_ready(max_attempts=10, delay_seconds=4, timeout=6):
+    """
+    Poll a lightweight outbound request until internet egress works, to cover the
+    Cloud Run Direct VPC egress + Cloud NAT cold-start window (~30s) on a fresh
+    instance. Returns True once a canary request to Yahoo succeeds, or False if it
+    never does within the budget (batch then proceeds best-effort).
+
+    On a warm instance this returns on the first attempt (sub-second).
+    """
+    import time
+    canary_url = "https://query1.finance.yahoo.com/v8/finance/chart/AAPL?interval=1d&range=1d"
+    for attempt in range(1, max_attempts + 1):
+        try:
+            resp = requests.get(canary_url, headers={"User-Agent": "Mozilla/5.0"}, timeout=timeout)
+            if resp.status_code == 200:
+                logger.info(f"Egress ready after {attempt} attempt(s)")
+                return True
+            logger.warning(f"Egress canary HTTP {resp.status_code} (attempt {attempt}/{max_attempts})")
+        except Exception as e:
+            logger.warning(f"Egress not ready (attempt {attempt}/{max_attempts}): {e}")
+        if attempt < max_attempts:
+            time.sleep(delay_seconds)
+    logger.error(f"Egress still not ready after {max_attempts} attempts; proceeding best-effort")
+    return False
+
+
 def handle_batch_portfolio_snapshot(body=None):
     """
     Batch endpoint: take a snapshot for every active user.
@@ -6146,6 +6172,12 @@ def handle_batch_portfolio_snapshot(body=None):
     from datetime import date, timedelta
 
     logger.info("Starting portfolio snapshot batch")
+
+    # Cold-start guard: Cloud Run Direct VPC egress + Cloud NAT can take ~30s to
+    # become ready on a fresh instance. If the batch starts pricing before egress
+    # is up, Yahoo fetches fail ("Network is unreachable") -> mock -> the whole
+    # portfolio value freezes via carry-forward. Wait for egress before pricing.
+    wait_for_egress_ready()
 
     backfill_days = 0
     if body and isinstance(body, dict):
