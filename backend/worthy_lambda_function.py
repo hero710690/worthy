@@ -4452,6 +4452,44 @@ def get_historical_fx_rate(from_currency, to_currency, on_date):
         return convert_currency_amount(1.0, from_currency, to_currency)
 
 
+def _fetch_yahoo_price_series(symbol, start_date, end_date):
+    """
+    Daily close prices for a stock symbol from Yahoo Finance over the inclusive
+    window. Returns { datetime.date: float } in the symbol's native currency.
+    """
+    import datetime as _dt
+    period1 = int(_dt.datetime.combine(start_date - _dt.timedelta(days=14), _dt.time()).timestamp())
+    period2 = int(_dt.datetime.combine(end_date + _dt.timedelta(days=1), _dt.time()).timestamp())
+    url = (
+        f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+        f"?period1={period1}&period2={period2}&interval=1d"
+    )
+    response = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=15)
+    response.raise_for_status()
+    data = response.json()
+    result = data["chart"]["result"][0]
+    timestamps = result.get("timestamp") or []
+    closes = result["indicators"]["quote"][0].get("close") or []
+    series = {}
+    for ts, close in zip(timestamps, closes):
+        if close is None:
+            continue
+        series[_dt.datetime.utcfromtimestamp(ts).date()] = float(close)
+    return series
+
+
+def _price_on(series, on_date):
+    """Close on on_date, else the most recent prior close (carry forward). None if empty."""
+    if not series:
+        return None
+    if on_date in series:
+        return series[on_date]
+    prior = [d for d in series.keys() if d <= on_date]
+    if not prior:
+        return None
+    return series[max(prior)]
+
+
 def get_historical_stock_price(ticker, target_date, fallback_current_price=None):
     """
     Get historical stock price for a specific date with multiple fallback strategies
@@ -5896,7 +5934,7 @@ def _load_user_ledger(user_id):
         DATABASE_URL,
         """
         SELECT t.asset_id, t.transaction_type, t.transaction_date,
-               t.shares, t.price_per_share, a.currency, a.asset_type
+               t.shares, t.price_per_share, a.currency, a.asset_type, a.ticker_symbol
         FROM transactions t
         JOIN assets a ON t.asset_id = a.asset_id
         WHERE a.user_id = %s
@@ -5915,7 +5953,8 @@ def _load_user_ledger(user_id):
             'price_per_share': r['price_per_share'],
         })
         asset_meta[aid] = {'currency': r.get('currency', 'USD'),
-                           'asset_type': r.get('asset_type', 'Stock')}
+                           'asset_type': r.get('asset_type', 'Stock'),
+                           'ticker_symbol': r.get('ticker_symbol')}
     return transactions, asset_meta, base_currency
 
 
@@ -6286,6 +6325,119 @@ def handle_backfill_snapshot_invested(body=None):
                 f"{results['users']} users, {len(results['failed'])} failed")
     return create_response(200, {
         'message': 'Snapshot invested backfill complete',
+        'results': results,
+    })
+
+
+def handle_backfill_snapshot_value(body=None):
+    """
+    Reconstruct total_value / invest_value for existing snapshots over a date range
+    using historical daily prices (Yahoo) + point-in-time holdings (ledger) +
+    historical FX. Fixes value rows that were frozen by carry-forward.
+
+    body: {"start_date": "YYYY-MM-DD", "end_date": "YYYY-MM-DD", "user_id": <optional>}
+    """
+    if not body or not body.get('start_date') or not body.get('end_date'):
+        return create_error_response(400, "start_date and end_date are required")
+
+    start_date = _coerce_date(body['start_date'])
+    end_date = _coerce_date(body['end_date'])
+    scope_user = body.get('user_id')
+
+    # Egress may be cold on a fresh instance; ensure outbound works before pricing.
+    wait_for_egress_ready()
+
+    logger.info(f"Starting snapshot value backfill {start_date}..{end_date} user={scope_user}")
+
+    if scope_user:
+        user_ids = [scope_user]
+    else:
+        rows = execute_query(
+            DATABASE_URL,
+            "SELECT DISTINCT user_id FROM portfolio_snapshots WHERE snapshot_date BETWEEN %s AND %s",
+            (start_date, end_date)
+        )
+        user_ids = [r['user_id'] for r in rows]
+
+    results = {'updated': 0, 'users': 0, 'failed': []}
+    for uid in user_ids:
+        try:
+            transactions, asset_meta, base_currency = _load_user_ledger(uid)
+
+            date_rows = execute_query(
+                DATABASE_URL,
+                """
+                SELECT snapshot_date FROM portfolio_snapshots
+                WHERE user_id = %s AND snapshot_date BETWEEN %s AND %s
+                ORDER BY snapshot_date
+                """,
+                (uid, start_date, end_date)
+            )
+            if not date_rows:
+                continue
+
+            # Prefetch each investable ticker's daily price series once for the window.
+            price_series = {}
+            for m in asset_meta.values():
+                tk = m.get('ticker_symbol')
+                if m.get('asset_type') in INVESTABLE_ASSET_TYPES and tk and tk not in price_series:
+                    try:
+                        price_series[tk] = _fetch_yahoo_price_series(tk, start_date, end_date)
+                    except Exception as e:
+                        logger.warning(f"Value backfill: price series failed for {tk}: {e}")
+                        price_series[tk] = {}
+
+            for dr in date_rows:
+                d = _coerce_date(dr['snapshot_date'])
+                holdings = reconstruct_holdings_asof(transactions, d)
+                total_value = 0.0
+                invest_value = 0.0
+                for aid, h in holdings.items():
+                    m = asset_meta.get(str(aid))
+                    if not m:
+                        continue
+                    currency = m.get('currency', 'USD')
+                    asset_type = m.get('asset_type', 'Stock')
+                    ticker = m.get('ticker_symbol')
+                    shares = h['shares']
+                    avg_cost = h['avg_cost']
+
+                    if asset_type in INVESTABLE_ASSET_TYPES and ticker:
+                        px = _price_on(price_series.get(ticker, {}), d)
+                        native_val = shares * px if px else shares * avg_cost  # cost fallback
+                    else:
+                        # Cash ~ face amount; CD ~ principal (accrued interest ignored for backfill)
+                        native_val = shares * avg_cost
+
+                    try:
+                        rate = get_historical_fx_rate(currency, base_currency, d)
+                    except Exception:
+                        rate = 1.0
+                    base_val = native_val * rate
+
+                    total_value += base_val
+                    if asset_type in INVESTABLE_ASSET_TYPES:
+                        invest_value += base_val
+
+                execute_update(
+                    DATABASE_URL,
+                    """
+                    UPDATE portfolio_snapshots
+                    SET total_value = %s, invest_value = %s
+                    WHERE user_id = %s AND snapshot_date = %s
+                    """,
+                    (total_value, invest_value, uid, dr['snapshot_date'])
+                )
+                results['updated'] += 1
+            results['users'] += 1
+        except Exception as e:
+            logger.error(f"Value backfill failed for user {uid}: {str(e)}")
+            results['failed'].append({'user_id': uid, 'error': str(e)})
+
+    logger.info(f"Value backfill complete: {results['updated']} snapshots, "
+                f"{results['users']} users, {len(results['failed'])} failed")
+    return create_response(200, {
+        'message': 'Snapshot value backfill complete',
         'results': results,
     })
 
@@ -8645,6 +8797,10 @@ def lambda_handler(event, context):
         elif path == '/batch/backfill-snapshot-invested' and http_method == 'POST':
             body = json.loads(event.get('body', '{}')) if event.get('body') else {}
             return handle_backfill_snapshot_invested(body)
+
+        elif path == '/batch/backfill-snapshot-value' and http_method == 'POST':
+            body = json.loads(event.get('body', '{}')) if event.get('body') else {}
+            return handle_backfill_snapshot_value(body)
 
         elif path == '/portfolio/snapshots' and http_method == 'GET':
             request_headers = event.get('headers', {})
