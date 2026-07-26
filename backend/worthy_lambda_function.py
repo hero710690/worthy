@@ -6000,10 +6000,24 @@ def populate_price_history(ticker_currency_pairs, start_date, end_date):
     import time
     stored = 0
     seen = set()
+    single_day = (start_date == end_date)
     for ticker, currency in ticker_currency_pairs:
         if not ticker or ticker in seen:
             continue
         seen.add(ticker)
+        # Daily case: if this symbol's close for the date is already stored,
+        # skip the Yahoo fetch (avoids re-fetching the same symbol per user).
+        if single_day:
+            try:
+                existing = execute_query(
+                    DATABASE_URL,
+                    "SELECT 1 FROM price_history WHERE ticker_symbol = %s AND price_date = %s LIMIT 1",
+                    (ticker, end_date)
+                )
+                if existing:
+                    continue
+            except Exception:
+                pass
         series = {}
         for attempt in range(4):
             try:
