@@ -5953,7 +5953,8 @@ def _load_user_ledger(user_id):
         DATABASE_URL,
         """
         SELECT t.asset_id, t.transaction_type, t.transaction_date,
-               t.shares, t.price_per_share, a.currency, a.asset_type, a.ticker_symbol
+               t.shares, t.price_per_share, a.currency, a.asset_type, a.ticker_symbol,
+               a.total_shares, a.average_cost_basis
         FROM transactions t
         JOIN assets a ON t.asset_id = a.asset_id
         WHERE a.user_id = %s
@@ -5973,7 +5974,9 @@ def _load_user_ledger(user_id):
         })
         asset_meta[aid] = {'currency': r.get('currency', 'USD'),
                            'asset_type': r.get('asset_type', 'Stock'),
-                           'ticker_symbol': r.get('ticker_symbol')}
+                           'ticker_symbol': r.get('ticker_symbol'),
+                           'total_shares': float(r['total_shares']) if r.get('total_shares') is not None else 0.0,
+                           'average_cost_basis': float(r['average_cost_basis']) if r.get('average_cost_basis') is not None else 0.0}
     return transactions, asset_meta, base_currency
 
 
@@ -6098,25 +6101,53 @@ def compute_value_from_history(transactions, asset_meta, base_currency, asof_dat
     Cash is valued at its balance and CD at principal (shares x avg_cost).
     Returns (total_value, invest_value) in base_currency.
     """
+    import datetime as _dt
     # include_dividend_shares=True: reinvested dividends added shares to the
-    # holdings, so the value quantity must include them (matches assets.total_shares).
+    # holdings, so the value quantity includes them (matches assets.total_shares).
     holdings = reconstruct_holdings_asof(transactions, asof_date, include_dividend_shares=True)
+    # Full-ledger position (all transactions) to detect assets whose ledger does
+    # NOT reconcile with assets.total_shares (missing/unrecorded transactions).
+    # For those, the ledger can't give a correct point-in-time quantity, so we
+    # use the current total_shares for the whole range (per product decision).
+    full_ledger = reconstruct_holdings_asof(transactions, _dt.date(2999, 1, 1), include_dividend_shares=True)
+
     if price_map is None:
         tickers = [m.get('ticker_symbol') for m in asset_meta.values()
                    if m.get('asset_type') in INVESTABLE_ASSET_TYPES and m.get('ticker_symbol')]
         price_map = _load_price_history(tickers, asof_date)
 
+    # Asset ids to value: those held point-in-time, plus unreconciled assets that
+    # are currently held but under-represented (or absent) in the ledger.
+    asset_ids = set(holdings.keys())
+    for aid, m in asset_meta.items():
+        ts = m.get('total_shares', 0.0)
+        ledger_latest = full_ledger.get(aid, {}).get('shares', 0.0)
+        if ts > 1e-9 and abs(ledger_latest - ts) > 0.01:
+            asset_ids.add(aid)
+
     total_value = 0.0
     invest_value = 0.0
-    for aid, h in holdings.items():
+    for aid in asset_ids:
         m = asset_meta.get(str(aid))
         if not m:
             continue
         currency = m.get('currency', 'USD')
         asset_type = m.get('asset_type', 'Stock')
         ticker = m.get('ticker_symbol')
-        shares = h['shares']
-        avg_cost = h['avg_cost']
+        total_shares = m.get('total_shares', 0.0)
+        ledger_latest = full_ledger.get(aid, {}).get('shares', 0.0)
+
+        # Reconciled ledger -> accurate point-in-time quantity. Otherwise fall
+        # back to current total_shares (constant across the range).
+        if total_shares > 1e-9 and abs(ledger_latest - total_shares) > 0.01:
+            shares = total_shares
+            avg_cost = m.get('average_cost_basis', 0.0)
+        else:
+            h = holdings.get(aid)
+            if not h:
+                continue
+            shares = h['shares']
+            avg_cost = h['avg_cost']
 
         if asset_type in INVESTABLE_ASSET_TYPES and ticker:
             close = _price_on(price_map.get(ticker, {}), asof_date)

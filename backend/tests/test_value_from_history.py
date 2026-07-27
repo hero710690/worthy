@@ -80,6 +80,36 @@ def test_cash_valued_at_balance_not_investable():
     assert invest == 0.0   # cash excluded from invest_value
 
 
+def test_unreconciled_ledger_falls_back_to_total_shares():
+    """When the ledger doesn't reconcile with assets.total_shares (missing txns),
+    value uses current total_shares, not the undercounted ledger quantity."""
+    txns = [_tx("S", "Initialization", "2025-08-03", 1500, 41.0)]  # ledger = 1500
+    meta = {"S": {"currency": "TWD", "asset_type": "Stock", "ticker_symbol": "6919.TW",
+                  "total_shares": 15000.0, "average_cost_basis": 41.0}}  # actual = 15000
+    price_map = {"6919.TW": {datetime.date(2026, 7, 2): 50.0}}
+    with mock.patch.object(wlf, "get_historical_fx_rate", return_value=1.0):
+        total, invest = wlf.compute_value_from_history(
+            txns, meta, "TWD", datetime.date(2026, 7, 2), price_map=price_map)
+    assert abs(total - 750000.0) < 1e-6   # 15000 * 50, not 1500 * 50
+    assert abs(invest - 750000.0) < 1e-6
+
+
+def test_reconciled_ledger_uses_point_in_time_quantity():
+    """When the ledger reconciles with total_shares, value uses the accurate
+    point-in-time quantity (e.g. fewer shares before a later buy)."""
+    txns = [
+        _tx("S", "LumpSum", "2026-06-01", 10, 90.0),
+        _tx("S", "LumpSum", "2026-07-20", 5, 100.0),   # after asof 7/02
+    ]
+    meta = {"S": {"currency": "TWD", "asset_type": "Stock", "ticker_symbol": "AAA",
+                  "total_shares": 15.0, "average_cost_basis": 93.0}}  # reconciles (10+5)
+    price_map = {"AAA": {datetime.date(2026, 7, 2): 100.0}}
+    with mock.patch.object(wlf, "get_historical_fx_rate", return_value=1.0):
+        total, _ = wlf.compute_value_from_history(
+            txns, meta, "TWD", datetime.date(2026, 7, 2), price_map=price_map)
+    assert abs(total - 1000.0) < 1e-6   # only 10 shares held on 7/02 (not 15)
+
+
 def test_no_stored_close_contributes_zero_not_cost():
     txns = [_tx("S", "LumpSum", "2026-06-01", 10, 90.0)]
     meta = {"S": {"currency": "USD", "asset_type": "Stock", "ticker_symbol": "AAA"}}
