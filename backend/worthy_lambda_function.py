@@ -5818,13 +5818,19 @@ def _coerce_date(value):
     return _dt.date.fromisoformat(str(value)[:10])
 
 
-def reconstruct_holdings_asof(transactions, asof_date):
+def reconstruct_holdings_asof(transactions, asof_date, include_dividend_shares=False):
     """
     Replay a user's transaction ledger to reconstruct per-asset holdings and
     average cost basis (native currency) as of asof_date.
 
     Average-cost method: buys update the running average; sells reduce shares
-    but leave average cost per share unchanged; dividends are ignored.
+    but leave average cost per share unchanged.
+
+    Dividends: by default ignored (so cost-basis reconstruction is unaffected).
+    When include_dividend_shares=True, a Dividend with shares > 0 is treated as
+    a reinvestment (adds shares), so the returned quantity matches the actual
+    holdings for VALUE computation. Cash dividends (shares == 0) never change
+    the quantity. Callers computing cost basis must keep the default (False).
 
     Returns { asset_id: {'shares': float, 'avg_cost': float} } for assets that
     still hold shares (> 1e-9) as of the date.
@@ -5844,12 +5850,15 @@ def reconstruct_holdings_asof(transactions, asof_date):
         shares = float(t['shares'])
         price = float(t['price_per_share'])
 
-        if ttype == 'Dividend':
+        is_reinvested_dividend = (
+            ttype == 'Dividend' and include_dividend_shares and shares > 0
+        )
+        if ttype == 'Dividend' and not is_reinvested_dividend:
             continue
 
         h = holdings.setdefault(aid, {'shares': 0.0, 'avg_cost': 0.0})
 
-        if ttype in BUY_TYPES:
+        if ttype in BUY_TYPES or is_reinvested_dividend:
             new_shares = h['shares'] + shares
             if new_shares > 1e-9:
                 h['avg_cost'] = (h['shares'] * h['avg_cost'] + shares * price) / new_shares
@@ -6089,7 +6098,9 @@ def compute_value_from_history(transactions, asset_meta, base_currency, asof_dat
     Cash is valued at its balance and CD at principal (shares x avg_cost).
     Returns (total_value, invest_value) in base_currency.
     """
-    holdings = reconstruct_holdings_asof(transactions, asof_date)
+    # include_dividend_shares=True: reinvested dividends added shares to the
+    # holdings, so the value quantity must include them (matches assets.total_shares).
+    holdings = reconstruct_holdings_asof(transactions, asof_date, include_dividend_shares=True)
     if price_map is None:
         tickers = [m.get('ticker_symbol') for m in asset_meta.values()
                    if m.get('asset_type') in INVESTABLE_ASSET_TYPES and m.get('ticker_symbol')]

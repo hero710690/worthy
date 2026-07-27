@@ -51,6 +51,25 @@ def test_value_carries_forward_close_on_weekend():
     assert abs(total - 250.0) < 1e-6   # carries forward Fri close: 5 * 50
 
 
+def test_reinvested_dividend_shares_count_toward_value():
+    """A Dividend with shares>0 is a reinvestment; its shares must be included in
+    the value quantity (they are part of actual holdings)."""
+    txns = [
+        _tx("S", "LumpSum", "2026-06-01", 100, 90.0),
+        _tx("S", "Dividend", "2026-06-15", 5, 95.0),   # reinvested -> +5 shares
+    ]
+    meta = {"S": {"currency": "TWD", "asset_type": "Stock", "ticker_symbol": "AAA"}}
+    price_map = {"AAA": {datetime.date(2026, 7, 2): 100.0}}
+    with mock.patch.object(wlf, "get_historical_fx_rate", return_value=1.0):
+        total, _ = wlf.compute_value_from_history(
+            txns, meta, "TWD", datetime.date(2026, 7, 2), price_map=price_map)
+    assert abs(total - 10500.0) < 1e-6   # (100 + 5) * 100
+
+    # And the default reconstruction (cost basis path) still excludes dividends:
+    holdings_cost = wlf.reconstruct_holdings_asof(txns, datetime.date(2026, 7, 2))
+    assert abs(holdings_cost["S"]["shares"] - 100.0) < 1e-6
+
+
 def test_cash_valued_at_balance_not_investable():
     txns = [_tx("C", "Initialization", "2026-06-01", 1, 5000.0)]
     meta = {"C": {"currency": "TWD", "asset_type": "Cash", "ticker_symbol": None}}
