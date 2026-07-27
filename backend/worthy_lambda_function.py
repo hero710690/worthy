@@ -4411,23 +4411,32 @@ def _fetch_yahoo_fx_series(pair_currency, start_date, end_date):
 
 
 def _usd_rate_on(pair_currency, on_date):
-    """USD -> pair_currency close for on_date, carrying forward within a cached window."""
+    """
+    USD -> pair_currency rate for on_date, carrying forward on WEEKDAYS only so a
+    weekend value snapshot uses the last weekday's FX (aligned with the Friday
+    stock-close carry-forward; otherwise weekends aren't flat).
+
+    Resolution is anchored to `target` = the most recent weekday on/before
+    on_date, computed BEFORE any cache lookup, so the result is deterministic
+    regardless of the order calls populate the shared FX cache.
+    """
     if pair_currency == "USD":
         return 1.0
+    # Anchor to the most recent weekday (Yahoo forex has weekend bars we ignore).
+    target = on_date
+    while target.weekday() >= 5:
+        target -= timedelta(days=1)
+
     cache_key = f"histfx_{pair_currency}"
     cached = get_cached_exchange_rate("USD", cache_key)
-    series = cached.get("series") if cached else None
-    if not series or on_date not in series:
-        fetched = _fetch_yahoo_fx_series(pair_currency, on_date, on_date)
-        # Merge with any prior cached series (keys are ISO strings in cache).
-        series = dict((k, v) for k, v in (series or {}).items())
+    series = dict((cached.get("series") or {}).items()) if cached else {}
+    # Fetch a proper window whenever the target weekday isn't already covered.
+    if target not in series:
+        fetched = _fetch_yahoo_fx_series(pair_currency, target, on_date)
         series.update(fetched)
         set_cached_exchange_rate("USD", cache_key, {"series": series})
-    # Carry forward on WEEKDAYS only. Yahoo forex has weekend bars (forex trades
-    # Sunday), but stock closes don't — so a weekend value snapshot must use the
-    # last weekday's FX to stay aligned with the Friday stock-close carry-forward
-    # (otherwise weekends aren't flat).
-    candidates = [d for d in series.keys() if d <= on_date and d.weekday() < 5]
+
+    candidates = [d for d in series.keys() if d <= target and d.weekday() < 5]
     if not candidates:
         raise Exception(f"No historical USD->{pair_currency} rate on or before {on_date}")
     return series[max(candidates)]
