@@ -15,6 +15,7 @@ def test_take_snapshot_uses_ledger_and_stored_price_history():
     with mock.patch.object(wlf, "execute_update", side_effect=fake_update), \
          mock.patch.object(wlf, "_load_user_ledger", return_value=([], meta, "TWD")), \
          mock.patch.object(wlf, "populate_price_history", return_value=1), \
+         mock.patch.object(wlf, "populate_fx_history", return_value=1), \
          mock.patch.object(wlf, "compute_value_from_history", return_value=(36000.0, 30000.0)), \
          mock.patch.object(wlf, "compute_cumulative_dividends_asof", return_value=100.0), \
          mock.patch.object(wlf, "compute_invested_asof", return_value=(9999.0, 8888.0)), \

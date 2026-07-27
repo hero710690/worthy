@@ -4410,36 +4410,96 @@ def _fetch_yahoo_fx_series(pair_currency, start_date, end_date):
     return series
 
 
+def _store_fx_series(quote_currency, series):
+    """Upsert { date: usd_rate } into fx_history for quote_currency."""
+    stored = 0
+    for d, rate in series.items():
+        try:
+            execute_update(
+                DATABASE_URL,
+                """
+                INSERT INTO fx_history (quote_currency, rate_date, usd_rate)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (quote_currency, rate_date) DO UPDATE SET usd_rate = EXCLUDED.usd_rate
+                """,
+                (quote_currency, d, rate)
+            )
+            stored += 1
+        except Exception as e:
+            logger.warning(f"_store_fx_series: upsert failed {quote_currency} {d}: {e}")
+    return stored
+
+
+def populate_fx_history(quote_currencies, start_date, end_date):
+    """
+    Fetch Yahoo USD->currency daily closes for each currency over the range and
+    store them in fx_history, so FX resolution reads from storage (deterministic,
+    no per-run drift). USD is skipped (rate is always 1).
+    """
+    import time
+    total = 0
+    for cur in set(quote_currencies):
+        if not cur or cur == 'USD':
+            continue
+        series = {}
+        for attempt in range(4):
+            try:
+                series = _fetch_yahoo_fx_series(cur, start_date, end_date)
+                if series:
+                    break
+            except Exception as e:
+                logger.warning(f"populate_fx_history: {cur} attempt {attempt+1}/4 failed: {e}")
+            time.sleep(2)
+        if series:
+            total += _store_fx_series(cur, series)
+        else:
+            logger.warning(f"populate_fx_history: no FX series for {cur} {start_date}..{end_date}")
+    return total
+
+
 def _usd_rate_on(pair_currency, on_date):
     """
-    USD -> pair_currency rate for on_date, carrying forward on WEEKDAYS only so a
-    weekend value snapshot uses the last weekday's FX (aligned with the Friday
-    stock-close carry-forward; otherwise weekends aren't flat).
+    USD -> pair_currency rate for on_date, read from the persisted fx_history
+    table. Carries forward on WEEKDAYS only (so weekend value snapshots use the
+    last weekday's FX, aligned with the Friday stock-close carry-forward).
 
-    Resolution is anchored to `target` = the most recent weekday on/before
-    on_date, computed BEFORE any cache lookup, so the result is deterministic
-    regardless of the order calls populate the shared FX cache.
+    Reading from storage makes this deterministic run-to-run. If the rate isn't
+    stored yet, it self-heals by fetching + storing, then falls back to current
+    spot only as a last resort.
     """
     if pair_currency == "USD":
         return 1.0
-    # Anchor to the most recent weekday (Yahoo forex has weekend bars we ignore).
+    # Anchor to the most recent weekday on/before on_date.
     target = on_date
     while target.weekday() >= 5:
         target -= timedelta(days=1)
 
-    cache_key = f"histfx_{pair_currency}"
-    cached = get_cached_exchange_rate("USD", cache_key)
-    series = dict((cached.get("series") or {}).items()) if cached else {}
-    # Fetch a proper window whenever the target weekday isn't already covered.
-    if target not in series:
-        fetched = _fetch_yahoo_fx_series(pair_currency, target, on_date)
-        series.update(fetched)
-        set_cached_exchange_rate("USD", cache_key, {"series": series})
+    row = execute_query(
+        DATABASE_URL,
+        """
+        SELECT usd_rate FROM fx_history
+        WHERE quote_currency = %s AND rate_date <= %s
+          AND EXTRACT(DOW FROM rate_date) NOT IN (0, 6)
+        ORDER BY rate_date DESC LIMIT 1
+        """,
+        (pair_currency, target)
+    )
+    if row:
+        return float(row[0]['usd_rate'])
 
-    candidates = [d for d in series.keys() if d <= target and d.weekday() < 5]
-    if not candidates:
-        raise Exception(f"No historical USD->{pair_currency} rate on or before {on_date}")
-    return series[max(candidates)]
+    # Not stored: fetch a window, persist it, and resolve from it.
+    try:
+        series = _fetch_yahoo_fx_series(pair_currency, target, on_date)
+        if series:
+            _store_fx_series(pair_currency, series)
+            candidates = [d for d in series.keys() if d <= target and d.weekday() < 5]
+            if candidates:
+                return series[max(candidates)]
+    except Exception as e:
+        logger.warning(f"_usd_rate_on: fetch failed for {pair_currency} on {on_date}: {e}")
+
+    # Last resort: current spot (keeps the snapshot from crashing).
+    return convert_currency_amount(1.0, "USD", pair_currency)
 
 
 def get_historical_fx_rate(from_currency, to_currency, on_date):
@@ -6208,6 +6268,11 @@ def take_portfolio_snapshot(user_id, snapshot_date=None):
         populate_price_history(pairs, asof, asof)
     except Exception as e:
         logger.warning(f"Snapshot: price history population failed for user {user_id}: {e}")
+    try:
+        currencies = {m.get('currency', 'USD') for m in asset_meta.values()} | {base_currency}
+        populate_fx_history(currencies, asof, asof)
+    except Exception as e:
+        logger.warning(f"Snapshot: FX history population failed for user {user_id}: {e}")
 
     total_value, invest_value = compute_value_from_history(
         transactions, asset_meta, base_currency, asof)
@@ -6570,6 +6635,18 @@ def handle_backfill_snapshot_value(body=None):
     pairs = [(r['ticker_symbol'], r.get('currency', 'USD')) for r in sym_rows]
     stored = populate_price_history(pairs, start_date, end_date)
     logger.info(f"Value backfill: stored {stored} price rows for {len(pairs)} symbols")
+
+    # Populate FX once for the range too, so per-date FX reads from storage
+    # (deterministic — no run-to-run drift on weekends/Fridays).
+    cur_rows = execute_query(
+        DATABASE_URL,
+        "SELECT DISTINCT currency FROM assets WHERE currency IS NOT NULL"
+    )
+    currencies = {r['currency'] for r in cur_rows}
+    base_rows = execute_query(DATABASE_URL, "SELECT DISTINCT base_currency FROM users WHERE base_currency IS NOT NULL")
+    currencies |= {r['base_currency'] for r in base_rows}
+    fx_stored = populate_fx_history(currencies, start_date, end_date)
+    logger.info(f"Value backfill: stored {fx_stored} FX rows for {len(currencies)} currencies")
 
     results = {'updated': 0, 'users': 0, 'failed': []}
     for uid in user_ids:
@@ -8721,6 +8798,11 @@ def lambda_handler(event, context):
                         close_price DECIMAL(20,8) NOT NULL,
                         currency VARCHAR(10) DEFAULT 'USD',
                         PRIMARY KEY (ticker_symbol, price_date))""",
+                    """CREATE TABLE IF NOT EXISTS fx_history (
+                        quote_currency VARCHAR(10) NOT NULL,
+                        rate_date DATE NOT NULL,
+                        usd_rate DECIMAL(20,8) NOT NULL,
+                        PRIMARY KEY (quote_currency, rate_date))""",
                 ]
                 results = []
                 for sql in schema_sql:

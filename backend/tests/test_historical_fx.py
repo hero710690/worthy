@@ -69,3 +69,15 @@ def test_spot_fallback_on_failure():
         rate = wlf.get_historical_fx_rate("USD", "TWD", datetime.date(2025, 2, 10))
     assert rate == 30.0
     spot.assert_called_once()
+
+
+def test_usd_rate_reads_from_fx_history_db():
+    """When fx_history has a stored rate, _usd_rate_on reads it (no Yahoo fetch)."""
+    def fake_query(db, query, params=None):
+        if "from fx_history" in query.lower():
+            return [{"usd_rate": 31.55}]
+        return []
+    with mock.patch.object(wlf, "execute_query", side_effect=fake_query), \
+         mock.patch.object(wlf, "_fetch_yahoo_fx_series", side_effect=AssertionError("should not fetch")):
+        rate = wlf.get_historical_fx_rate("USD", "TWD", datetime.date(2026, 7, 10))
+    assert abs(rate - 31.55) < 1e-6
