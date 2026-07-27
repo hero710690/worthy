@@ -117,3 +117,11 @@ def test_no_stored_close_contributes_zero_not_cost():
         total, invest = wlf.compute_value_from_history(
             txns, meta, "USD", datetime.date(2026, 7, 2), price_map={})
     assert total == 0.0 and invest == 0.0   # never falls back to cost basis
+
+
+def test_yahoo_symbol_maps_us_share_class_only():
+    assert wlf._yahoo_symbol("BRK.B") == "BRK-B"
+    assert wlf._yahoo_symbol("BRK.A") == "BRK-A"
+    assert wlf._yahoo_symbol("0050.TW") == "0050.TW"   # exchange suffix preserved
+    assert wlf._yahoo_symbol("006208.TW") == "006208.TW"
+    assert wlf._yahoo_symbol("AAPL") == "AAPL"

@@ -4462,12 +4462,25 @@ def get_historical_fx_rate(from_currency, to_currency, on_date):
         return convert_currency_amount(1.0, from_currency, to_currency)
 
 
+def _yahoo_symbol(ticker):
+    """
+    Map an app ticker to Yahoo's symbol. Yahoo uses '-' for US share classes
+    (BRK.B -> BRK-B) but keeps '.' for exchange suffixes (0050.TW stays 0050.TW).
+    Only a bare single-letter class suffix (e.g. .A/.B) is converted.
+    """
+    import re as _re
+    if ticker and _re.match(r'^[A-Za-z]+\.[A-Za-z]$', ticker):
+        return ticker.replace('.', '-')
+    return ticker
+
+
 def _fetch_yahoo_price_series(symbol, start_date, end_date):
     """
     Daily close prices for a stock symbol from Yahoo Finance over the inclusive
     window. Returns { datetime.date: float } in the symbol's native currency.
     """
     import datetime as _dt
+    symbol = _yahoo_symbol(symbol)
     period1 = int(_dt.datetime.combine(start_date - _dt.timedelta(days=14), _dt.time()).timestamp())
     period2 = int(_dt.datetime.combine(end_date + _dt.timedelta(days=1), _dt.time()).timestamp())
     url = (
