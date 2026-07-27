@@ -6392,6 +6392,117 @@ def handle_backfill_snapshot_invested(body=None):
     })
 
 
+def handle_value_breakdown(body=None):
+    """
+    Debug endpoint: per-day, per-asset breakdown of the portfolio value
+    computation for a user over a date range. Mirrors compute_value_from_history
+    exactly, but returns the components (quantity, source, native close, FX,
+    base value) plus the stored snapshot value for cross-checking.
+
+    body: {"user_id": <id>, "start_date": "YYYY-MM-DD", "end_date": "YYYY-MM-DD"}
+    """
+    import datetime as _dt
+    if not body or not body.get('user_id') or not body.get('start_date') or not body.get('end_date'):
+        return create_error_response(400, "user_id, start_date and end_date are required")
+
+    user_id = body['user_id']
+    start_date = _coerce_date(body['start_date'])
+    end_date = _coerce_date(body['end_date'])
+    wait_for_egress_ready()
+
+    transactions, asset_meta, base_currency = _load_user_ledger(user_id)
+    tickers = [m.get('ticker_symbol') for m in asset_meta.values()
+               if m.get('asset_type') in INVESTABLE_ASSET_TYPES and m.get('ticker_symbol')]
+    price_map = _load_price_history(tickers, end_date)
+    full_ledger = reconstruct_holdings_asof(transactions, _dt.date(2999, 1, 1), include_dividend_shares=True)
+
+    stored_rows = execute_query(
+        DATABASE_URL,
+        """
+        SELECT snapshot_date, total_value, invest_value FROM portfolio_snapshots
+        WHERE user_id = %s AND snapshot_date BETWEEN %s AND %s ORDER BY snapshot_date
+        """,
+        (user_id, start_date, end_date)
+    )
+    stored = {_coerce_date(r['snapshot_date']): r for r in stored_rows}
+
+    days = []
+    d = start_date
+    while d <= end_date:
+        holdings = reconstruct_holdings_asof(transactions, d, include_dividend_shares=True)
+        asset_ids = set(holdings.keys())
+        for aid, m in asset_meta.items():
+            ts = m.get('total_shares', 0.0)
+            if ts > 1e-9 and abs(full_ledger.get(aid, {}).get('shares', 0.0) - ts) > 0.01:
+                asset_ids.add(aid)
+
+        rows = []
+        total_value = 0.0
+        invest_value = 0.0
+        for aid in sorted(asset_ids):
+            m = asset_meta.get(str(aid))
+            if not m:
+                continue
+            currency = m.get('currency', 'USD')
+            asset_type = m.get('asset_type', 'Stock')
+            ticker = m.get('ticker_symbol')
+            total_shares = m.get('total_shares', 0.0)
+            ledger_latest = full_ledger.get(aid, {}).get('shares', 0.0)
+
+            if total_shares > 1e-9 and abs(ledger_latest - total_shares) > 0.01:
+                shares = total_shares
+                avg_cost = m.get('average_cost_basis', 0.0)
+                qty_source = 'total_shares(unreconciled)'
+            else:
+                h = holdings.get(aid)
+                if not h:
+                    continue
+                shares = h['shares']
+                avg_cost = h['avg_cost']
+                qty_source = 'point-in-time'
+
+            if asset_type in INVESTABLE_ASSET_TYPES and ticker:
+                close = _price_on(price_map.get(ticker, {}), d)
+                native_val = shares * close if close else 0.0
+                unit = close
+            else:
+                native_val = shares * avg_cost
+                unit = avg_cost
+            try:
+                rate = get_historical_fx_rate(currency, base_currency, d)
+            except Exception:
+                rate = 1.0
+            base_val = native_val * rate
+            total_value += base_val
+            if asset_type in INVESTABLE_ASSET_TYPES:
+                invest_value += base_val
+            rows.append({
+                'ticker': ticker or m.get('asset_type'),
+                'asset_type': asset_type,
+                'currency': currency,
+                'quantity': round(shares, 6),
+                'qty_source': qty_source,
+                'unit_price': round(unit, 6) if unit is not None else None,
+                'fx_to_base': round(rate, 6),
+                'base_value': round(base_val, 2),
+                'investable': asset_type in INVESTABLE_ASSET_TYPES,
+            })
+
+        st = stored.get(d)
+        days.append({
+            'date': str(d),
+            'weekday': d.strftime('%a'),
+            'computed_total_value': round(total_value, 2),
+            'computed_invest_value': round(invest_value, 2),
+            'stored_total_value': round(float(st['total_value']), 2) if st else None,
+            'stored_invest_value': round(float(st['invest_value']), 2) if st else None,
+            'assets': rows,
+        })
+        d += _dt.timedelta(days=1)
+
+    return create_response(200, {'user_id': user_id, 'base_currency': base_currency, 'days': days})
+
+
 def handle_backfill_snapshot_value(body=None):
     """
     Reconstruct total_value / invest_value for existing snapshots over a date range
@@ -8861,6 +8972,10 @@ def lambda_handler(event, context):
         elif path == '/batch/backfill-snapshot-value' and http_method == 'POST':
             body = json.loads(event.get('body', '{}')) if event.get('body') else {}
             return handle_backfill_snapshot_value(body)
+
+        elif path == '/admin/value-breakdown' and http_method == 'POST':
+            body = json.loads(event.get('body', '{}')) if event.get('body') else {}
+            return handle_value_breakdown(body)
 
         elif path == '/portfolio/snapshots' and http_method == 'GET':
             request_headers = event.get('headers', {})
